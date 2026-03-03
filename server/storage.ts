@@ -46,6 +46,7 @@ export interface IStorage {
   getMyTeam(): Promise<PlayerWithTeamInfo[]>;
   addToMyTeam(entry: InsertMyTeamPlayer): Promise<MyTeamPlayer>;
   removeFromMyTeam(id: number): Promise<void>;
+  clearMyTeam(): Promise<void>;
   setCaptain(id: number): Promise<void>;
   setViceCaptain(id: number): Promise<void>;
 
@@ -142,6 +143,10 @@ export class DatabaseStorage implements IStorage {
 
   async removeFromMyTeam(id: number): Promise<void> {
     await db.delete(myTeamPlayers).where(eq(myTeamPlayers.id, id));
+  }
+
+  async clearMyTeam(): Promise<void> {
+    await db.delete(myTeamPlayers);
   }
 
   async setCaptain(id: number): Promise<void> {

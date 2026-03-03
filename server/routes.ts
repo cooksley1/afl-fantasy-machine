@@ -100,6 +100,94 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/my-team/setup-glens-team", async (_req, res) => {
+    try {
+      const allPlayers = await storage.getAllPlayers();
+      const findPlayer = (name: string) => allPlayers.find(p => p.name === name);
+
+      const missingPlayers = [
+        { name: "Will Derksen", team: "Essendon", position: "DEF", price: 230000 },
+        { name: "Tom Blamires", team: "North Melbourne", position: "MID", price: 230000 },
+      ];
+      for (const mp of missingPlayers) {
+        if (!findPlayer(mp.name)) {
+          await storage.createPlayer({
+            name: mp.name,
+            team: mp.team,
+            position: mp.position,
+            price: mp.price,
+            avgScore: 0,
+            last3Avg: 0,
+            last5Avg: 0,
+            seasonTotal: 0,
+            gamesPlayed: 0,
+            ownedByPercent: 0,
+            formTrend: "stable",
+            isNamedTeam: true,
+            isDebutant: true,
+          });
+        }
+      }
+
+      const refreshed = await storage.getAllPlayers();
+      const fp = (name: string) => {
+        const p = refreshed.find(pl => pl.name === name);
+        if (!p) throw new Error(`Player not found: ${name}`);
+        return p.id;
+      };
+
+      await storage.clearMyTeam();
+
+      const teamEntries: Array<{
+        playerId: number;
+        isOnField: boolean;
+        isCaptain: boolean;
+        isViceCaptain: boolean;
+        fieldPosition: string;
+      }> = [
+        { playerId: fp("Connor Rozee"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Jack Sinclair"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Colby McKercher"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Sam Grlj"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Lachlan Blakiston"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Caleb Windsor"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Lachie Jaques"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Will Derksen"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Jordan Dawson"), isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Zak Butters"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "MID" },
+        { playerId: fp("Darcy Parish"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Cooper Lord"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Willem Duursma"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Tanner Bruhn"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Jagga Smith"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Tom Blamires"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Roan Steele"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+        { playerId: fp("Brodie Grundy"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+        { playerId: fp("Lachlan McAndrew"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+        { playerId: fp("Liam Reidy"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+        { playerId: fp("Zac Williams"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Christian Petracca"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Sam Flanders"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Mattaes Phillipou"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Billy Dowling"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Deven Robertson"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Sullivan Robey"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Charlie Ballard"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
+      ];
+
+      for (const entry of teamEntries) {
+        await storage.addToMyTeam(entry);
+      }
+
+      const team = await storage.getMyTeam();
+      res.json({ success: true, playerCount: team.length, team });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/trade-recommendations", async (_req, res) => {
     try {
       const recs = await storage.getTradeRecommendations();

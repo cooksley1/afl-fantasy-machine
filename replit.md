@@ -27,7 +27,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/data-gatherer.ts` - Live data fetching from Squiggle API, AFL.com.au RSS, all 18 AFL club Google News feeds
 - `server/scheduler.ts` - Automated 4-hour intelligence gathering cycle
 - `client/src/App.tsx` - Main app with sidebar navigation, mobile header branding, and routing
-- `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
+- `client/src/pages/` - Dashboard, MyTeam (dual view: Field + List), Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
 - `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
 
 ## Data Model
@@ -58,12 +58,13 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `GET /api/players` - All players with advanced metrics
 - `GET /api/players/:id` - Single player
 - `GET /api/players/:id/report` - AI scouting report
-- `GET /api/my-team` - Current team with player details
+- `GET /api/my-team` - Current team with player details (30 players: Glen's 2026 starting team)
 - `POST /api/my-team` - Add player to team
 - `DELETE /api/my-team/:id` - Remove player
 - `POST /api/my-team/:id/captain` - Set captain
 - `POST /api/my-team/:id/vice-captain` - Set vice captain
 - `POST /api/my-team/analyze` - AI full team analysis
+- `POST /api/my-team/setup-glens-team` - Reset team to Glen's 2026 starting squad (30 players)
 - `GET /api/trade-recommendations` - List recommendations (with Trade EV)
 - `POST /api/trade-recommendations/generate` - Generate Trade EV-powered recommendations
 - `POST /api/trade-recommendations/generate-ai` - AI-powered deep trade analysis

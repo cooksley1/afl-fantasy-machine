@@ -91,44 +91,40 @@ export async function seedDatabase() {
     createdPlayers.push(created);
   }
 
-  const daicosId = createdPlayers.find(p => p.name === "Nick Daicos")?.id;
-  const nealeId = createdPlayers.find(p => p.name === "Lachie Neale")?.id;
-  const bontemId = createdPlayers.find(p => p.name === "Marcus Bontempelli")?.id;
-  const heeneyId = createdPlayers.find(p => p.name === "Isaac Heeney")?.id;
-  const englishId = createdPlayers.find(p => p.name === "Tim English")?.id;
-  const dawsonId = createdPlayers.find(p => p.name === "Jordan Dawson")?.id;
-  const cameronId = createdPlayers.find(p => p.name === "Jeremy Cameron")?.id;
-  const oliverId = createdPlayers.find(p => p.name === "Clayton Oliver")?.id;
-  const curnowId = createdPlayers.find(p => p.name === "Charlie Curnow")?.id;
-  const gawnId = createdPlayers.find(p => p.name === "Max Gawn")?.id;
-  const zorkoId = createdPlayers.find(p => p.name === "Dayne Zorko")?.id;
-  const dochertyId = createdPlayers.find(p => p.name === "Sam Docherty")?.id;
+  const fp = (name: string) => {
+    const p = createdPlayers.find(cp => cp.name === name);
+    if (!p) return null;
+    return p.id;
+  };
 
-  const teamEntries = [
-    { playerId: daicosId!, isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "DEF" },
-    { playerId: dawsonId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-    { playerId: zorkoId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-    { playerId: dochertyId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-    { playerId: nealeId!, isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "MID" },
-    { playerId: bontemId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-    { playerId: oliverId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-    { playerId: englishId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-    { playerId: gawnId!, isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-    { playerId: heeneyId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-    { playerId: cameronId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-    { playerId: curnowId!, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-  ];
+  const rozeeId = fp("Connor Rozee");
+  const sinclairId = fp("Jack Sinclair");
+  const dawsonId = fp("Jordan Dawson");
+  const buttersId = fp("Zak Butters");
+  const parishId = fp("Darcy Parish");
+  const grundyId = fp("Brodie Grundy");
+  const petracId = fp("Christian Petracca");
 
-  for (const entry of teamEntries) {
-    await db.insert(myTeamPlayers).values(entry);
+  const seedTeamEntries = [
+    rozeeId && { playerId: rozeeId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+    sinclairId && { playerId: sinclairId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+    dawsonId && { playerId: dawsonId, isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "MID" },
+    buttersId && { playerId: buttersId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+    parishId && { playerId: parishId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
+    grundyId && { playerId: grundyId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+    petracId && { playerId: petracId, isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+  ].filter(Boolean);
+
+  for (const entry of seedTeamEntries) {
+    if (entry) await db.insert(myTeamPlayers).values(entry);
   }
 
   await db.insert(leagueSettings).values({
-    teamName: "Fantasy Demons",
-    salaryCap: 10000000,
-    currentRound: 15,
-    tradesRemaining: 18,
-    totalTradesUsed: 12,
+    teamName: "The Lizards Gulch",
+    salaryCap: 18300000,
+    currentRound: 1,
+    tradesRemaining: 30,
+    totalTradesUsed: 0,
   });
 
   console.log("Database seeded successfully with", createdPlayers.length, "players and a starting team.");
