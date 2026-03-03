@@ -487,6 +487,57 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/intel/gather", async (_req, res) => {
+    try {
+      const { gatherIntelligence } = await import("./data-gatherer");
+      const result = await gatherIntelligence();
+      res.json(result);
+    } catch (error: any) {
+      console.error("Intel gathering error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/intel/sources", async (_req, res) => {
+    try {
+      const { getRecentIntelSources } = await import("./data-gatherer");
+      const sources = await getRecentIntelSources(30);
+      res.json(sources);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/intel/sources/stats", async (_req, res) => {
+    try {
+      const { getIntelSourceStats } = await import("./data-gatherer");
+      const stats = await getIntelSourceStats();
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/intel/pre-game", async (_req, res) => {
+    try {
+      const { generatePreGameAdvice } = await import("./data-gatherer");
+      const advice = await generatePreGameAdvice();
+      res.json(advice);
+    } catch (error: any) {
+      console.error("Pre-game advice error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/scheduler/status", async (_req, res) => {
+    try {
+      const { getSchedulerStatus } = await import("./scheduler");
+      res.json(getSchedulerStatus());
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/trade-recommendations/generate-ai", async (_req, res) => {
     try {
       const { generateAITradeRecommendations } = await import("./intel-engine");

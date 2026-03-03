@@ -43,7 +43,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/">
           <div className="flex items-center gap-3 cursor-pointer" data-testid="link-home">
-            <div className="w-10 h-10 rounded-md bg-accent flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-accent flex items-center justify-center shrink-0">
               <Zap className="w-5 h-5 text-accent-foreground" />
             </div>
             <div>
@@ -71,14 +71,14 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       data-active={isActive}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent"
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent min-h-[44px]"
                     >
                       <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}>
                         <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                        {item.title === "Trade Centre" && (
+                        <span className="text-sm">{item.title}</span>
+                        {item.title === "Intel Hub" && (
                           <Badge variant="default" className="ml-auto text-[10px] bg-accent text-accent-foreground">
-                            New
+                            Live
                           </Badge>
                         )}
                       </Link>
@@ -94,7 +94,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="rounded-md bg-sidebar-accent/50 p-3">
           <p className="text-[11px] text-sidebar-foreground/60 leading-relaxed">
-            Powered by AI analysis covering form, injuries, byes, captains, cash cows, and tactical insights.
+            AI-powered analysis covering form, injuries, byes, captains, cash cows, and live data from AFL sources.
           </p>
         </div>
       </SidebarFooter>

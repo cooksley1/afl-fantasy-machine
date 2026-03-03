@@ -80,6 +80,21 @@ export const lateChanges = pgTable("late_changes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const intelSources = pgTable("intel_sources", {
+  id: serial("id").primaryKey(),
+  sourceType: text("source_type").notNull(),
+  sourceUrl: text("source_url").default(null),
+  title: text("title").notNull(),
+  rawContent: text("raw_content").notNull(),
+  processedInsights: text("processed_insights").default(null),
+  relevantPlayerNames: text("relevant_player_names").default(null),
+  round: integer("round").default(null),
+  isProcessed: boolean("is_processed").notNull().default(false),
+  isActionable: boolean("is_actionable").notNull().default(false),
+  fetchedAt: timestamp("fetched_at").defaultNow(),
+  processedAt: timestamp("processed_at").default(null),
+});
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -100,6 +115,7 @@ export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omi
 export const insertLeagueSettingsSchema = createInsertSchema(leagueSettings).omit({ id: true });
 export const insertIntelReportSchema = createInsertSchema(intelReports).omit({ id: true, createdAt: true });
 export const insertLateChangeSchema = createInsertSchema(lateChanges).omit({ id: true, createdAt: true });
+export const insertIntelSourceSchema = createInsertSchema(intelSources).omit({ id: true, fetchedAt: true, processedAt: true });
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
@@ -113,6 +129,8 @@ export type IntelReport = typeof intelReports.$inferSelect;
 export type InsertIntelReport = z.infer<typeof insertIntelReportSchema>;
 export type LateChange = typeof lateChanges.$inferSelect;
 export type InsertLateChange = z.infer<typeof insertLateChangeSchema>;
+export type IntelSource = typeof intelSources.$inferSelect;
+export type InsertIntelSource = z.infer<typeof insertIntelSourceSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;

@@ -16,6 +16,7 @@ import IntelHub from "@/pages/intel-hub";
 import TeamAnalyzer from "@/pages/team-analyzer";
 import PlayerReportPage from "@/pages/player-report";
 import SettingsPage from "@/pages/settings-page";
+import { Zap } from "lucide-react";
 
 function Router() {
   return (
@@ -48,7 +49,13 @@ function App() {
             <AppSidebar />
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center justify-between gap-2 px-3 py-2 border-b h-12 shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+                <div className="flex items-center gap-2">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+                  <div className="flex items-center gap-1.5 sm:hidden">
+                    <Zap className="w-4 h-4 text-accent" />
+                    <span className="text-sm font-semibold tracking-tight">AFL Fantasy Machine</span>
+                  </div>
+                </div>
                 <ThemeToggle />
               </header>
               <main className="flex-1 overflow-auto">
