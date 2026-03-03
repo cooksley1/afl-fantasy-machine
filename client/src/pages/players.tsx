@@ -21,6 +21,9 @@ import {
   ArrowUpDown,
   AlertTriangle,
   Repeat2,
+  Gauge,
+  Star,
+  DollarSign,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -51,7 +54,7 @@ const AFL_TEAMS = [
 
 const POSITIONS = ["All Positions", "DEF", "MID", "RUC", "FWD"];
 
-type SortField = "avgScore" | "price" | "last3Avg" | "ownedByPercent" | "name";
+type SortField = "avgScore" | "price" | "last3Avg" | "ownedByPercent" | "name" | "consistencyRating";
 
 export default function Players() {
   const { toast } = useToast();
@@ -136,6 +139,59 @@ export default function Players() {
     return <Minus className="w-4 h-4 text-muted-foreground" />;
   };
 
+  const ConsistencyIndicator = ({ rating, stdDev, avg }: { rating: number | null; stdDev: number | null; avg: number }) => {
+    if (rating === null) return null;
+    let color = "text-muted-foreground";
+    let bgColor = "bg-muted";
+    let label = "Low";
+    if (avg >= 80 && rating >= 7.5) {
+      color = "text-green-600 dark:text-green-400";
+      bgColor = "bg-green-500/10";
+      label = "Elite";
+    } else if (avg >= 70 && rating >= 6.5) {
+      color = "text-blue-600 dark:text-blue-400";
+      bgColor = "bg-blue-500/10";
+      label = "Good";
+    } else if (rating >= 5.5) {
+      color = "text-yellow-600 dark:text-yellow-400";
+      bgColor = "bg-yellow-500/10";
+      label = "Avg";
+    } else if (avg < 60 && rating >= 5) {
+      color = "text-orange-600 dark:text-orange-400";
+      bgColor = "bg-orange-500/10";
+      label = "Low Avg";
+    } else {
+      color = "text-red-500";
+      bgColor = "bg-red-500/10";
+      label = "Volatile";
+    }
+    return (
+      <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${bgColor}`} data-testid="indicator-consistency">
+        <Gauge className={`w-3 h-3 ${color}`} />
+        <span className={`text-[10px] font-medium ${color}`}>{label}</span>
+        {stdDev !== null && (
+          <span className="text-[9px] text-muted-foreground">±{stdDev.toFixed(0)}</span>
+        )}
+      </div>
+    );
+  };
+
+  const CashGenBadge = ({ potential }: { potential: string | null }) => {
+    if (!potential) return null;
+    const colors: Record<string, string> = {
+      elite: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
+      high: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+      medium: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+      low: "bg-muted text-muted-foreground",
+    };
+    return (
+      <Badge variant="outline" className={`text-[10px] gap-0.5 ${colors[potential] || ''}`} data-testid="badge-cash-gen">
+        <DollarSign className="w-2.5 h-2.5" />
+        {potential === "elite" ? "Cash Gen $$" : potential === "high" ? "Cash Gen $" : "Cash Gen"}
+      </Badge>
+    );
+  };
+
   const PlayerBadges = ({ player, isOnTeam }: { player: Player; isOnTeam: boolean }) => (
     <div className="flex items-center gap-1.5 flex-wrap">
       {player.dualPosition && (
@@ -144,6 +200,13 @@ export default function Players() {
           {player.position}/{player.dualPosition}
         </Badge>
       )}
+      {player.isDebutant && (
+        <Badge variant="outline" className="text-[10px] gap-0.5 border-purple-500/50 text-purple-600 dark:text-purple-400 bg-purple-500/10" data-testid="badge-debutant">
+          <Star className="w-2.5 h-2.5" />
+          Debut{player.debutRound ? ` R${player.debutRound}` : ''}
+        </Badge>
+      )}
+      <CashGenBadge potential={player.cashGenPotential} />
       {player.injuryStatus && (
         <Badge variant="destructive" className="text-[10px]">
           <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
@@ -213,7 +276,7 @@ export default function Players() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-border/50">
+          <div className="grid grid-cols-5 gap-1.5 mt-3 pt-2.5 border-t border-border/50">
             <div className="text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
               <p className="text-sm font-mono font-medium" data-testid={`text-avg-${player.id}`}>
@@ -248,6 +311,10 @@ export default function Players() {
               }`} data-testid={`text-be-${player.id}`}>
                 {player.breakEven ?? '-'}
               </p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Con</p>
+              <ConsistencyIndicator rating={player.consistencyRating} stdDev={player.scoreStdDev} avg={player.avgScore || 0} />
             </div>
           </div>
         </CardContent>
@@ -312,6 +379,9 @@ export default function Players() {
           }`}>
             {player.breakEven ?? '-'}
           </span>
+        </div>
+        <div className="hidden xl:block w-16 text-center">
+          <ConsistencyIndicator rating={player.consistencyRating} stdDev={player.scoreStdDev} avg={player.avgScore || 0} />
         </div>
         <div className="hidden lg:block w-14 text-center">
           <span className="text-xs text-muted-foreground">
@@ -391,7 +461,7 @@ export default function Players() {
         </div>
         {isMobile && (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {(["avgScore", "price", "name"] as SortField[]).map((field) => (
+            {(["avgScore", "price", "consistencyRating", "name"] as SortField[]).map((field) => (
               <Button
                 key={field}
                 variant={sortBy === field ? "default" : "outline"}
@@ -400,7 +470,7 @@ export default function Players() {
                 className="shrink-0"
                 data-testid={`button-sort-${field}`}
               >
-                {field === "avgScore" ? "Avg" : field === "price" ? "Price" : "Name"}
+                {field === "avgScore" ? "Avg" : field === "price" ? "Price" : field === "consistencyRating" ? "Consistency" : "Name"}
                 <ArrowUpDown className="w-3 h-3 ml-1" />
               </Button>
             ))}
@@ -451,6 +521,15 @@ export default function Players() {
                 </button>
               </div>
               <div className="hidden xl:block w-14 text-center">BE</div>
+              <div className="hidden xl:block w-16 text-center">
+                <button
+                  onClick={() => toggleSort("consistencyRating")}
+                  className="flex items-center gap-1 mx-auto"
+                  data-testid="button-sort-consistency"
+                >
+                  Con <ArrowUpDown className="w-3 h-3" />
+                </button>
+              </div>
               <div className="hidden lg:block w-14 text-center">Own%</div>
               <div className="w-12 text-center">Form</div>
               <div className="w-10"></div>

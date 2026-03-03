@@ -319,7 +319,7 @@ export default function IntelHub() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-10 w-full" />
         <div className="space-y-4">
@@ -333,7 +333,7 @@ export default function IntelHub() {
 
   if (isError) {
     return (
-      <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto">
         <ErrorState message="Failed to load intelligence data." onRetry={() => refetch()} />
       </div>
     );

@@ -28,6 +28,12 @@ export const players = pgTable("players", {
   ceilingScore: integer("ceiling_score").default(null),
   isNamedTeam: boolean("is_named_team").notNull().default(true),
   lateChange: boolean("late_change").notNull().default(false),
+  consistencyRating: real("consistency_rating").default(null),
+  scoreStdDev: real("score_std_dev").default(null),
+  recentScores: text("recent_scores").default(null),
+  isDebutant: boolean("is_debutant").notNull().default(false),
+  debutRound: integer("debut_round").default(null),
+  cashGenPotential: text("cash_gen_potential").default(null),
 });
 
 export const myTeamPlayers = pgTable("my_team_players", {

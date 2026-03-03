@@ -95,5 +95,12 @@ PostgreSQL with tables: players, my_team_players, trade_recommendations, league_
 1. Express server starts
 2. `seedDatabase()` - Creates initial data if DB is empty
 3. `expandPlayerDatabase()` - Loads 780 real players from JSON
-4. `registerRoutes()` - Sets up all API endpoints
-5. `startScheduler()` - Begins automated 4-hour data gathering cycle
+4. `populateConsistencyData()` - Generates consistency ratings, debutant flags, cash gen potential for all players
+5. `registerRoutes()` - Sets up all API endpoints
+6. `startScheduler()` - Begins automated 4-hour data gathering cycle
+
+## Consistency & Debutant System
+- Consistency Rating: 1-10 scale using CV-inverse (0.6 weight) + avg factor (0.4 weight)
+- Debutant Detection: Base price (<=$150K) 70% chance, rookie (<=$250K) 40% chance
+- Cash Generation: elite/high/medium/low based on scoring above break-even
+- Re-evaluates non-debutant low-price players on each startup

@@ -111,6 +111,12 @@ Complete technical blueprint to rebuild this application from scratch.
 | ceiling_score | integer? | Maximum scoring potential |
 | is_named_team | boolean | Whether selected in team |
 | late_change | boolean | Late withdrawal flag |
+| consistency_rating | real? | 1-10 consistency rating (CV-inverse + avg factor) |
+| score_std_dev | real? | Standard deviation of recent scores |
+| recent_scores | text? | Comma-separated last 6-10 scores |
+| is_debutant | boolean | First-year player flag |
+| debut_round | integer? | Round of AFL debut (1-10) |
+| cash_gen_potential | text? | "elite", "high", "medium", "low" |
 
 ### `my_team_players`
 | Column | Type | Notes |
@@ -161,7 +167,7 @@ Complete technical blueprint to rebuild this application from scratch.
 | Column | Type | Notes |
 |--------|------|-------|
 | id | serial PK | |
-| source_type | text | squiggle_fixtures, squiggle_tips, squiggle_ladder, afl_news |
+| source_type | text | squiggle_fixtures, squiggle_tips, squiggle_ladder, afl_news, club_news, club_official, fantasy_news |
 | source_url | text? | Source URL |
 | title | text | Source headline |
 | raw_content | text | Raw fetched content |
@@ -328,7 +334,7 @@ const openai = new OpenAI({
 
 ## 6. Live Data Gathering System
 
-### Data Sources
+### Data Sources (135+ per cycle)
 
 **Squiggle API** (`api.squiggle.com.au`)
 - Requires `User-Agent: AFL-Fantasy-Machine/1.0` header
@@ -336,10 +342,19 @@ const openai = new OpenAI({
 - Tips/Predictions: `?q=tips;year=YYYY;round=N` — Model predictions with confidence
 - Ladder: `?q=standings;year=YYYY` — Current standings
 
-**AFL.com.au RSS** (`afl.com.au/rss`)
-- Requires Mozilla-compatible User-Agent
-- Returns 20 news items
-- Filtered for fantasy-relevant keywords: injury, selection, trade, debut, captain, form, vest, etc.
+**Google News RSS (18 AFL clubs)** — ~89 items per cycle
+- URL pattern: `https://news.google.com/rss/search?q={TEAM}+AFL&hl=en-AU&gl=AU&ceid=AU:en`
+- All 18 teams: Adelaide Crows, Brisbane Lions, Carlton Blues, Collingwood Magpies, Essendon Bombers, Fremantle Dockers, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn Hawks, Melbourne Demons, North Melbourne Kangaroos, Port Adelaide Power, Richmond Tigers, St Kilda Saints, Sydney Swans, West Coast Eagles, Western Bulldogs
+- Batched in groups of 4 with 1.5s delays to avoid rate limiting
+
+**Melbourne FC Official RSS** (`melbournefc.com.au/rss`) — ~8 items
+- Direct official club RSS feed
+
+**Fantasy-Specific News** — ~19 items
+- Google News RSS queries for: "AFL Fantasy 2026", "SuperCoach AFL", "AFL injury list", "AFL team selection", "AFL Fantasy cash cow", "AFL Fantasy captain", "AFL Fantasy breakeven", "AFL Fantasy rookie"
+
+**AFL.com.au News** — ~16 items
+- Google News RSS filtered for fantasy-relevant keywords: injury, selection, trade, debut, captain, form, vest, etc.
 - Article content extracted from linked pages when relevant
 
 ### Processing Pipeline (server/data-gatherer.ts)
@@ -519,9 +534,26 @@ $230,000 to $1,220,000
 - GPT-4o vision identifies players and positions
 - Returns: players found, team analysis, recommendations, captain tip, trade suggestions
 
+### Consistency Rating System
+- Each player gets a 1-10 consistency rating based on CV-inverse (0.6 weight) + avg factor (0.4 weight)
+- Elite: avg >= 80 AND rating >= 7.5 (green badge)
+- Good: avg >= 70 AND rating >= 6.5 (blue badge)
+- Average: rating >= 5.5 (yellow badge)
+- Volatile: rating < 5.5 (red badge)
+- Score sparkline SVG visualizes recent scores vs average
+- `populateConsistencyData()` generates realistic scores on startup
+
+### Debutant / Cash Cow Tracking
+- Base price players (<= $150K): 70% flagged as debutant
+- Rookie price (<= $250K): 40% flagged
+- Cash generation rated: elite (20+ above BE), high (10-20), medium (slight), low
+- Form Guide "Debutants" tab ranks by cash generation with scoring above BE
+- Purple badges indicate debut round
+
 ### Intel Hub with Live Data
 - AI-generated strategic reports across 12 categories
-- Live data gathering from Squiggle API and AFL.com.au RSS
+- Live data gathering from all 18 AFL clubs via Google News RSS, Squiggle API, AFL.com.au, fantasy-specific news
+- 135+ sources per gathering cycle
 - Automated 4-hour gathering cycle
 - Pre-game lockout advice with trade/captain recommendations
 - Stats dashboard: total sources, processed count, actionable count, source breakdown
@@ -623,9 +655,10 @@ npm start                # Production server
 1. Express server initializes
 2. `seedDatabase()` — Creates initial data if DB is empty
 3. `expandPlayerDatabase()` — Loads 780 real players from JSON
-4. `registerRoutes()` — Sets up all API endpoints
-5. `startScheduler()` — Begins automated 4-hour data gathering cycle
-6. Vite dev server serves frontend (dev) or static build (prod)
+4. `populateConsistencyData()` — Generates consistency ratings, debutant flags, cash gen potential
+5. `registerRoutes()` — Sets up all API endpoints
+6. `startScheduler()` — Begins automated 4-hour data gathering cycle (30s delay)
+7. Vite dev server serves frontend (dev) or static build (prod)
 
 ### Database Setup
 Schema is managed by Drizzle ORM. Run `npm run db:push` to create/sync all tables. Seed data is applied automatically on first server start if the players table is empty.

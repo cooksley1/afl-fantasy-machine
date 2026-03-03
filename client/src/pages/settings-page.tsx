@@ -67,7 +67,7 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6 max-w-2xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-2xl mx-auto">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-64 rounded-md" />
       </div>

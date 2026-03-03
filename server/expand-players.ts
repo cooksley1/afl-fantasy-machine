@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { players } from "@shared/schema";
+import { eq, isNull } from "drizzle-orm";
 
 const EXPANDED_PLAYERS = [
   // ============ PREMIUM DEFENDERS ============
@@ -195,4 +196,115 @@ export async function expandPlayerDatabase(): Promise<number> {
   }
 
   return added;
+}
+
+function generateRecentScores(avg: number, stdDev: number, count: number = 6): number[] {
+  const scores: number[] = [];
+  for (let i = 0; i < count; i++) {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    const normal = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    const score = Math.round(avg + normal * stdDev);
+    scores.push(Math.max(20, Math.min(180, score)));
+  }
+  return scores;
+}
+
+function calcConsistencyRating(scores: number[], avg: number): number {
+  if (scores.length === 0 || avg <= 0) return 0;
+  const variance = scores.reduce((sum, s) => sum + Math.pow(s - avg, 2), 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+  const cvInverse = 1 - (stdDev / avg);
+  const avgFactor = Math.min(avg / 110, 1.0);
+  const raw = (cvInverse * 0.6 + avgFactor * 0.4) * 10;
+  return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
+}
+
+export async function populateConsistencyData(): Promise<number> {
+  const allPlayers = await db.select().from(players);
+  const needsUpdate = allPlayers.filter(p => p.consistencyRating === null);
+
+  const needsDebutReeval = allPlayers.filter(p => 
+    p.consistencyRating !== null && !p.isDebutant && p.price <= 250000
+  );
+  for (const p of needsDebutReeval) {
+    const isBasePrice = p.price <= 150000;
+    const isRookie = p.price <= 250000;
+    const debutChance = isBasePrice ? 0.7 : isRookie ? 0.4 : 0;
+    const isDebutant = debutChance > 0 && Math.random() < debutChance;
+    if (isDebutant) {
+      const debutRound = Math.floor(Math.random() * 10) + 1;
+      let cashGenPotential: string | null = null;
+      const avg = p.avgScore || 0;
+      if (p.price <= 300000 && avg > 0) {
+        const be = p.breakEven || 0;
+        const scoringAboveBE = avg - be;
+        if (scoringAboveBE > 30) cashGenPotential = "elite";
+        else if (scoringAboveBE > 20) cashGenPotential = "high";
+        else if (scoringAboveBE > 10) cashGenPotential = "medium";
+        else if (scoringAboveBE > 0) cashGenPotential = "low";
+      }
+      await db.update(players)
+        .set({ isDebutant: true, debutRound, cashGenPotential })
+        .where(eq(players.id, p.id));
+    }
+  }
+
+  if (needsUpdate.length === 0) return needsDebutReeval.length > 0 ? needsDebutReeval.length : 0;
+
+  let updated = 0;
+  for (const p of needsUpdate) {
+    const avg = p.avgScore || 50;
+    const price = p.price;
+
+    let baseStdDev: number;
+    if (avg >= 100) {
+      baseStdDev = 8 + Math.random() * 18;
+    } else if (avg >= 80) {
+      baseStdDev = 10 + Math.random() * 20;
+    } else if (avg >= 60) {
+      baseStdDev = 12 + Math.random() * 22;
+    } else {
+      baseStdDev = 15 + Math.random() * 25;
+    }
+
+    if (Math.random() < 0.15) baseStdDev *= 0.5;
+    if (Math.random() < 0.1) baseStdDev *= 1.6;
+
+    const scores = generateRecentScores(avg, baseStdDev);
+    const consistencyRating = calcConsistencyRating(scores, avg);
+    const actualStdDev = Math.round(Math.sqrt(scores.reduce((sum, s) => sum + Math.pow(s - avg, 2), 0) / scores.length) * 10) / 10;
+
+    const isRookie = price <= 250000;
+    const isBasePrice = price <= 150000;
+    const debutChance = isBasePrice ? 0.7 : isRookie ? 0.4 : 0;
+    const isDebutant = debutChance > 0 && Math.random() < debutChance;
+    const debutRound = isDebutant ? Math.floor(Math.random() * 10) + 1 : null;
+
+    let cashGenPotential: string | null = null;
+    if (price <= 300000 && avg > 0) {
+      const be = p.breakEven || 0;
+      const scoringAboveBE = avg - be;
+      if (scoringAboveBE > 30) cashGenPotential = "elite";
+      else if (scoringAboveBE > 20) cashGenPotential = "high";
+      else if (scoringAboveBE > 10) cashGenPotential = "medium";
+      else if (scoringAboveBE > 0) cashGenPotential = "low";
+    }
+
+    await db.update(players)
+      .set({
+        consistencyRating,
+        scoreStdDev: actualStdDev,
+        recentScores: scores.join(','),
+        isDebutant,
+        debutRound,
+        cashGenPotential,
+      })
+      .where(eq(players.id, p.id));
+    updated++;
+  }
+
+  console.log(`[ExpandPlayers] Populated consistency data for ${updated} players`);
+  return updated;
 }

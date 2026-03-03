@@ -63,10 +63,14 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
-  const { expandPlayerDatabase } = await import("./expand-players");
+  const { expandPlayerDatabase, populateConsistencyData } = await import("./expand-players");
   const added = await expandPlayerDatabase();
   if (added > 0) {
     log(`Expanded player database with ${added} new players`);
+  }
+  const consistencyUpdated = await populateConsistencyData();
+  if (consistencyUpdated > 0) {
+    log(`Populated consistency data for ${consistencyUpdated} players`);
   }
 
   await registerRoutes(httpServer, app);
