@@ -11,6 +11,7 @@ import {
   teamContext,
   positionConcessions,
   projections,
+  modelWeights,
   type Player,
   type InsertPlayer,
   type MyTeamPlayer,
@@ -33,6 +34,8 @@ import {
   type InsertPositionConcession,
   type Projection,
   type InsertProjection,
+  type ModelWeight,
+  type InsertModelWeight,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -86,6 +89,11 @@ export interface IStorage {
   createProjection(proj: InsertProjection): Promise<Projection>;
   deleteProjections(playerId: number): Promise<void>;
   clearProjectionsByRound(round: number): Promise<void>;
+
+  getAllModelWeights(): Promise<ModelWeight[]>;
+  getModelWeight(key: string): Promise<ModelWeight | undefined>;
+  upsertModelWeight(weight: InsertModelWeight): Promise<ModelWeight>;
+  deleteModelWeight(key: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -376,6 +384,32 @@ export class DatabaseStorage implements IStorage {
 
   async clearProjectionsByRound(round: number): Promise<void> {
     await db.delete(projections).where(eq(projections.round, round));
+  }
+
+  async getAllModelWeights(): Promise<ModelWeight[]> {
+    return db.select().from(modelWeights);
+  }
+
+  async getModelWeight(key: string): Promise<ModelWeight | undefined> {
+    const [weight] = await db.select().from(modelWeights).where(eq(modelWeights.key, key));
+    return weight;
+  }
+
+  async upsertModelWeight(weight: InsertModelWeight): Promise<ModelWeight> {
+    const existing = await this.getModelWeight(weight.key);
+    if (existing) {
+      const [updated] = await db.update(modelWeights)
+        .set({ value: weight.value, description: weight.description, category: weight.category })
+        .where(eq(modelWeights.key, weight.key))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(modelWeights).values(weight).returning();
+    return created;
+  }
+
+  async deleteModelWeight(key: string): Promise<void> {
+    await db.delete(modelWeights).where(eq(modelWeights.key, key));
   }
 }
 

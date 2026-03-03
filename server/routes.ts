@@ -4,6 +4,13 @@ import { storage } from "./storage";
 import { insertMyTeamPlayerSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
+import {
+  calcTradeEV,
+  calcTradeRankingScore,
+  calcTradeConfidence,
+  getCachedWeights,
+  buildWeightConfig,
+} from "./services/projection-engine";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -117,7 +124,7 @@ export async function registerRoutes(
         (p) => !teamPlayerIds.has(p.id) && !p.injuryStatus
       );
 
-      const { calcTradeEV } = await import("./expand-players");
+      const w = getCachedWeights();
 
       const underperformers = myTeam
         .filter((p) => p.isOnField)
@@ -132,8 +139,8 @@ export async function registerRoutes(
         const samePosPlayers = availablePlayers
           .filter((p) => p.position === playerOut.position)
           .sort((a, b) => {
-            const aScore = (a.last3Avg || 0) * 0.4 + (a.avgScore || 0) * 0.3 + (a.formTrend === "up" ? 10 : a.formTrend === "down" ? -10 : 0) * 0.3;
-            const bScore = (b.last3Avg || 0) * 0.4 + (b.avgScore || 0) * 0.3 + (b.formTrend === "up" ? 10 : b.formTrend === "down" ? -10 : 0) * 0.3;
+            const aScore = calcTradeRankingScore(a.last3Avg || 0, a.avgScore || 0, a.formTrend, w);
+            const bScore = calcTradeRankingScore(b.last3Avg || 0, b.avgScore || 0, b.formTrend, w);
             return bScore - aScore;
           })
           .slice(0, 3);
@@ -144,27 +151,25 @@ export async function registerRoutes(
           const volIn = playerIn.volatilityScore || 5;
           const volOut = playerOut.volatilityScore || 5;
           const cashGen = playerIn.cashGenPotential === "elite" ? 40 : playerIn.cashGenPotential === "high" ? 25 : playerIn.cashGenPotential === "medium" ? 15 : 0;
-          const tradeEv = calcTradeEV(projIn, projOut, volIn, volOut, cashGen);
+          const tradeEv = calcTradeEV(projIn, projOut, volIn, volOut, cashGen, w);
 
           const scoreDiff = (playerIn.avgScore || 0) - (playerOut.avgScore || 0);
           const formDiff = (playerIn.last3Avg || 0) - (playerOut.last3Avg || 0);
           const priceDiff = playerIn.price - playerOut.price;
 
-          let confidence = 0.5;
-          if (tradeEv > 30) confidence += 0.25;
-          else if (tradeEv > 15) confidence += 0.15;
-          else if (tradeEv > 0) confidence += 0.05;
-          if (formDiff > 15) confidence += 0.1;
-          else if (formDiff > 5) confidence += 0.05;
-          if (playerIn.formTrend === "up") confidence += 0.05;
-          if (playerOut.formTrend === "down") confidence += 0.05;
-          if (playerOut.injuryStatus) confidence += 0.1;
-          if (playerIn.dualPosition) confidence += 0.05;
-          confidence = Math.min(confidence, 0.95);
+          const confidence = calcTradeConfidence(
+            tradeEv,
+            formDiff,
+            playerIn.formTrend,
+            playerOut.formTrend,
+            !!playerOut.injuryStatus,
+            !!playerIn.dualPosition,
+            w
+          );
 
           const reasons = [];
-          if (tradeEv > 30) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (strong)`);
-          else if (tradeEv > 15) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (marginal)`);
+          if (tradeEv > w.confidence_ev_strong_threshold) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (strong)`);
+          else if (tradeEv > w.confidence_ev_moderate_threshold) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (marginal)`);
           if (playerIn.formTrend === "up") reasons.push(`${playerIn.name} trending up (L3: ${playerIn.last3Avg?.toFixed(1)})`);
           if (playerOut.formTrend === "down") reasons.push(`${playerOut.name} trending down`);
           if (scoreDiff > 0) reasons.push(`+${scoreDiff.toFixed(1)} avg pts/game`);
@@ -607,6 +612,83 @@ export async function registerRoutes(
       const playerId = parseInt(req.params.playerId);
       const projs = await storage.getProjections(playerId);
       res.json(projs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/model-weights", async (_req, res) => {
+    try {
+      const weights = await storage.getAllModelWeights();
+      res.json(weights);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/model-weights/:key", async (req, res) => {
+    try {
+      const weight = await storage.getModelWeight(req.params.key);
+      if (!weight) return res.status(404).json({ message: "Weight not found" });
+      res.json(weight);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  const updateWeightSchema = z.object({
+    value: z.number(),
+    description: z.string().nullable().optional(),
+    category: z.string().optional(),
+  });
+
+  const batchUpdateWeightSchema = z.array(z.object({
+    key: z.string(),
+    value: z.number(),
+  }));
+
+  app.put("/api/model-weights/:key", async (req, res) => {
+    try {
+      const parsed = updateWeightSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.errors });
+      }
+      const { value, description, category } = parsed.data;
+      const weight = await storage.upsertModelWeight({
+        key: req.params.key,
+        value,
+        description: description ?? null,
+        category: category || "general",
+      });
+      const allWeights = await storage.getAllModelWeights();
+      buildWeightConfig(allWeights);
+      res.json(weight);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/model-weights", async (req, res) => {
+    try {
+      const parsed = batchUpdateWeightSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.errors });
+      }
+      const results = [];
+      for (const { key, value } of parsed.data) {
+        const existing = await storage.getModelWeight(key);
+        if (existing) {
+          results.push(await storage.upsertModelWeight({
+            key,
+            value,
+            description: existing.description,
+            category: existing.category,
+          }));
+        }
+      }
+      const allWeights = await storage.getAllModelWeights();
+      buildWeightConfig(allWeights);
+      res.json(results);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

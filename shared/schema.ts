@@ -227,6 +227,18 @@ export type TradeRecommendationWithPlayers = TradeRecommendation & {
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
+export const modelWeights = pgTable("model_weights", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: real("value").notNull(),
+  description: text("description").default(null),
+  category: text("category").notNull().default("general"),
+});
+
+export const insertModelWeightSchema = createInsertSchema(modelWeights).omit({ id: true });
+export type ModelWeight = typeof modelWeights.$inferSelect;
+export type InsertModelWeight = z.infer<typeof insertModelWeightSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
