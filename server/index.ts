@@ -63,6 +63,12 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
+  const { expandPlayerDatabase } = await import("./expand-players");
+  const added = await expandPlayerDatabase();
+  if (added > 0) {
+    log(`Expanded player database with ${added} new players`);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

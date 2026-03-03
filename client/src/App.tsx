@@ -14,6 +14,7 @@ import Trades from "@/pages/trades";
 import FormGuide from "@/pages/form-guide";
 import IntelHub from "@/pages/intel-hub";
 import TeamAnalyzer from "@/pages/team-analyzer";
+import PlayerReportPage from "@/pages/player-report";
 import SettingsPage from "@/pages/settings-page";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/form" component={FormGuide} />
       <Route path="/intel" component={IntelHub} />
       <Route path="/analyze" component={TeamAnalyzer} />
+      <Route path="/player/:id" component={PlayerReportPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>

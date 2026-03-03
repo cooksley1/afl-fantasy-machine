@@ -15,10 +15,11 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/db.ts` - Database connection pool
 - `server/storage.ts` - DatabaseStorage class implementing IStorage interface
 - `server/routes.ts` - Express API routes (all prefixed with /api)
-- `server/seed.ts` - Seeds database with 43 real AFL players (with DPP, venues, game times, BEs, ceilings) and a starting team
-- `server/intel-engine.ts` - AI-powered intelligence engine using OpenAI for strategic analysis including captain loophole decision trees, DPP exploitation, break-even arbitrage, trade recommendations, and screenshot team analysis
+- `server/seed.ts` - Seeds database with initial AFL players and a starting team
+- `server/expand-players.ts` - Expands database to 140+ real 2026 AFL players across all 18 teams with SuperCoach prices, DPP, bye rounds, venues, and game times
+- `server/intel-engine.ts` - AI-powered intelligence engine using OpenAI for strategic analysis including captain loophole decision trees, DPP exploitation, break-even arbitrage, trade recommendations, screenshot team analysis, full team analysis with per-player verdicts, and individual player scouting reports
 - `client/src/App.tsx` - Main app with sidebar navigation and routing
-- `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, Settings pages
+- `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
 - `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
 
 ## Key Strategic Features
@@ -33,7 +34,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 
 ## Pages
 1. **Dashboard** - Team overview, projected score, captain loophole strategy (VC/C), late change alerts, top performers, suggested trades
-2. **My Team** - View/manage roster by position (DEF/MID/RUC/FWD), set captain/VC, remove players
+2. **My Team** - View/manage roster by position (DEF/MID/RUC/FWD), set captain/VC, remove players, AI "Analyse Team" button with per-player verdicts (keep/trade/sell/must_have/monitor), click any player for full AI scouting report
 3. **Players** - Browse all players with DPP badges, break-even, price changes, venue info, search/filter/sort (card layout on mobile)
 4. **Trade Centre** - Quick algorithmic + AI-powered deep trade recommendations (with BE arbitrage, DPP value, bye coverage), execute trades
 5. **Form Guide** - Hot/cold players, top scorers, rising stars with team filtering
@@ -58,6 +59,8 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `GET /api/intel/:category` - Get intel by category (validated)
 - `POST /api/intel/generate` - Generate new AI intel reports (10-14 reports with loophole/DPP/BE analysis)
 - `GET /api/captain-advice` - AI-powered captain loophole analysis with decision tree
+- `POST /api/my-team/analyze` - AI full team analysis with per-player verdicts, captain strategy, bye risk, strengths/weaknesses
+- `GET /api/players/:id/report` - AI comprehensive player scouting report with form, price, fixture, captaincy, DPP, comparisons, trade targets
 - `POST /api/analyze-screenshot` - Upload team screenshot for GPT-4o vision analysis (multipart/form-data)
 - `POST /api/players/refresh-data` - Refresh player data with DPP, venues, game times, BEs, ceilings
 - `GET /api/late-changes` - Get late changes for current round

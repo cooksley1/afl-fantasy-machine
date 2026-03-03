@@ -410,6 +410,17 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/players/expand", async (_req, res) => {
+    try {
+      const { expandPlayerDatabase } = await import("./expand-players");
+      const added = await expandPlayerDatabase();
+      const allPlayers = await storage.getAllPlayers();
+      res.json({ message: `Added ${added} new players. Total: ${allPlayers.length}`, count: allPlayers.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/captain-advice", async (_req, res) => {
     try {
       const { generateCaptainAdvice } = await import("./intel-engine");
@@ -443,6 +454,36 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Screenshot analysis error:", error.message);
       res.status(500).json({ message: "Failed to analyze screenshot. Please try again with a clearer image." });
+    }
+  });
+
+  app.post("/api/my-team/analyze", async (_req, res) => {
+    try {
+      const myTeam = await storage.getMyTeam();
+      if (myTeam.length === 0) {
+        return res.status(400).json({ message: "Add players to your team first" });
+      }
+      const { analyzeMyTeam } = await import("./intel-engine");
+      const analysis = await analyzeMyTeam();
+      res.json(analysis);
+    } catch (error: any) {
+      console.error("Team analysis error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/players/:id/report", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid player ID" });
+      const player = await storage.getPlayer(id);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      const { generatePlayerReport } = await import("./intel-engine");
+      const report = await generatePlayerReport(id);
+      res.json({ player, report });
+    } catch (error: any) {
+      console.error("Player report error:", error.message);
+      res.status(500).json({ message: error.message });
     }
   });
 

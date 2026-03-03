@@ -445,3 +445,246 @@ The VC MUST play in an earlier game slot than the Captain pick. Choose the best 
 
   return JSON.parse(content);
 }
+
+export interface PlayerAdvice {
+  name: string;
+  playerId: number;
+  action: "keep" | "trade" | "sell" | "buy" | "monitor" | "must_have";
+  captaincy: "captain" | "vice_captain" | "loophole_vc" | "none";
+  reasoning: string;
+  formAnalysis: string;
+  priceOutlook: string;
+  riskLevel: "low" | "medium" | "high";
+  priority: number;
+}
+
+export interface TeamAnalysisResult {
+  overallRating: number;
+  summary: string;
+  strengthAreas: string[];
+  weaknessAreas: string[];
+  playerAdvice: PlayerAdvice[];
+  urgentActions: string[];
+  byeRiskSummary: string;
+  captainStrategy: string;
+}
+
+export async function analyzeMyTeam(): Promise<TeamAnalysisResult> {
+  const allPlayers = await storage.getAllPlayers();
+  const myTeam = await storage.getMyTeam();
+  const settings = await storage.getSettings();
+
+  if (myTeam.length === 0) {
+    throw new Error("Add players to your team first");
+  }
+
+  const teamData = buildTeamSummary(myTeam);
+  const gameSlots = getGameSlots(myTeam);
+  const byeBreakdown = getByeRoundBreakdown(myTeam);
+
+  const teamPlayerIds = new Set(myTeam.map(p => p.id));
+  const topAvailable = allPlayers
+    .filter(p => !teamPlayerIds.has(p.id))
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 50);
+  const availableData = buildPlayerSummary(topAvailable);
+
+  const playerList = myTeam.map(p => `ID:${p.id} | ${p.name}`).join(', ');
+
+  const prompt = `You are an elite AFL Fantasy analyst. Analyze my full team and provide a specific verdict on EVERY player. 
+
+CURRENT ROUND: ${settings.currentRound}
+TRADES REMAINING: ${settings.tradesRemaining}
+SALARY CAP: $${(settings.salaryCap / 1000).toFixed(0)}K
+SALARY REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
+
+MY TEAM:
+${teamData}
+
+GAME TIME SLOTS:
+${gameSlots}
+
+BYE ROUND EXPOSURE:
+${byeBreakdown}
+
+TOP AVAILABLE PLAYERS (not on my team):
+${availableData}
+
+MY PLAYER IDs: ${playerList}
+
+Return ONLY valid JSON:
+{
+  "overallRating": 1-10,
+  "summary": "2-3 sentence team assessment",
+  "strengthAreas": ["strength 1", "strength 2"],
+  "weaknessAreas": ["weakness 1", "weakness 2"],
+  "playerAdvice": [
+    {
+      "name": "exact player name",
+      "playerId": player_id_number,
+      "action": "keep" | "trade" | "sell" | "buy" | "monitor" | "must_have",
+      "captaincy": "captain" | "vice_captain" | "loophole_vc" | "none",
+      "reasoning": "Why this action - be specific with stats, matchups, form trends",
+      "formAnalysis": "Recent form assessment with L3/L5/avg comparison",
+      "priceOutlook": "Will price rise or fall? By how much? BE analysis",
+      "riskLevel": "low" | "medium" | "high",
+      "priority": 1-10 (10 = most urgent to act on)
+    }
+  ],
+  "urgentActions": ["Most urgent action 1", "Most urgent action 2"],
+  "byeRiskSummary": "Assessment of bye round exposure and what to do",
+  "captainStrategy": "Who should be VC and C this week, with decision tree"
+}
+
+RULES:
+- You MUST include advice for EVERY player on the team (${myTeam.length} players)
+- Use the exact player IDs from the data provided
+- "trade" means swap for someone better at similar price
+- "sell" means downgrade for cash to fund upgrades elsewhere
+- "must_have" means this player is elite and must be kept
+- "monitor" means watch for one more week before deciding
+- Be specific with replacement targets from the available players list
+- Factor in bye rounds, DPP, break-even, form, fixtures, and ceiling`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are an elite AFL Fantasy analyst providing comprehensive team analysis. Return only valid JSON." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.6,
+      max_tokens: 6000,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("No response from AI");
+
+    const parsed = JSON.parse(content);
+    return {
+      overallRating: parsed.overallRating || 5,
+      summary: parsed.summary || "Analysis complete.",
+      strengthAreas: Array.isArray(parsed.strengthAreas) ? parsed.strengthAreas : [],
+      weaknessAreas: Array.isArray(parsed.weaknessAreas) ? parsed.weaknessAreas : [],
+      playerAdvice: Array.isArray(parsed.playerAdvice) ? parsed.playerAdvice : [],
+      urgentActions: Array.isArray(parsed.urgentActions) ? parsed.urgentActions : [],
+      byeRiskSummary: parsed.byeRiskSummary || "",
+      captainStrategy: parsed.captainStrategy || "",
+    };
+  } catch (error: any) {
+    console.error("Team analysis error:", error.message);
+    throw error;
+  }
+}
+
+export interface PlayerReport {
+  overview: string;
+  verdict: "keep" | "trade" | "sell" | "buy" | "monitor" | "must_have";
+  verdictReasoning: string;
+  formBreakdown: string;
+  priceAnalysis: string;
+  fixtureOutlook: string;
+  captaincyCase: string;
+  dppValue: string;
+  comparisonPlayers: { name: string; reason: string }[];
+  tradeTargets: { name: string; reason: string; direction: "in" | "out" }[];
+  riskFactors: string[];
+  keyStats: { label: string; value: string; trend: "up" | "down" | "stable" }[];
+}
+
+export async function generatePlayerReport(playerId: number): Promise<PlayerReport> {
+  const player = await storage.getPlayer(playerId);
+  if (!player) throw new Error("Player not found");
+
+  const allPlayers = await storage.getAllPlayers();
+  const myTeam = await storage.getMyTeam();
+  const settings = await storage.getSettings();
+
+  const isOnMyTeam = myTeam.some(p => p.id === playerId);
+  const samePositionPlayers = allPlayers
+    .filter(p => p.position === player.position && p.id !== player.id)
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 20);
+
+  const playerDetail = buildPlayerSummary([player]);
+  const comparisons = buildPlayerSummary(samePositionPlayers);
+  const teamContext = myTeam.length > 0 ? buildTeamSummary(myTeam) : "No team selected";
+
+  const prompt = `You are an elite AFL Fantasy analyst. Generate a comprehensive scouting report for this player.
+
+PLAYER:
+${playerDetail}
+
+${isOnMyTeam ? "THIS PLAYER IS ON MY TEAM" : "THIS PLAYER IS NOT ON MY TEAM"}
+
+MY TEAM:
+${teamContext}
+
+CURRENT ROUND: ${settings.currentRound}
+TRADES REMAINING: ${settings.tradesRemaining}
+
+TOP ${player.position} PLAYERS FOR COMPARISON:
+${comparisons}
+
+Return ONLY valid JSON:
+{
+  "overview": "2-3 sentence player assessment covering role, scoring profile, and current trajectory",
+  "verdict": "keep" | "trade" | "sell" | "buy" | "monitor" | "must_have",
+  "verdictReasoning": "Detailed reasoning for the verdict - 3-4 sentences with specific stats",
+  "formBreakdown": "Analysis of L3 vs L5 vs season avg trends. Is form rising, falling, or steady? What's driving it?",
+  "priceAnalysis": "Break-even analysis, predicted price movement over next 3 weeks, is now the right time to buy/sell?",
+  "fixtureOutlook": "Next 3-5 week fixture analysis. Good or bad matchups coming? Venue impact?",
+  "captaincyCase": "Is this player a viable captain/VC option? When should you captain them?",
+  "dppValue": "If DPP, how valuable is that flexibility? If not DPP, is position limiting?",
+  "comparisonPlayers": [{"name": "Player Name", "reason": "How they compare - better/worse and why"}],
+  "tradeTargets": [{"name": "Player Name", "reason": "Why trade to/from this player", "direction": "in" | "out"}],
+  "riskFactors": ["Risk factor 1", "Risk factor 2"],
+  "keyStats": [
+    {"label": "stat name", "value": "stat value", "trend": "up" | "down" | "stable"}
+  ]
+}
+
+RULES:
+- Be specific with numbers and comparisons
+- Compare to same-position players
+- If on my team, advise whether to keep or trade
+- If not on my team, advise whether to buy
+- Include at least 3 comparison players and 2 trade targets
+- Include at least 5 key stats with trends`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are an elite AFL Fantasy analyst. Return only valid JSON." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 4000,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("No response from AI");
+
+    const parsed = JSON.parse(content);
+    return {
+      overview: parsed.overview || "",
+      verdict: parsed.verdict || "monitor",
+      verdictReasoning: parsed.verdictReasoning || "",
+      formBreakdown: parsed.formBreakdown || "",
+      priceAnalysis: parsed.priceAnalysis || "",
+      fixtureOutlook: parsed.fixtureOutlook || "",
+      captaincyCase: parsed.captaincyCase || "",
+      dppValue: parsed.dppValue || "",
+      comparisonPlayers: Array.isArray(parsed.comparisonPlayers) ? parsed.comparisonPlayers : [],
+      tradeTargets: Array.isArray(parsed.tradeTargets) ? parsed.tradeTargets : [],
+      riskFactors: Array.isArray(parsed.riskFactors) ? parsed.riskFactors : [],
+      keyStats: Array.isArray(parsed.keyStats) ? parsed.keyStats : [],
+    };
+  } catch (error: any) {
+    console.error("Player report error:", error.message);
+    throw error;
+  }
+}
