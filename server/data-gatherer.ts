@@ -111,6 +111,61 @@ async function fetchSquiggleLadder(): Promise<FetchedItem[]> {
   return items;
 }
 
+const FANTASY_KEYWORDS = [
+  'fantasy', 'supercoach', 'injury', 'injur', 'medical', 'hamstring', 'concuss',
+  'trade', 'selection', 'team selection', 'ins and outs', 'named', 'omit',
+  'debut', 'return', 'suspend', 'tribunal', 'captain', 'breakout',
+  'form', 'role', 'tag', 'tagger', 'position', 'midfield', 'forward',
+  'defender', 'ruck', 'late change', 'withdraw', 'rest', 'manage',
+  'predicted', 'line up', 'lineup', 'bye', 'vest', 'draft', 'price',
+  'score', 'average', 'breakeven', 'cash cow', 'premium', 'mid-pricer',
+  'rookie', 'emerging', 'rising star', 'contract', 'sign', 'delist',
+  'train', 'training', 'match committee', 'dropped', 'recalled',
+  'season over', 'acl', 'surgery', 'scan', 'soreness',
+];
+
+const AFL_CLUB_FEEDS: { team: string; shortName: string; query: string; rssUrl?: string }[] = [
+  { team: "Adelaide Crows", shortName: "ADE", query: "Adelaide+Crows+AFL" },
+  { team: "Brisbane Lions", shortName: "BRL", query: "Brisbane+Lions+AFL" },
+  { team: "Carlton", shortName: "CAR", query: "Carlton+Blues+AFL" },
+  { team: "Collingwood", shortName: "COL", query: "Collingwood+Magpies+AFL" },
+  { team: "Essendon", shortName: "ESS", query: "Essendon+Bombers+AFL" },
+  { team: "Fremantle", shortName: "FRE", query: "Fremantle+Dockers+AFL" },
+  { team: "Geelong Cats", shortName: "GEE", query: "Geelong+Cats+AFL" },
+  { team: "Gold Coast Suns", shortName: "GCS", query: "Gold+Coast+Suns+AFL" },
+  { team: "GWS Giants", shortName: "GWS", query: "GWS+Giants+AFL" },
+  { team: "Hawthorn", shortName: "HAW", query: "Hawthorn+Hawks+AFL" },
+  { team: "Melbourne", shortName: "MEL", query: "Melbourne+Demons+AFL", rssUrl: "https://www.melbournefc.com.au/rss" },
+  { team: "North Melbourne", shortName: "NTH", query: "North+Melbourne+Kangaroos+AFL" },
+  { team: "Port Adelaide", shortName: "PTA", query: "Port+Adelaide+Power+AFL" },
+  { team: "Richmond", shortName: "RIC", query: "Richmond+Tigers+AFL" },
+  { team: "St Kilda", shortName: "STK", query: "St+Kilda+Saints+AFL" },
+  { team: "Sydney Swans", shortName: "SYD", query: "Sydney+Swans+AFL" },
+  { team: "West Coast Eagles", shortName: "WCE", query: "West+Coast+Eagles+AFL" },
+  { team: "Western Bulldogs", shortName: "WBD", query: "Western+Bulldogs+AFL" },
+];
+
+function parseRSSItems(xml: string): { title: string; link: string; desc: string; pubDate: string; source?: string }[] {
+  const rssItems = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+  return rssItems.map(item => {
+    const titleCdata = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1];
+    const titlePlain = item.match(/<title>(.*?)<\/title>/)?.[1];
+    const title = titleCdata || titlePlain || '';
+    const link = item.match(/<link>(.*?)<\/link>/)?.[1] || '';
+    const descCdata = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1];
+    const descPlain = item.match(/<description>(.*?)<\/description>/)?.[1];
+    const desc = descCdata || descPlain || '';
+    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
+    const source = item.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || '';
+    return { title, link, desc: desc.replace(/<[^>]*>/g, '').trim(), pubDate, source };
+  });
+}
+
+function isFantasyRelevant(text: string): boolean {
+  const lower = text.toLowerCase();
+  return FANTASY_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 async function fetchAFLRSS(): Promise<FetchedItem[]> {
   const items: FetchedItem[] = [];
   try {
@@ -119,37 +174,135 @@ async function fetchAFLRSS(): Promise<FetchedItem[]> {
     });
     if (!res.ok) return items;
     const xml = await res.text();
-    const rssItems = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+    const parsed = parseRSSItems(xml);
 
-    const fantasyKeywords = [
-      'fantasy', 'supercoach', 'injury', 'injur', 'medical', 'hamstring', 'concuss',
-      'trade', 'selection', 'team selection', 'ins and outs', 'named', 'omit',
-      'debut', 'return', 'suspend', 'tribunal', 'captain', 'breakout',
-      'form', 'role', 'tag', 'tagger', 'position', 'midfield', 'forward',
-      'defender', 'ruck', 'late change', 'withdraw', 'rest', 'manage',
-      'predicted', 'line up', 'lineup', 'bye', 'vest',
-    ];
-
-    for (const item of rssItems.slice(0, 20)) {
-      const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || '';
-      const link = item.match(/<link>(.*?)<\/link>/)?.[1] || '';
-      const desc = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] || '';
-      const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
-      const cleanDesc = desc.replace(/<[^>]*>/g, '').trim();
-      const combined = `${title} ${cleanDesc}`.toLowerCase();
-      const isRelevant = fantasyKeywords.some(kw => combined.includes(kw));
-
-      if (isRelevant) {
+    for (const entry of parsed.slice(0, 20)) {
+      const combined = `${entry.title} ${entry.desc}`;
+      if (isFantasyRelevant(combined)) {
         items.push({
           sourceType: "afl_news",
-          sourceUrl: link,
-          title: title,
-          rawContent: `${title}\n${cleanDesc}\nPublished: ${pubDate}`,
+          sourceUrl: entry.link,
+          title: entry.title,
+          rawContent: `${entry.title}\n${entry.desc}\nPublished: ${entry.pubDate}`,
         });
       }
     }
   } catch (e: any) {
     console.error("AFL RSS fetch error:", e.message);
+  }
+  return items;
+}
+
+async function fetchClubOfficialRSS(club: typeof AFL_CLUB_FEEDS[0]): Promise<FetchedItem[]> {
+  if (!club.rssUrl) return [];
+  const items: FetchedItem[] = [];
+  try {
+    const res = await fetchWithTimeout(club.rssUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; AFL-Fantasy-Machine/1.0)" }
+    });
+    if (!res.ok) return items;
+    const xml = await res.text();
+    if (!xml.includes('<rss') && !xml.includes('<?xml')) return items;
+    const parsed = parseRSSItems(xml);
+
+    for (const entry of parsed.slice(0, 10)) {
+      items.push({
+        sourceType: "club_official",
+        sourceUrl: entry.link,
+        title: `[${club.shortName}] ${entry.title}`,
+        rawContent: `Team: ${club.team}\n${entry.title}\n${entry.desc}\nPublished: ${entry.pubDate}`,
+      });
+    }
+    console.log(`[DataGatherer] ${club.team} official RSS: ${items.length} items`);
+  } catch (e: any) {
+    console.error(`[DataGatherer] ${club.team} RSS error:`, e.message);
+  }
+  return items;
+}
+
+async function fetchClubGoogleNews(club: typeof AFL_CLUB_FEEDS[0]): Promise<FetchedItem[]> {
+  const items: FetchedItem[] = [];
+  try {
+    const url = `https://news.google.com/rss/search?q=${club.query}&hl=en-AU&gl=AU&ceid=AU:en`;
+    const res = await fetchWithTimeout(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    }, 12000);
+    if (!res.ok) return items;
+    const xml = await res.text();
+    const parsed = parseRSSItems(xml);
+
+    for (const entry of parsed.slice(0, 5)) {
+      const cleanTitle = entry.title.replace(/ - [^-]+$/, '').trim();
+      const sourceName = entry.source || entry.title.match(/ - ([^-]+)$/)?.[1]?.trim() || '';
+      items.push({
+        sourceType: "club_news",
+        sourceUrl: entry.link,
+        title: `[${club.shortName}] ${cleanTitle}`,
+        rawContent: `Team: ${club.team}\nSource: ${sourceName}\n${cleanTitle}\n${entry.desc}\nPublished: ${entry.pubDate}`,
+      });
+    }
+  } catch (e: any) {
+    console.error(`[DataGatherer] ${club.team} Google News error:`, e.message);
+  }
+  return items;
+}
+
+async function fetchAllClubFeeds(): Promise<FetchedItem[]> {
+  const allItems: FetchedItem[] = [];
+  const BATCH_SIZE = 4;
+
+  for (let i = 0; i < AFL_CLUB_FEEDS.length; i += BATCH_SIZE) {
+    const batch = AFL_CLUB_FEEDS.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      batch.flatMap(club => [
+        fetchClubGoogleNews(club),
+        fetchClubOfficialRSS(club),
+      ])
+    );
+    for (const result of results) {
+      allItems.push(...result);
+    }
+    if (i + BATCH_SIZE < AFL_CLUB_FEEDS.length) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+  }
+
+  console.log(`[DataGatherer] Fetched ${allItems.length} items from all 18 AFL club feeds`);
+  return allItems;
+}
+
+async function fetchFantasySpecificNews(): Promise<FetchedItem[]> {
+  const items: FetchedItem[] = [];
+  const queries = [
+    "AFL+Fantasy+2026",
+    "AFL+SuperCoach+2026",
+    "AFL+injury+list+round",
+    "AFL+team+selection+ins+outs",
+  ];
+
+  for (const query of queries) {
+    try {
+      const url = `https://news.google.com/rss/search?q=${query}&hl=en-AU&gl=AU&ceid=AU:en`;
+      const res = await fetchWithTimeout(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+      }, 12000);
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const parsed = parseRSSItems(xml);
+
+      for (const entry of parsed.slice(0, 5)) {
+        const cleanTitle = entry.title.replace(/ - [^-]+$/, '').trim();
+        const sourceName = entry.source || entry.title.match(/ - ([^-]+)$/)?.[1]?.trim() || '';
+        items.push({
+          sourceType: "fantasy_news",
+          sourceUrl: entry.link,
+          title: cleanTitle,
+          rawContent: `Source: ${sourceName}\n${cleanTitle}\n${entry.desc}\nPublished: ${entry.pubDate}`,
+        });
+      }
+    } catch (e: any) {
+      console.error(`[DataGatherer] Fantasy news error (${query}):`, e.message);
+    }
   }
   return items;
 }
@@ -191,14 +344,16 @@ export async function gatherIntelligence(): Promise<{ fetched: number; processed
 
   const allItems: FetchedItem[] = [];
 
-  const [fixtures, tips, ladder, aflNews] = await Promise.all([
+  const [fixtures, tips, ladder, aflNews, clubFeeds, fantasyNews] = await Promise.all([
     fetchSquiggleGames(currentRound),
     fetchSquiggleTips(currentRound),
     fetchSquiggleLadder(),
     fetchAFLRSS(),
+    fetchAllClubFeeds(),
+    fetchFantasySpecificNews(),
   ]);
 
-  allItems.push(...fixtures, ...tips, ...ladder, ...aflNews);
+  allItems.push(...fixtures, ...tips, ...ladder, ...aflNews, ...clubFeeds, ...fantasyNews);
 
   let fetched = 0;
   for (const item of allItems) {
@@ -234,7 +389,7 @@ async function processUnprocessedIntel(): Promise<number> {
     .from(intelSources)
     .where(eq(intelSources.isProcessed, false))
     .orderBy(desc(intelSources.fetchedAt))
-    .limit(10);
+    .limit(20);
 
   if (unprocessed.length === 0) return 0;
 

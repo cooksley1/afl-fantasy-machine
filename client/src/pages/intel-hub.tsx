@@ -90,9 +90,13 @@ function SourceBadge({ source }: { source: string | null }) {
     squiggle_tips: "Predictions",
     squiggle_ladder: "Ladder",
     afl_news: "AFL.com.au",
+    club_news: "Club News",
+    club_official: "Official Club",
+    fantasy_news: "Fantasy News",
   };
+  const isClub = source === "club_news" || source === "club_official";
   return (
-    <Badge variant="outline" className="text-[10px]">
+    <Badge variant="outline" className={`text-[10px] ${isClub ? 'border-green-500/50 text-green-600 dark:text-green-400' : ''}`}>
       <Rss className="w-2.5 h-2.5 mr-0.5" />
       {labels[source] || source}
     </Badge>
@@ -343,7 +347,7 @@ export default function IntelHub() {
             Intel Hub
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Live data from AFL sources + AI-powered strategic intelligence
+            Live data from all 18 AFL clubs, AFL.com.au, Squiggle + AI analysis
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -439,11 +443,40 @@ export default function IntelHub() {
       </div>
 
       {sourceStats?.lastFetched && (
-        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          Last data gather: {new Date(sourceStats.lastFetched).toLocaleString()} |
-          Sources: {Object.entries(sourceStats.sourceBreakdown || {}).map(([k, v]) => `${k}: ${v}`).join(', ')}
-        </p>
+        <Card className="bg-muted/30">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1 mb-2">
+              <Clock className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">
+                Last gather: {new Date(sourceStats.lastFetched).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(sourceStats.sourceBreakdown || {}).map(([key, count]) => {
+                const sourceLabels: Record<string, string> = {
+                  squiggle_fixtures: "Squiggle Fixtures",
+                  squiggle_tips: "Squiggle Tips",
+                  squiggle_ladder: "Ladder",
+                  afl_news: "AFL.com.au",
+                  club_news: "Club News",
+                  club_official: "Official Club",
+                  fantasy_news: "Fantasy News",
+                };
+                const isClub = key === "club_news" || key === "club_official";
+                return (
+                  <Badge
+                    key={key}
+                    variant="secondary"
+                    className={`text-[10px] ${isClub ? 'bg-green-500/10 text-green-600 dark:text-green-400' : ''}`}
+                    data-testid={`badge-source-${key}`}
+                  >
+                    {sourceLabels[key] || key}: {count}
+                  </Badge>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {preGameAdvice && <PreGamePanel advice={preGameAdvice} />}
@@ -492,8 +525,8 @@ export default function IntelHub() {
             <Brain className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <h3 className="font-semibold text-lg mb-1">No intelligence reports yet</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-              Gather live data from AFL sources, then generate AI analysis for strategic insights
-              about captain picks, cash cows, bye strategy, POD plays, and more.
+              Gather live data from all 18 AFL club feeds, AFL.com.au, Squiggle, and fantasy news,
+              then generate AI analysis for captain picks, cash cows, bye strategy, POD plays, and more.
             </p>
             <div className="flex items-center justify-center gap-2">
               <Button

@@ -8,7 +8,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - **Backend**: Express.js, Node.js, multer (file uploads)
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI**: OpenAI GPT-4o-mini (text analysis), GPT-4o (vision/screenshot analysis) via Replit AI Integrations
-- **Data Sources**: Squiggle API (fixtures, tips, ladder), AFL.com.au RSS (injury/selection news)
+- **Data Sources**: Squiggle API (fixtures, tips, ladder), AFL.com.au RSS, all 18 AFL club feeds via Google News RSS, Melbourne FC official RSS, Fantasy-specific news feeds
 - **Styling**: Custom navy/gold AFL-themed color scheme with dark mode support, mobile-first responsive design
 
 ## Architecture
@@ -20,7 +20,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/expand-players.ts` - Expands database to 780 real 2026 AFL players across all 18 teams with prices, DPP, bye rounds, venues, and game times
 - `server/real-players-2026.json` - 780 parsed players from official DFS Australia Excel file
 - `server/intel-engine.ts` - AI-powered intelligence engine using OpenAI for strategic analysis including captain loophole decision trees, DPP exploitation, break-even arbitrage, trade recommendations, screenshot team analysis, full team analysis with per-player verdicts, and individual player scouting reports
-- `server/data-gatherer.ts` - Live data fetching from Squiggle API and AFL.com.au RSS, AI processing of raw sources into actionable fantasy insights, pre-game advice generation
+- `server/data-gatherer.ts` - Live data fetching from Squiggle API, AFL.com.au RSS, all 18 AFL club Google News feeds (Adelaide, Brisbane, Carlton, Collingwood, Essendon, Fremantle, Geelong, Gold Coast, GWS, Hawthorn, Melbourne, North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney, West Coast, Western Bulldogs), Melbourne FC official RSS, fantasy-specific news searches; AI processing of raw sources into actionable fantasy insights; pre-game advice generation
 - `server/scheduler.ts` - Automated 4-hour intelligence gathering cycle, starts 30s after boot
 - `client/src/App.tsx` - Main app with sidebar navigation, mobile header branding, and routing
 - `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
@@ -44,7 +44,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 3. **Players** - Browse all 780 players with DPP badges, break-even, price changes, venue info, search/filter/sort (card layout on mobile)
 4. **Trade Centre** - Quick algorithmic + AI-powered deep trade recommendations (with BE arbitrage, DPP value, bye coverage), execute trades
 5. **Form Guide** - Hot/cold players, top scorers, rising stars with team filtering
-6. **Intel Hub** - AI-powered strategic intelligence + live data gathering from Squiggle/AFL + pre-game lockout advice, source stats dashboard, 12 category filters
+6. **Intel Hub** - AI-powered strategic intelligence + live data gathering from all 18 AFL clubs, Squiggle, AFL.com.au, fantasy news + pre-game lockout advice, source stats dashboard, 12 category filters
 7. **Team Analyzer** - Upload team screenshot for AI-powered analysis using GPT-4o vision (player identification, strategy recommendations, trade suggestions)
 8. **Player Report** - Per-player AI scouting report with form, price, fixtures, captaincy, DPP, comparisons, risks
 9. **Settings** - Configure team name, salary cap, current round, trades remaining
