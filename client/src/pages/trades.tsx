@@ -144,9 +144,9 @@ export default function Trades() {
                 <ArrowLeftRight className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Trades Remaining</p>
+                <p className="text-sm font-semibold">Trades This Round</p>
                 <p className="text-xs text-muted-foreground">
-                  {settings?.totalTradesUsed || 0} used this season
+                  Round {settings?.currentRound || 1} — {settings?.totalTradesUsed || 0} used this season
                 </p>
               </div>
             </div>
@@ -154,6 +154,7 @@ export default function Trades() {
               <p className="text-3xl font-bold text-accent">
                 {settings?.tradesRemaining || 0}
               </p>
+              <p className="text-[10px] text-muted-foreground">this round</p>
             </div>
           </div>
         </CardContent>

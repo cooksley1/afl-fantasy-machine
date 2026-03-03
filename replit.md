@@ -70,7 +70,8 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `POST /api/trade-recommendations/generate-ai` - AI-powered deep trade analysis
 - `POST /api/trade-recommendations/:id/execute` - Execute a trade
 - `GET /api/settings` - Get league settings
-- `PATCH /api/settings` - Update settings
+- `PATCH /api/settings` - Update settings (auto-resets trades when round changes)
+- `GET /api/game-rules` - AFL Fantasy Classic 2026 rules
 - `GET /api/intel` - All intel reports
 - `GET /api/intel/:category` - Intel by category
 - `POST /api/intel/generate` - Generate AI intel

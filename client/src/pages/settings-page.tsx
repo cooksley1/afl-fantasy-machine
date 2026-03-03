@@ -40,9 +40,9 @@ export default function SettingsPage() {
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
       teamName: settings?.teamName || "My Team",
-      salaryCap: settings?.salaryCap || 10000000,
+      salaryCap: settings?.salaryCap || 18300000,
       currentRound: settings?.currentRound || 1,
-      tradesRemaining: settings?.tradesRemaining || 30,
+      tradesRemaining: settings?.tradesRemaining || 2,
     },
     values: settings
       ? {
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                       />
                     </FormControl>
                     <FormDescription>
-                      Total salary cap for your team (default: $10,000,000)
+                      AFL Fantasy Classic 2026 salary cap (default: $18,300,000)
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -162,7 +162,7 @@ export default function SettingsPage() {
                   name="tradesRemaining"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Trades Remaining</FormLabel>
+                      <FormLabel>Trades This Round</FormLabel>
                       <FormControl>
                         <Input
                           {...field}

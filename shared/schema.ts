@@ -120,9 +120,9 @@ export const tradeRecommendations = pgTable("trade_recommendations", {
 export const leagueSettings = pgTable("league_settings", {
   id: serial("id").primaryKey(),
   teamName: text("team_name").notNull().default("My Team"),
-  salaryCap: integer("salary_cap").notNull().default(10000000),
+  salaryCap: integer("salary_cap").notNull().default(18300000),
   currentRound: integer("current_round").notNull().default(1),
-  tradesRemaining: integer("trades_remaining").notNull().default(30),
+  tradesRemaining: integer("trades_remaining").notNull().default(2),
   totalTradesUsed: integer("total_trades_used").notNull().default(0),
 });
 

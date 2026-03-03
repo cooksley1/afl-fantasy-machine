@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertMyTeamPlayerSchema } from "@shared/schema";
+import { AFL_FANTASY_CLASSIC_2026, getTradesForRound } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
 import {
@@ -11,6 +12,8 @@ import {
   getCachedWeights,
   buildWeightConfig,
 } from "./services/projection-engine";
+
+const gameRules = AFL_FANTASY_CLASSIC_2026;
 
 export async function registerRoutes(
   httpServer: Server,
@@ -293,8 +296,9 @@ export async function registerRoutes(
       if (!trade) return res.status(404).json({ message: "Trade not found" });
 
       const settings = await storage.getSettings();
+      const maxTradesThisRound = getTradesForRound(settings.currentRound);
       if (settings.tradesRemaining <= 0) {
-        return res.status(400).json({ message: "No trades remaining" });
+        return res.status(400).json({ message: `No trades remaining this round (${maxTradesThisRound} per round${gameRules.byeRounds.includes(settings.currentRound) ? ' - bye round' : ''})` });
       }
 
       const myTeam = await storage.getMyTeam();
@@ -338,6 +342,10 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/game-rules", (_req, res) => {
+    res.json(gameRules);
+  });
+
   app.patch("/api/settings", async (req, res) => {
     try {
       const schema = z.object({
@@ -345,8 +353,15 @@ export async function registerRoutes(
         salaryCap: z.number().min(1000000).max(20000000).optional(),
         currentRound: z.number().min(1).max(24).optional(),
         tradesRemaining: z.number().min(0).max(100).optional(),
+        totalTradesUsed: z.number().min(0).optional(),
       });
       const data = schema.parse(req.body);
+      if (data.currentRound !== undefined) {
+        const tradesForRound = getTradesForRound(data.currentRound);
+        if (data.tradesRemaining === undefined) {
+          data.tradesRemaining = tradesForRound;
+        }
+      }
       const updated = await storage.updateSettings(data);
       res.json(updated);
     } catch (error: any) {
