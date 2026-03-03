@@ -276,7 +276,7 @@ export default function Players() {
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-1.5 mt-3 pt-2.5 border-t border-border/50">
+          <div className="grid grid-cols-6 gap-1 mt-3 pt-2.5 border-t border-border/50">
             <div className="text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
               <p className="text-sm font-mono font-medium" data-testid={`text-avg-${player.id}`}>
@@ -295,9 +295,9 @@ export default function Players() {
               )}
             </div>
             <div className="text-center">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">L3</p>
-              <p className="text-sm font-mono text-muted-foreground" data-testid={`text-l3-${player.id}`}>
-                {player.last3Avg?.toFixed(1)}
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Range</p>
+              <p className="text-sm font-mono text-muted-foreground" data-testid={`text-range-${player.id}`}>
+                {player.projectedFloor?.toFixed(0) || '?'}-{player.ceilingScore || '?'}
               </p>
             </div>
             <div className="text-center">
@@ -315,6 +315,12 @@ export default function Players() {
             <div className="text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Con</p>
               <ConsistencyIndicator rating={player.consistencyRating} stdDev={player.scoreStdDev} avg={player.avgScore || 0} />
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">P120</p>
+              <p className={`text-sm font-mono ${player.captainProbability && player.captainProbability > 0.3 ? 'text-green-500 font-medium' : 'text-muted-foreground'}`} data-testid={`text-p120-${player.id}`}>
+                {player.captainProbability ? `${(player.captainProbability * 100).toFixed(0)}%` : '-'}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -348,7 +354,8 @@ export default function Players() {
               {player.nextOpponent && ` vs ${player.nextOpponent}`}
               {player.venue && ` @ ${player.venue}`}
               {player.projectedScore ? ` | Proj: ${player.projectedScore.toFixed(0)}` : ''}
-              {player.ceilingScore ? ` | Ceil: ${player.ceilingScore}` : ''}
+              {player.projectedFloor ? ` (${player.projectedFloor.toFixed(0)}-${player.ceilingScore || '?'})` : player.ceilingScore ? ` | Ceil: ${player.ceilingScore}` : ''}
+              {player.captainProbability && player.captainProbability > 0.15 ? ` | P120: ${(player.captainProbability * 100).toFixed(0)}%` : ''}
             </p>
           </div>
         </div>

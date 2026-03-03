@@ -13,12 +13,15 @@ function buildPlayerSummary(players: Player[]): string {
       `${p.name} (${p.team}, ${p.position}${p.dualPosition ? '/' + p.dualPosition : ''})`,
       `Avg: ${p.avgScore?.toFixed(1)}, L3: ${p.last3Avg?.toFixed(1)}, L5: ${p.last5Avg?.toFixed(1)}`,
       `Price: $${(p.price/1000).toFixed(0)}K (${p.priceChange >= 0 ? '+' : ''}$${(p.priceChange/1000).toFixed(0)}K)`,
-      `BE: ${p.breakEven ?? 'N/A'}, Ceiling: ${p.ceilingScore ?? 'N/A'}`,
-      `Proj: ${p.projectedScore?.toFixed(0) ?? 'N/A'}`,
+      `BE: ${p.breakEven ?? 'N/A'}, Proj: ${p.projectedScore?.toFixed(0) ?? 'N/A'}, Floor: ${p.projectedFloor?.toFixed(0) ?? 'N/A'}, Ceil: ${p.ceilingScore ?? 'N/A'}`,
+      `Vol: ${p.volatilityScore?.toFixed(1) ?? 'N/A'}, P(120+): ${p.captainProbability ? (p.captainProbability * 100).toFixed(0) + '%' : 'N/A'}`,
       `Form: ${p.formTrend}, Own%: ${p.ownedByPercent?.toFixed(0)}%`,
       `Bye: R${p.byeRound}`,
       `Next: vs ${p.nextOpponent} @ ${p.venue || 'TBA'} (${p.gameTime || 'TBA'})`,
     ];
+    if (p.age) parts.push(`Age: ${p.age}, Exp: ${p.yearsExperience ?? 0}yr`);
+    if (p.durabilityScore) parts.push(`Durability: ${(p.durabilityScore * 100).toFixed(0)}%`);
+    if (p.injuryRiskScore && p.injuryRiskScore > 0.3) parts.push(`InjuryRisk: ${(p.injuryRiskScore * 100).toFixed(0)}%`);
     if (p.injuryStatus) parts.push(`INJURY: ${p.injuryStatus}`);
     if (p.lateChange) parts.push('LATE CHANGE');
     if (!p.isNamedTeam) parts.push('NOT NAMED');
@@ -30,9 +33,9 @@ function buildTeamSummary(team: PlayerWithTeamInfo[]): string {
   return team.map(p => {
     const parts = [
       `${p.name} (${p.team}, ${p.fieldPosition}${p.dualPosition ? ' DPP:' + p.dualPosition : ''})`,
-      `Avg: ${p.avgScore?.toFixed(1)}, L3: ${p.last3Avg?.toFixed(1)}, Proj: ${p.projectedScore?.toFixed(0) ?? 'N/A'}`,
+      `Avg: ${p.avgScore?.toFixed(1)}, L3: ${p.last3Avg?.toFixed(1)}, Proj: ${p.projectedScore?.toFixed(0) ?? 'N/A'} (Floor: ${p.projectedFloor?.toFixed(0) ?? '?'}, Ceil: ${p.ceilingScore ?? '?'})`,
       `Form: ${p.formTrend}, Price: $${(p.price/1000).toFixed(0)}K`,
-      `BE: ${p.breakEven ?? 'N/A'}, Ceiling: ${p.ceilingScore ?? 'N/A'}`,
+      `BE: ${p.breakEven ?? 'N/A'}, Vol: ${p.volatilityScore?.toFixed(1) ?? '?'}, P(120+): ${p.captainProbability ? (p.captainProbability * 100).toFixed(0) + '%' : '?'}`,
       `Game: ${p.gameTime || 'TBA'} @ ${p.venue || 'TBA'}`,
     ];
     if (p.isCaptain) parts.push('[CAPTAIN]');
@@ -410,7 +413,10 @@ export async function generateCaptainAdvice(): Promise<{
     avgScore: p.avgScore || 0,
     last3Avg: p.last3Avg || 0,
     projectedScore: p.projectedScore || p.avgScore || 0,
+    projectedFloor: p.projectedFloor || 0,
     ceilingScore: p.ceilingScore || 0,
+    volatilityScore: p.volatilityScore || 5,
+    captainProbability: p.captainProbability || 0,
     opponent: p.nextOpponent || 'Unknown',
     position: p.fieldPosition,
   }));
@@ -420,7 +426,9 @@ export async function generateCaptainAdvice(): Promise<{
 The Captain Loophole exploits rolling lockout: set VC on early-game player, if they score well keep their doubled score, otherwise switch captain to a late-game player.
 
 MY ON-FIELD PLAYERS:
-${teamWithTimes.map(p => `${p.name} (${p.position}) - Game: ${p.gameTime} @ ${p.venue} vs ${p.opponent} | Avg: ${p.avgScore.toFixed(1)}, L3: ${p.last3Avg.toFixed(1)}, Proj: ${p.projectedScore.toFixed(0)}, Ceiling: ${p.ceilingScore}`).join('\n')}
+${teamWithTimes.map(p => `${p.name} (${p.position}) - Game: ${p.gameTime} @ ${p.venue} vs ${p.opponent} | Avg: ${p.avgScore.toFixed(1)}, L3: ${p.last3Avg.toFixed(1)}, Proj: ${p.projectedScore.toFixed(0)}, Floor: ${p.projectedFloor.toFixed(0)}, Ceil: ${p.ceilingScore}, Vol: ${p.volatilityScore.toFixed(1)}, P(120+): ${(p.captainProbability * 100).toFixed(0)}%`).join('\n')}
+
+CAPTAIN PROBABILITY MODEL: Rank by P(score >= 120) using normal distribution, not by average. Higher probability = better captain pick.
 
 Return ONLY valid JSON:
 {

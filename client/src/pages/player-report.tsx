@@ -150,13 +150,19 @@ export default function PlayerReport() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         <StatCard label="Avg" value={player.avgScore?.toFixed(1) || "0"} />
         <StatCard label="L3 Avg" value={player.last3Avg?.toFixed(1) || "0"} />
-        <StatCard label="L5 Avg" value={player.last5Avg?.toFixed(1) || "0"} />
+        <StatCard label="Projected" value={player.projectedScore?.toFixed(0) || "N/A"} />
         <StatCard label="Break Even" value={player.breakEven?.toString() || "N/A"} />
+        <StatCard label="Floor" value={player.projectedFloor?.toFixed(0) || "N/A"} />
         <StatCard label="Ceiling" value={player.ceilingScore?.toString() || "N/A"} />
+        <StatCard label="P(120+)" value={player.captainProbability ? `${(player.captainProbability * 100).toFixed(0)}%` : "N/A"} subtext="Captain prob" />
+        <StatCard label="Volatility" value={player.volatilityScore?.toFixed(1) || "N/A"} subtext={player.volatilityScore !== null ? (player.volatilityScore < 3 ? "Low" : player.volatilityScore < 6 ? "Medium" : "High") : undefined} />
         <StatCard label="Owned" value={`${player.ownedByPercent?.toFixed(0) || 0}%`} />
+        <StatCard label="Age" value={player.age?.toString() || "N/A"} subtext={player.yearsExperience ? `${player.yearsExperience}yr exp` : undefined} />
+        <StatCard label="Durability" value={player.durabilityScore ? `${(player.durabilityScore * 100).toFixed(0)}%` : "N/A"} />
+        <StatCard label="Injury Risk" value={player.injuryRiskScore ? `${(player.injuryRiskScore * 100).toFixed(0)}%` : "N/A"} subtext={player.injuryRiskScore !== null ? (player.injuryRiskScore < 0.2 ? "Low" : player.injuryRiskScore < 0.4 ? "Medium" : "High") : undefined} />
       </div>
 
       <Card>

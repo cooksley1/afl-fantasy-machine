@@ -184,7 +184,9 @@ export default function Dashboard() {
                     <p className="text-base sm:text-lg font-bold text-primary">
                       {((viceCaptain.projectedScore || viceCaptain.avgScore || 0) * 2).toFixed(0)}
                     </p>
-                    <p className="text-[9px] text-muted-foreground">2x score</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      {viceCaptain.captainProbability ? `P(120+): ${(viceCaptain.captainProbability * 100).toFixed(0)}%` : '2x score'}
+                    </p>
                   </div>
                 </div>
               )}
@@ -207,7 +209,9 @@ export default function Dashboard() {
                     <p className="text-base sm:text-lg font-bold text-accent">
                       {((captain.projectedScore || captain.avgScore || 0) * 2).toFixed(0)}
                     </p>
-                    <p className="text-[9px] text-muted-foreground">Safety net</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      {captain.captainProbability ? `P(120+): ${(captain.captainProbability * 100).toFixed(0)}%` : 'Safety net'}
+                    </p>
                   </div>
                 </div>
               )}

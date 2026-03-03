@@ -117,6 +117,8 @@ export async function registerRoutes(
         (p) => !teamPlayerIds.has(p.id) && !p.injuryStatus
       );
 
+      const { calcTradeEV } = await import("./expand-players");
+
       const underperformers = myTeam
         .filter((p) => p.isOnField)
         .sort((a, b) => {
@@ -137,26 +139,39 @@ export async function registerRoutes(
           .slice(0, 3);
 
         for (const playerIn of samePosPlayers) {
+          const projIn = playerIn.projectedScore || playerIn.avgScore || 0;
+          const projOut = playerOut.projectedScore || playerOut.avgScore || 0;
+          const volIn = playerIn.volatilityScore || 5;
+          const volOut = playerOut.volatilityScore || 5;
+          const cashGen = playerIn.cashGenPotential === "elite" ? 40 : playerIn.cashGenPotential === "high" ? 25 : playerIn.cashGenPotential === "medium" ? 15 : 0;
+          const tradeEv = calcTradeEV(projIn, projOut, volIn, volOut, cashGen);
+
           const scoreDiff = (playerIn.avgScore || 0) - (playerOut.avgScore || 0);
           const formDiff = (playerIn.last3Avg || 0) - (playerOut.last3Avg || 0);
           const priceDiff = playerIn.price - playerOut.price;
 
           let confidence = 0.5;
-          if (formDiff > 15) confidence += 0.2;
-          else if (formDiff > 5) confidence += 0.1;
-          if (scoreDiff > 10) confidence += 0.15;
-          else if (scoreDiff > 0) confidence += 0.05;
-          if (playerIn.formTrend === "up") confidence += 0.1;
-          if (playerOut.formTrend === "down") confidence += 0.1;
-          if (playerOut.injuryStatus) confidence += 0.15;
+          if (tradeEv > 30) confidence += 0.25;
+          else if (tradeEv > 15) confidence += 0.15;
+          else if (tradeEv > 0) confidence += 0.05;
+          if (formDiff > 15) confidence += 0.1;
+          else if (formDiff > 5) confidence += 0.05;
+          if (playerIn.formTrend === "up") confidence += 0.05;
+          if (playerOut.formTrend === "down") confidence += 0.05;
+          if (playerOut.injuryStatus) confidence += 0.1;
+          if (playerIn.dualPosition) confidence += 0.05;
           confidence = Math.min(confidence, 0.95);
 
           const reasons = [];
-          if (playerIn.formTrend === "up") reasons.push(`${playerIn.name} is in strong form with a last 3 avg of ${playerIn.last3Avg?.toFixed(1)}`);
-          if (playerOut.formTrend === "down") reasons.push(`${playerOut.name} has been underperforming recently`);
-          if (scoreDiff > 0) reasons.push(`+${scoreDiff.toFixed(1)} avg points per game`);
-          if (priceDiff < 0) reasons.push(`saves $${Math.abs(priceDiff / 1000).toFixed(0)}K in salary`);
-          if (playerIn.ownedByPercent > 30) reasons.push(`owned by ${playerIn.ownedByPercent?.toFixed(0)}% of coaches`);
+          if (tradeEv > 30) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (strong)`);
+          else if (tradeEv > 15) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (marginal)`);
+          if (playerIn.formTrend === "up") reasons.push(`${playerIn.name} trending up (L3: ${playerIn.last3Avg?.toFixed(1)})`);
+          if (playerOut.formTrend === "down") reasons.push(`${playerOut.name} trending down`);
+          if (scoreDiff > 0) reasons.push(`+${scoreDiff.toFixed(1)} avg pts/game`);
+          if (priceDiff < 0) reasons.push(`saves $${Math.abs(priceDiff / 1000).toFixed(0)}K`);
+          if (playerIn.captainProbability && playerIn.captainProbability > 0.3) reasons.push(`P(120+): ${(playerIn.captainProbability * 100).toFixed(0)}%`);
+          if (playerIn.dualPosition) reasons.push(`DPP: ${playerIn.position}/${playerIn.dualPosition}`);
+          if (playerIn.volatilityScore !== null && playerIn.volatilityScore < 3) reasons.push("Low volatility (safe)");
           if (reasons.length === 0) reasons.push("Potential upgrade based on form analysis");
 
           await storage.createTradeRecommendation({
@@ -166,6 +181,7 @@ export async function registerRoutes(
             confidence,
             priceChange: priceDiff,
             scoreDifference: scoreDiff,
+            tradeEv,
           });
         }
       }
@@ -544,6 +560,53 @@ export async function registerRoutes(
       await generateAITradeRecommendations();
       const recs = await storage.getTradeRecommendations();
       res.json(recs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/weekly-stats/:playerId", async (req, res) => {
+    try {
+      const playerId = parseInt(req.params.playerId);
+      const stats = await storage.getWeeklyStats(playerId);
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/team-context", async (_req, res) => {
+    try {
+      const contexts = await storage.getAllTeamContexts();
+      res.json(contexts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/position-concessions", async (_req, res) => {
+    try {
+      const concessions = await storage.getAllPositionConcessions();
+      res.json(concessions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/position-concessions/:team", async (req, res) => {
+    try {
+      const concessions = await storage.getPositionConcessions(req.params.team);
+      res.json(concessions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/projections/:playerId", async (req, res) => {
+    try {
+      const playerId = parseInt(req.params.playerId);
+      const projs = await storage.getProjections(playerId);
+      res.json(projs);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

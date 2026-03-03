@@ -221,6 +221,78 @@ function calcConsistencyRating(scores: number[], avg: number): number {
   return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
 }
 
+function normalCDF(z: number): number {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.sqrt(2);
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return 0.5 * (1.0 + sign * y);
+}
+
+function calcCaptainProbability(projectedScore: number, volatility: number, threshold: number = 120): number {
+  if (volatility <= 0) return projectedScore >= threshold ? 1.0 : 0.0;
+  const z = (threshold - projectedScore) / volatility;
+  return Math.round((1 - normalCDF(z)) * 1000) / 1000;
+}
+
+function calcVolatilityScore(stdDev: number, avg: number): number {
+  if (avg <= 0) return 10;
+  const cv = stdDev / avg;
+  const raw = cv * 40;
+  return Math.round(Math.max(0, Math.min(10, raw)) * 10) / 10;
+}
+
+function calcProjectedFloor(projectedScore: number, volatility: number): number {
+  return Math.round(Math.max(10, projectedScore - (1.0 * volatility)));
+}
+
+function calcProjectedCeiling(projectedScore: number, volatility: number): number {
+  return Math.round(projectedScore + (1.3 * volatility));
+}
+
+function bayesianAdjustedAvg(last3Avg: number, last5Avg: number, avgScore: number): number {
+  const last2Estimate = last3Avg * 1.5 - last5Avg * 0.5;
+  const prev3Estimate = (last5Avg * 5 - last3Avg * 3) / 2;
+  return last2Estimate * 0.6 + prev3Estimate * 0.4;
+}
+
+function calcTradeEV(projIn: number, projOut: number, volIn: number, volOut: number, cashGenValue: number): number {
+  const projDiff = projIn - projOut;
+  const volatilityPenalty = (volIn - volOut) * 0.5;
+  const ev = (projDiff * 3) - volatilityPenalty + (cashGenValue * 0.2);
+  return Math.round(ev * 10) / 10;
+}
+
+function generateAge(price: number, avgScore: number): number {
+  if (price <= 150000) return 18 + Math.floor(Math.random() * 2);
+  if (price <= 250000) return 19 + Math.floor(Math.random() * 3);
+  if (price <= 400000) return 21 + Math.floor(Math.random() * 6);
+  if (avgScore >= 100) return 24 + Math.floor(Math.random() * 6);
+  return 22 + Math.floor(Math.random() * 8);
+}
+
+function generateYearsExperience(age: number): number {
+  return Math.max(0, age - 18 - Math.floor(Math.random() * 2));
+}
+
+function generateDurabilityScore(age: number, injuryStatus: string | null): number {
+  let base = 0.7 + Math.random() * 0.3;
+  if (age >= 30) base -= 0.1;
+  if (age >= 33) base -= 0.1;
+  if (injuryStatus) base -= 0.15 + Math.random() * 0.15;
+  return Math.round(Math.max(0.1, Math.min(1.0, base)) * 100) / 100;
+}
+
+function generateInjuryRiskScore(durability: number, age: number, injuryStatus: string | null): number {
+  let risk = 1 - durability;
+  if (age >= 30) risk += 0.1;
+  if (injuryStatus) risk += 0.2;
+  risk += (Math.random() * 0.1 - 0.05);
+  return Math.round(Math.max(0, Math.min(1.0, risk)) * 100) / 100;
+}
+
 export async function populateConsistencyData(): Promise<number> {
   const allPlayers = await db.select().from(players);
   const needsUpdate = allPlayers.filter(p => p.consistencyRating === null);
@@ -251,7 +323,46 @@ export async function populateConsistencyData(): Promise<number> {
     }
   }
 
-  if (needsUpdate.length === 0) return needsDebutReeval.length > 0 ? needsDebutReeval.length : 0;
+  const needsAdvancedUpdate = allPlayers.filter(p => p.volatilityScore === null || p.captainProbability === null);
+  for (const p of needsAdvancedUpdate) {
+    const avg = p.avgScore || 50;
+    const stdDev = p.scoreStdDev || 15;
+    const proj = p.projectedScore || avg;
+    const bayesianProj = bayesianAdjustedAvg(p.last3Avg || avg, p.last5Avg || avg, avg);
+    const adjustedProj = Math.round((proj * 0.5 + bayesianProj * 0.5) * 10) / 10;
+    const volatility = calcVolatilityScore(stdDev, avg);
+    const floor = calcProjectedFloor(adjustedProj, stdDev);
+    const ceiling = calcProjectedCeiling(adjustedProj, stdDev);
+    const captainProb = calcCaptainProbability(adjustedProj, stdDev);
+
+    const age = p.age || generateAge(p.price, avg);
+    const yearsExperience = p.yearsExperience || generateYearsExperience(age);
+    const durabilityScore = p.durabilityScore || generateDurabilityScore(age, p.injuryStatus);
+    const injuryRiskScore = p.injuryRiskScore || generateInjuryRiskScore(durabilityScore, age, p.injuryStatus);
+    const startingPrice = p.startingPrice || p.price;
+
+    await db.update(players)
+      .set({
+        projectedScore: adjustedProj,
+        projectedFloor: floor,
+        ceilingScore: ceiling,
+        volatilityScore: volatility,
+        captainProbability: captainProb,
+        age,
+        yearsExperience,
+        durabilityScore,
+        injuryRiskScore,
+        startingPrice,
+      })
+      .where(eq(players.id, p.id));
+  }
+
+  if (needsUpdate.length === 0) {
+    if (needsAdvancedUpdate.length > 0) {
+      console.log(`[ExpandPlayers] Updated advanced metrics for ${needsAdvancedUpdate.length} players`);
+    }
+    return needsDebutReeval.length > 0 ? needsDebutReeval.length : needsAdvancedUpdate.length;
+  }
 
   let updated = 0;
   for (const p of needsUpdate) {
@@ -292,6 +403,19 @@ export async function populateConsistencyData(): Promise<number> {
       else if (scoringAboveBE > 0) cashGenPotential = "low";
     }
 
+    const proj = p.projectedScore || avg;
+    const bayesianProj = bayesianAdjustedAvg(p.last3Avg || avg, p.last5Avg || avg, avg);
+    const adjustedProj = Math.round((proj * 0.5 + bayesianProj * 0.5) * 10) / 10;
+    const volatility = calcVolatilityScore(actualStdDev, avg);
+    const floor = calcProjectedFloor(adjustedProj, actualStdDev);
+    const ceiling = calcProjectedCeiling(adjustedProj, actualStdDev);
+    const captainProb = calcCaptainProbability(adjustedProj, actualStdDev);
+
+    const age = generateAge(price, avg);
+    const yearsExperience = generateYearsExperience(age);
+    const durabilityScore = generateDurabilityScore(age, p.injuryStatus);
+    const injuryRiskScore = generateInjuryRiskScore(durabilityScore, age, p.injuryStatus);
+
     await db.update(players)
       .set({
         consistencyRating,
@@ -300,11 +424,76 @@ export async function populateConsistencyData(): Promise<number> {
         isDebutant,
         debutRound,
         cashGenPotential,
+        projectedScore: adjustedProj,
+        projectedFloor: floor,
+        ceilingScore: ceiling,
+        volatilityScore: volatility,
+        captainProbability: captainProb,
+        age,
+        yearsExperience,
+        durabilityScore,
+        injuryRiskScore,
+        startingPrice: price,
       })
       .where(eq(players.id, p.id));
     updated++;
   }
 
-  console.log(`[ExpandPlayers] Populated consistency data for ${updated} players`);
+  console.log(`[ExpandPlayers] Populated consistency + advanced data for ${updated} players`);
   return updated;
 }
+
+const AFL_TEAMS = [
+  "Adelaide", "Brisbane Lions", "Carlton", "Collingwood", "Essendon",
+  "Fremantle", "Geelong", "Gold Coast", "GWS Giants", "Hawthorn",
+  "Melbourne", "North Melbourne", "Port Adelaide", "Richmond",
+  "St Kilda", "Sydney", "West Coast", "Western Bulldogs"
+];
+const POSITIONS = ["DEF", "MID", "RUC", "FWD"];
+
+export async function populateBaselineData(): Promise<void> {
+  const { positionConcessions, teamContext } = await import("@shared/schema");
+
+  const existingPC = await db.select().from(positionConcessions);
+  if (existingPC.length === 0) {
+    for (const team of AFL_TEAMS) {
+      for (const pos of POSITIONS) {
+        const base = pos === "MID" ? 85 : pos === "DEF" ? 78 : pos === "RUC" ? 90 : 75;
+        const avgConceded = base + (Math.random() * 20 - 10);
+        const stdDev = 12 + Math.random() * 10;
+        await db.insert(positionConcessions).values({
+          team,
+          position: pos,
+          avgPointsConceded: Math.round(avgConceded * 10) / 10,
+          stdDevConceded: Math.round(stdDev * 10) / 10,
+        });
+      }
+    }
+    console.log(`[ExpandPlayers] Populated position concessions for ${AFL_TEAMS.length} teams`);
+  }
+
+  const existingTC = await db.select().from(teamContext);
+  if (existingTC.length === 0) {
+    for (const team of AFL_TEAMS) {
+      const disposals = 350 + Math.floor(Math.random() * 80);
+      const clearances = 30 + Math.floor(Math.random() * 15);
+      const contestedRate = 0.3 + Math.random() * 0.15;
+      const pace = 0.85 + Math.random() * 0.3;
+      const scored = 1400 + Math.floor(Math.random() * 400);
+      const conceded = 1400 + Math.floor(Math.random() * 400);
+      await db.insert(teamContext).values({
+        team,
+        round: 1,
+        disposalCount: disposals,
+        clearanceCount: clearances,
+        contestedPossessionRate: Math.round(contestedRate * 100) / 100,
+        paceFactor: Math.round(pace * 100) / 100,
+        fantasyPointsScored: scored,
+        fantasyPointsConceded: conceded,
+      });
+    }
+    console.log(`[ExpandPlayers] Populated team context for ${AFL_TEAMS.length} teams`);
+  }
+}
+
+export { calcTradeEV, calcCaptainProbability, bayesianAdjustedAvg, calcVolatilityScore };

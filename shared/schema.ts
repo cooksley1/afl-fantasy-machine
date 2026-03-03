@@ -10,6 +10,7 @@ export const players = pgTable("players", {
   position: text("position").notNull(),
   dualPosition: text("dual_position").default(null),
   price: integer("price").notNull(),
+  startingPrice: integer("starting_price").default(null),
   avgScore: real("avg_score").notNull().default(0),
   last3Avg: real("last3_avg").notNull().default(0),
   last5Avg: real("last5_avg").notNull().default(0),
@@ -23,6 +24,7 @@ export const players = pgTable("players", {
   venue: text("venue").default(null),
   gameTime: text("game_time").default(null),
   projectedScore: real("projected_score").default(null),
+  projectedFloor: real("projected_floor").default(null),
   priceChange: integer("price_change").notNull().default(0),
   breakEven: integer("break_even").default(null),
   ceilingScore: integer("ceiling_score").default(null),
@@ -34,6 +36,64 @@ export const players = pgTable("players", {
   isDebutant: boolean("is_debutant").notNull().default(false),
   debutRound: integer("debut_round").default(null),
   cashGenPotential: text("cash_gen_potential").default(null),
+  age: integer("age").default(null),
+  yearsExperience: integer("years_experience").default(null),
+  durabilityScore: real("durability_score").default(null),
+  injuryRiskScore: real("injury_risk_score").default(null),
+  volatilityScore: real("volatility_score").default(null),
+  captainProbability: real("captain_probability").default(null),
+});
+
+export const weeklyStats = pgTable("weekly_stats", {
+  id: serial("id").primaryKey(),
+  playerId: integer("player_id").notNull(),
+  round: integer("round").notNull(),
+  opponent: text("opponent").default(null),
+  venue: text("venue").default(null),
+  fantasyScore: real("fantasy_score").notNull().default(0),
+  timeOnGroundPercent: real("time_on_ground_percent").default(null),
+  centreBounceAttendancePercent: real("centre_bounce_attendance_percent").default(null),
+  kickCount: integer("kick_count").default(null),
+  handballCount: integer("handball_count").default(null),
+  markCount: integer("mark_count").default(null),
+  tackleCount: integer("tackle_count").default(null),
+  hitouts: integer("hitouts").default(null),
+  inside50s: integer("inside_50s").default(null),
+  rebound50s: integer("rebound_50s").default(null),
+  contestedPossessions: integer("contested_possessions").default(null),
+  uncontestedPossessions: integer("uncontested_possessions").default(null),
+  subFlag: boolean("sub_flag").notNull().default(false),
+});
+
+export const teamContext = pgTable("team_context", {
+  id: serial("id").primaryKey(),
+  team: text("team").notNull(),
+  round: integer("round").notNull(),
+  disposalCount: integer("disposal_count").default(null),
+  clearanceCount: integer("clearance_count").default(null),
+  contestedPossessionRate: real("contested_possession_rate").default(null),
+  paceFactor: real("pace_factor").default(null),
+  fantasyPointsScored: real("fantasy_points_scored").default(null),
+  fantasyPointsConceded: real("fantasy_points_conceded").default(null),
+});
+
+export const positionConcessions = pgTable("position_concessions", {
+  id: serial("id").primaryKey(),
+  team: text("team").notNull(),
+  position: text("position").notNull(),
+  avgPointsConceded: real("avg_points_conceded").default(null),
+  stdDevConceded: real("std_dev_conceded").default(null),
+});
+
+export const projections = pgTable("projections", {
+  id: serial("id").primaryKey(),
+  playerId: integer("player_id").notNull(),
+  round: integer("round").notNull(),
+  projectedScore: real("projected_score").default(null),
+  projectedFloor: real("projected_floor").default(null),
+  projectedCeiling: real("projected_ceiling").default(null),
+  volatilityScore: real("volatility_score").default(null),
+  confidenceScore: real("confidence_score").default(null),
 });
 
 export const myTeamPlayers = pgTable("my_team_players", {
@@ -53,6 +113,7 @@ export const tradeRecommendations = pgTable("trade_recommendations", {
   confidence: real("confidence").notNull().default(0),
   priceChange: integer("price_change").notNull().default(0),
   scoreDifference: real("score_difference").notNull().default(0),
+  tradeEv: real("trade_ev").default(null),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -122,6 +183,10 @@ export const insertLeagueSettingsSchema = createInsertSchema(leagueSettings).omi
 export const insertIntelReportSchema = createInsertSchema(intelReports).omit({ id: true, createdAt: true });
 export const insertLateChangeSchema = createInsertSchema(lateChanges).omit({ id: true, createdAt: true });
 export const insertIntelSourceSchema = createInsertSchema(intelSources).omit({ id: true, fetchedAt: true, processedAt: true });
+export const insertWeeklyStatSchema = createInsertSchema(weeklyStats).omit({ id: true });
+export const insertTeamContextSchema = createInsertSchema(teamContext).omit({ id: true });
+export const insertPositionConcessionSchema = createInsertSchema(positionConcessions).omit({ id: true });
+export const insertProjectionSchema = createInsertSchema(projections).omit({ id: true });
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
@@ -137,6 +202,14 @@ export type LateChange = typeof lateChanges.$inferSelect;
 export type InsertLateChange = z.infer<typeof insertLateChangeSchema>;
 export type IntelSource = typeof intelSources.$inferSelect;
 export type InsertIntelSource = z.infer<typeof insertIntelSourceSchema>;
+export type WeeklyStat = typeof weeklyStats.$inferSelect;
+export type InsertWeeklyStat = z.infer<typeof insertWeeklyStatSchema>;
+export type TeamContextType = typeof teamContext.$inferSelect;
+export type InsertTeamContext = z.infer<typeof insertTeamContextSchema>;
+export type PositionConcession = typeof positionConcessions.$inferSelect;
+export type InsertPositionConcession = z.infer<typeof insertPositionConcessionSchema>;
+export type Projection = typeof projections.$inferSelect;
+export type InsertProjection = z.infer<typeof insertProjectionSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;

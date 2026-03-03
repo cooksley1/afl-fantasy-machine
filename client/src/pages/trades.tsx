@@ -274,7 +274,7 @@ function TradeCard({
           <div className="flex items-center justify-between gap-3 sm:gap-4">
             <div className="flex-1 max-w-48">
               <ConfidenceBar confidence={trade.confidence} />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 flex-wrap">
                 <span className={trade.scoreDifference > 0 ? "text-green-500" : trade.scoreDifference < 0 ? "text-red-500" : ""}>
                   {trade.scoreDifference > 0 ? "+" : ""}
                   {trade.scoreDifference?.toFixed(1)} pts
@@ -283,6 +283,14 @@ function TradeCard({
                 <span className={trade.priceChange > 0 ? "text-green-500" : trade.priceChange < 0 ? "text-red-500" : ""}>
                   {trade.priceChange > 0 ? "+" : ""}${(trade.priceChange / 1000).toFixed(0)}K
                 </span>
+                {trade.tradeEv !== null && trade.tradeEv !== undefined && (
+                  <>
+                    <span>|</span>
+                    <span className={trade.tradeEv > 30 ? "text-green-500 font-medium" : trade.tradeEv > 15 ? "text-yellow-500" : "text-muted-foreground"} data-testid={`text-trade-ev-${trade.id}`}>
+                      EV: {trade.tradeEv.toFixed(0)}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 

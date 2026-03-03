@@ -1,4 +1,4 @@
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and } from "drizzle-orm";
 import { db } from "./db";
 import {
   players,
@@ -7,6 +7,10 @@ import {
   leagueSettings,
   intelReports,
   lateChanges,
+  weeklyStats,
+  teamContext,
+  positionConcessions,
+  projections,
   type Player,
   type InsertPlayer,
   type MyTeamPlayer,
@@ -21,6 +25,14 @@ import {
   type InsertIntelReport,
   type LateChange,
   type InsertLateChange,
+  type WeeklyStat,
+  type InsertWeeklyStat,
+  type TeamContextType,
+  type InsertTeamContext,
+  type PositionConcession,
+  type InsertPositionConcession,
+  type Projection,
+  type InsertProjection,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -53,6 +65,27 @@ export interface IStorage {
   clearLateChanges(round: number): Promise<void>;
 
   updatePlayer(id: number, data: Partial<InsertPlayer>): Promise<Player>;
+
+  getWeeklyStats(playerId: number): Promise<WeeklyStat[]>;
+  getWeeklyStatsByRound(round: number): Promise<WeeklyStat[]>;
+  createWeeklyStat(stat: InsertWeeklyStat): Promise<WeeklyStat>;
+  deleteWeeklyStats(playerId: number): Promise<void>;
+
+  getTeamContext(team: string, round: number): Promise<TeamContextType | undefined>;
+  getAllTeamContexts(): Promise<TeamContextType[]>;
+  createTeamContext(ctx: InsertTeamContext): Promise<TeamContextType>;
+  clearTeamContexts(): Promise<void>;
+
+  getPositionConcessions(team: string): Promise<PositionConcession[]>;
+  getAllPositionConcessions(): Promise<PositionConcession[]>;
+  createPositionConcession(pc: InsertPositionConcession): Promise<PositionConcession>;
+  clearPositionConcessions(): Promise<void>;
+
+  getProjections(playerId: number): Promise<Projection[]>;
+  getProjectionsByRound(round: number): Promise<Projection[]>;
+  createProjection(proj: InsertProjection): Promise<Projection>;
+  deleteProjections(playerId: number): Promise<void>;
+  clearProjectionsByRound(round: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -250,6 +283,99 @@ export class DatabaseStorage implements IStorage {
       .where(eq(players.id, id))
       .returning();
     return updated;
+  }
+
+  async getWeeklyStats(playerId: number): Promise<WeeklyStat[]> {
+    return db
+      .select()
+      .from(weeklyStats)
+      .where(eq(weeklyStats.playerId, playerId))
+      .orderBy(desc(weeklyStats.round));
+  }
+
+  async getWeeklyStatsByRound(round: number): Promise<WeeklyStat[]> {
+    return db
+      .select()
+      .from(weeklyStats)
+      .where(eq(weeklyStats.round, round));
+  }
+
+  async createWeeklyStat(stat: InsertWeeklyStat): Promise<WeeklyStat> {
+    const [created] = await db.insert(weeklyStats).values(stat).returning();
+    return created;
+  }
+
+  async getTeamContext(team: string, round: number): Promise<TeamContextType | undefined> {
+    const [ctx] = await db
+      .select()
+      .from(teamContext)
+      .where(and(eq(teamContext.team, team), eq(teamContext.round, round)));
+    return ctx;
+  }
+
+  async getAllTeamContexts(): Promise<TeamContextType[]> {
+    return db.select().from(teamContext).orderBy(desc(teamContext.round));
+  }
+
+  async createTeamContext(ctx: InsertTeamContext): Promise<TeamContextType> {
+    const [created] = await db.insert(teamContext).values(ctx).returning();
+    return created;
+  }
+
+  async getPositionConcessions(team: string): Promise<PositionConcession[]> {
+    return db
+      .select()
+      .from(positionConcessions)
+      .where(eq(positionConcessions.team, team));
+  }
+
+  async getAllPositionConcessions(): Promise<PositionConcession[]> {
+    return db.select().from(positionConcessions);
+  }
+
+  async createPositionConcession(pc: InsertPositionConcession): Promise<PositionConcession> {
+    const [created] = await db.insert(positionConcessions).values(pc).returning();
+    return created;
+  }
+
+  async getProjections(playerId: number): Promise<Projection[]> {
+    return db
+      .select()
+      .from(projections)
+      .where(eq(projections.playerId, playerId))
+      .orderBy(desc(projections.round));
+  }
+
+  async getProjectionsByRound(round: number): Promise<Projection[]> {
+    return db
+      .select()
+      .from(projections)
+      .where(eq(projections.round, round));
+  }
+
+  async createProjection(proj: InsertProjection): Promise<Projection> {
+    const [created] = await db.insert(projections).values(proj).returning();
+    return created;
+  }
+
+  async deleteWeeklyStats(playerId: number): Promise<void> {
+    await db.delete(weeklyStats).where(eq(weeklyStats.playerId, playerId));
+  }
+
+  async clearTeamContexts(): Promise<void> {
+    await db.delete(teamContext);
+  }
+
+  async clearPositionConcessions(): Promise<void> {
+    await db.delete(positionConcessions);
+  }
+
+  async deleteProjections(playerId: number): Promise<void> {
+    await db.delete(projections).where(eq(projections.playerId, playerId));
+  }
+
+  async clearProjectionsByRound(round: number): Promise<void> {
+    await db.delete(projections).where(eq(projections.round, round));
   }
 }
 
