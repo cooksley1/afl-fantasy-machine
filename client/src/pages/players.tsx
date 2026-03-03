@@ -20,6 +20,7 @@ import {
   Minus,
   ArrowUpDown,
   AlertTriangle,
+  Repeat2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -204,6 +205,7 @@ export default function Players() {
                 Price <ArrowUpDown className="w-3 h-3" />
               </button>
             </div>
+            <div className="hidden xl:block w-14 text-center">BE</div>
             <div className="hidden lg:block w-14 text-center">Own%</div>
             <div className="w-12 text-center">Form</div>
             <div className="w-10"></div>
@@ -234,8 +236,22 @@ export default function Players() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium truncate">{player.name}</p>
+                        {player.dualPosition && (
+                          <Badge variant="secondary" className="text-[10px] gap-0.5">
+                            <Repeat2 className="w-2.5 h-2.5" />
+                            {player.position}/{player.dualPosition}
+                          </Badge>
+                        )}
                         {player.injuryStatus && (
-                          <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />
+                          <Badge variant="destructive" className="text-[10px]">
+                            <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                            {player.injuryStatus}
+                          </Badge>
+                        )}
+                        {player.lateChange && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Late Change
+                          </Badge>
                         )}
                         {isOnTeam && (
                           <Badge variant="default" className="text-[10px]">
@@ -246,6 +262,9 @@ export default function Players() {
                       <p className="text-xs text-muted-foreground">
                         {player.team}
                         {player.nextOpponent && ` vs ${player.nextOpponent}`}
+                        {player.venue && ` @ ${player.venue}`}
+                        {player.projectedScore ? ` | Proj: ${player.projectedScore.toFixed(0)}` : ''}
+                        {player.ceilingScore ? ` | Ceil: ${player.ceilingScore}` : ''}
                       </p>
                     </div>
                   </div>
@@ -259,7 +278,23 @@ export default function Players() {
                     </span>
                   </div>
                   <div className="hidden lg:block w-20 text-center">
-                    <span className="text-sm font-mono">${(player.price / 1000).toFixed(0)}K</span>
+                    <div className="text-sm font-mono">${(player.price / 1000).toFixed(0)}K</div>
+                    {player.priceChange !== 0 && (
+                      <div className={`text-[10px] ${player.priceChange > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {player.priceChange > 0 ? '+' : ''}{(player.priceChange / 1000).toFixed(0)}K
+                      </div>
+                    )}
+                  </div>
+                  <div className="hidden xl:block w-14 text-center">
+                    <span className={`text-sm font-mono ${
+                      player.breakEven && player.avgScore && player.breakEven < player.avgScore
+                        ? 'text-green-500'
+                        : player.breakEven && player.avgScore && player.breakEven > player.avgScore
+                        ? 'text-red-500'
+                        : 'text-muted-foreground'
+                    }`}>
+                      {player.breakEven ?? '-'}
+                    </span>
                   </div>
                   <div className="hidden lg:block w-14 text-center">
                     <span className="text-xs text-muted-foreground">

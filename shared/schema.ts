@@ -8,6 +8,7 @@ export const players = pgTable("players", {
   name: text("name").notNull(),
   team: text("team").notNull(),
   position: text("position").notNull(),
+  dualPosition: text("dual_position").default(null),
   price: integer("price").notNull(),
   avgScore: real("avg_score").notNull().default(0),
   last3Avg: real("last3_avg").notNull().default(0),
@@ -19,6 +20,14 @@ export const players = pgTable("players", {
   injuryStatus: text("injury_status").default(null),
   nextOpponent: text("next_opponent").default(null),
   byeRound: integer("bye_round").default(null),
+  venue: text("venue").default(null),
+  gameTime: text("game_time").default(null),
+  projectedScore: real("projected_score").default(null),
+  priceChange: integer("price_change").notNull().default(0),
+  breakEven: integer("break_even").default(null),
+  ceilingScore: integer("ceiling_score").default(null),
+  isNamedTeam: boolean("is_named_team").notNull().default(true),
+  lateChange: boolean("late_change").notNull().default(false),
 });
 
 export const myTeamPlayers = pgTable("my_team_players", {
@@ -62,6 +71,15 @@ export const intelReports = pgTable("intel_reports", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const lateChanges = pgTable("late_changes", {
+  id: serial("id").primaryKey(),
+  playerId: integer("player_id").notNull(),
+  changeType: text("change_type").notNull(),
+  details: text("details").notNull(),
+  round: integer("round").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -81,6 +99,7 @@ export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
 export const insertLeagueSettingsSchema = createInsertSchema(leagueSettings).omit({ id: true });
 export const insertIntelReportSchema = createInsertSchema(intelReports).omit({ id: true, createdAt: true });
+export const insertLateChangeSchema = createInsertSchema(lateChanges).omit({ id: true, createdAt: true });
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
@@ -92,6 +111,8 @@ export type LeagueSettings = typeof leagueSettings.$inferSelect;
 export type InsertLeagueSettings = z.infer<typeof insertLeagueSettingsSchema>;
 export type IntelReport = typeof intelReports.$inferSelect;
 export type InsertIntelReport = z.infer<typeof insertIntelReportSchema>;
+export type LateChange = typeof lateChanges.$inferSelect;
+export type InsertLateChange = z.infer<typeof insertLateChangeSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;

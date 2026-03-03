@@ -277,6 +277,148 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/players/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid player ID" });
+      const updated = await storage.updatePlayer(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/late-changes", async (req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      const changes = await storage.getLateChanges(settings.currentRound);
+      res.json(changes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/late-changes", async (req, res) => {
+    try {
+      const schema = z.object({
+        playerId: z.number(),
+        changeType: z.string().min(1),
+        details: z.string().min(1),
+        round: z.number(),
+      });
+      const data = schema.parse(req.body);
+      const change = await storage.createLateChange(data);
+
+      await storage.updatePlayer(data.playerId, { lateChange: true });
+
+      res.json(change);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/players/refresh-data", async (req, res) => {
+    try {
+      const { eq } = await import("drizzle-orm");
+      const { db } = await import("./db");
+      const { players } = await import("@shared/schema");
+
+      const dppMap: Record<string, { dualPosition?: string; venue?: string; gameTime?: string; projectedScore?: number; breakEven?: number; ceilingScore?: number; priceChange?: number }> = {
+        "Nick Daicos": { dualPosition: "MID", venue: "SCG", gameTime: "Saturday 1:45pm", projectedScore: 118, breakEven: 108, ceilingScore: 168, priceChange: 10000 },
+        "Marcus Bontempelli": { dualPosition: "FWD", venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 108, breakEven: 110, ceilingScore: 155, priceChange: -3000 },
+        "Zak Butters": { dualPosition: "FWD", venue: "Adelaide Oval", gameTime: "Saturday 7:25pm", projectedScore: 115, breakEven: 90, ceilingScore: 152, priceChange: 18000 },
+        "Isaac Heeney": { dualPosition: "MID", venue: "SCG", gameTime: "Saturday 1:45pm", projectedScore: 112, breakEven: 92, ceilingScore: 155, priceChange: 12000 },
+        "Jordan Dawson": { dualPosition: "MID", venue: "Adelaide Oval", gameTime: "Saturday 1:45pm", projectedScore: 104, breakEven: 90, ceilingScore: 138, priceChange: 7000 },
+        "Dayne Zorko": { dualPosition: "FWD", venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 88, breakEven: 100, ceilingScore: 125, priceChange: -5000 },
+        "Tim English": { dualPosition: "FWD", venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 106, breakEven: 92, ceilingScore: 140, priceChange: 8000 },
+        "Touk Miller": { dualPosition: "DEF", venue: "People First Stadium", gameTime: "Saturday 4:35pm", projectedScore: 98, breakEven: 108, ceilingScore: 138, priceChange: -5000 },
+        "Rory Laird": { dualPosition: "MID", venue: "Adelaide Oval", gameTime: "Saturday 1:45pm", projectedScore: 95, breakEven: 98, ceilingScore: 132, priceChange: -1000 },
+        "Jack Steele": { dualPosition: "FWD", venue: "Marvel Stadium", gameTime: "Saturday 7:25pm", projectedScore: 99, breakEven: 85, ceilingScore: 135, priceChange: 6000 },
+        "Connor Rozee": { dualPosition: "FWD", venue: "Adelaide Oval", gameTime: "Saturday 7:25pm", projectedScore: 101, breakEven: 88, ceilingScore: 140, priceChange: 6000 },
+        "Liam Baker": { dualPosition: "FWD", venue: "Adelaide Oval", gameTime: "Saturday 1:45pm", projectedScore: 89, breakEven: 76, ceilingScore: 120, priceChange: 5000 },
+        "Jack Sinclair": { dualPosition: "MID", venue: "Marvel Stadium", gameTime: "Saturday 7:25pm", projectedScore: 94, breakEven: 85, ceilingScore: 128, priceChange: 5000 },
+      };
+
+      const venueMap: Record<string, { venue: string; gameTime: string; projectedScore: number; breakEven: number; ceilingScore: number; priceChange: number }> = {
+        "Lachie Neale": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 118, breakEven: 105, ceilingScore: 162, priceChange: 12000 },
+        "Clayton Oliver": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 100, breakEven: 118, ceilingScore: 148, priceChange: -15000 },
+        "Christian Petracca": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 112, breakEven: 100, ceilingScore: 158, priceChange: 8000 },
+        "Tom Green": { venue: "GIANTS Stadium", gameTime: "Sunday 1:10pm", projectedScore: 108, breakEven: 95, ceilingScore: 145, priceChange: 10000 },
+        "Andrew Brayshaw": { venue: "Optus Stadium", gameTime: "Sunday 3:20pm", projectedScore: 100, breakEven: 115, ceilingScore: 140, priceChange: -8000 },
+        "Errol Gulden": { venue: "SCG", gameTime: "Saturday 1:45pm", projectedScore: 110, breakEven: 88, ceilingScore: 148, priceChange: 14000 },
+        "Sam Docherty": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 90, breakEven: 108, ceilingScore: 130, priceChange: -6000 },
+        "James Sicily": { venue: "GIANTS Stadium", gameTime: "Sunday 1:10pm", projectedScore: 100, breakEven: 92, ceilingScore: 135, priceChange: 5000 },
+        "Max Gawn": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 94, breakEven: 108, ceilingScore: 135, priceChange: -6000 },
+        "Brodie Grundy": { venue: "SCG", gameTime: "Saturday 1:45pm", projectedScore: 97, breakEven: 95, ceilingScore: 130, priceChange: 2000 },
+        "Sean Darcy": { venue: "Optus Stadium", gameTime: "Sunday 3:20pm", projectedScore: 94, breakEven: 85, ceilingScore: 128, priceChange: 6000 },
+        "Jeremy Cameron": { venue: "Adelaide Oval", gameTime: "Saturday 7:25pm", projectedScore: 103, breakEven: 90, ceilingScore: 142, priceChange: 7000 },
+        "Charlie Curnow": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 90, breakEven: 102, ceilingScore: 135, priceChange: -4000 },
+        "Tom Lynch": { venue: "Adelaide Oval", gameTime: "Saturday 1:45pm", projectedScore: 84, breakEven: 95, ceilingScore: 120, priceChange: -5000 },
+        "Harry McKay": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 91, breakEven: 78, ceilingScore: 125, priceChange: 5000 },
+        "Aaron Naughton": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 80, breakEven: 85, ceilingScore: 118, priceChange: -2000 },
+        "Jesse Hogan": { venue: "GIANTS Stadium", gameTime: "Sunday 1:10pm", projectedScore: 93, breakEven: 72, ceilingScore: 130, priceChange: 8000 },
+        "Patrick Cripps": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 110, breakEven: 100, ceilingScore: 152, priceChange: 7000 },
+        "Josh Dunkley": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 106, breakEven: 88, ceilingScore: 140, priceChange: 9000 },
+        "Caleb Serong": { venue: "Optus Stadium", gameTime: "Sunday 3:20pm", projectedScore: 104, breakEven: 88, ceilingScore: 138, priceChange: 8000 },
+        "Sam Walsh": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 92, breakEven: 105, ceilingScore: 132, priceChange: -4000 },
+        "Jake Lloyd": { venue: "SCG", gameTime: "Saturday 1:45pm", projectedScore: 88, breakEven: 98, ceilingScore: 125, priceChange: -3000 },
+        "Adam Treloar": { venue: "Marvel Stadium", gameTime: "Friday 7:50pm", projectedScore: 88, breakEven: 102, ceilingScore: 128, priceChange: -5000 },
+        "Jai Newcombe": { venue: "GIANTS Stadium", gameTime: "Sunday 1:10pm", projectedScore: 99, breakEven: 86, ceilingScore: 132, priceChange: 6000 },
+        "Dyson Heppell": { venue: "People First Stadium", gameTime: "Saturday 4:35pm", projectedScore: 77, breakEven: 88, ceilingScore: 112, priceChange: -4000 },
+        "Darcy Parish": { venue: "People First Stadium", gameTime: "Saturday 4:35pm", projectedScore: 95, breakEven: 80, ceilingScore: 128, priceChange: 6000 },
+        "Jack Viney": { venue: "The Gabba", gameTime: "Saturday 4:35pm", projectedScore: 82, breakEven: 95, ceilingScore: 118, priceChange: -4000 },
+        "Tom Stewart": { venue: "Adelaide Oval", gameTime: "Saturday 7:25pm", projectedScore: 96, breakEven: 93, ceilingScore: 130, priceChange: 2000 },
+        "Hayden Young": { venue: "Optus Stadium", gameTime: "Sunday 3:20pm", projectedScore: 93, breakEven: 78, ceilingScore: 125, priceChange: 6000 },
+        "Mitch Duncan": { venue: "Adelaide Oval", gameTime: "Saturday 7:25pm", projectedScore: 80, breakEven: 92, ceilingScore: 118, priceChange: -3000 },
+      };
+
+      const allPlayers = await storage.getAllPlayers();
+      for (const player of allPlayers) {
+        const dpp = dppMap[player.name];
+        const venue = venueMap[player.name];
+        const updates: any = {};
+
+        if (dpp) {
+          if (dpp.dualPosition) updates.dualPosition = dpp.dualPosition;
+          if (dpp.venue) updates.venue = dpp.venue;
+          if (dpp.gameTime) updates.gameTime = dpp.gameTime;
+          if (dpp.projectedScore) updates.projectedScore = dpp.projectedScore;
+          if (dpp.breakEven) updates.breakEven = dpp.breakEven;
+          if (dpp.ceilingScore) updates.ceilingScore = dpp.ceilingScore;
+          if (dpp.priceChange !== undefined) updates.priceChange = dpp.priceChange;
+        }
+
+        if (venue) {
+          updates.venue = venue.venue;
+          updates.gameTime = venue.gameTime;
+          updates.projectedScore = venue.projectedScore;
+          updates.breakEven = venue.breakEven;
+          updates.ceilingScore = venue.ceilingScore;
+          updates.priceChange = venue.priceChange;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await db.update(players).set(updates).where(eq(players.id, player.id));
+        }
+      }
+
+      const updatedPlayers = await storage.getAllPlayers();
+      res.json({ message: "Player data refreshed", count: updatedPlayers.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/captain-advice", async (_req, res) => {
+    try {
+      const { generateCaptainAdvice } = await import("./intel-engine");
+      const advice = await generateCaptainAdvice();
+      res.json(advice);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/trade-recommendations/generate-ai", async (_req, res) => {
     try {
       const { generateAITradeRecommendations } = await import("./intel-engine");

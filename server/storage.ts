@@ -6,6 +6,7 @@ import {
   tradeRecommendations,
   leagueSettings,
   intelReports,
+  lateChanges,
   type Player,
   type InsertPlayer,
   type MyTeamPlayer,
@@ -18,6 +19,8 @@ import {
   type TradeRecommendationWithPlayers,
   type IntelReport,
   type InsertIntelReport,
+  type LateChange,
+  type InsertLateChange,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -44,6 +47,12 @@ export interface IStorage {
   getIntelReportsByCategory(category: string): Promise<IntelReport[]>;
   createIntelReport(report: InsertIntelReport): Promise<IntelReport>;
   clearIntelReports(): Promise<void>;
+
+  getLateChanges(round: number): Promise<LateChange[]>;
+  createLateChange(change: InsertLateChange): Promise<LateChange>;
+  clearLateChanges(round: number): Promise<void>;
+
+  updatePlayer(id: number, data: Partial<InsertPlayer>): Promise<Player>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -215,6 +224,32 @@ export class DatabaseStorage implements IStorage {
 
   async clearIntelReports(): Promise<void> {
     await db.delete(intelReports);
+  }
+
+  async getLateChanges(round: number): Promise<LateChange[]> {
+    return db
+      .select()
+      .from(lateChanges)
+      .where(eq(lateChanges.round, round))
+      .orderBy(desc(lateChanges.createdAt));
+  }
+
+  async createLateChange(change: InsertLateChange): Promise<LateChange> {
+    const [created] = await db.insert(lateChanges).values(change).returning();
+    return created;
+  }
+
+  async clearLateChanges(round: number): Promise<void> {
+    await db.delete(lateChanges).where(eq(lateChanges.round, round));
+  }
+
+  async updatePlayer(id: number, data: Partial<InsertPlayer>): Promise<Player> {
+    const [updated] = await db
+      .update(players)
+      .set(data)
+      .where(eq(players.id, id))
+      .returning();
+    return updated;
   }
 }
 
