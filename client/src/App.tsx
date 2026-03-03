@@ -13,6 +13,7 @@ import Players from "@/pages/players";
 import Trades from "@/pages/trades";
 import FormGuide from "@/pages/form-guide";
 import IntelHub from "@/pages/intel-hub";
+import TeamAnalyzer from "@/pages/team-analyzer";
 import SettingsPage from "@/pages/settings-page";
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/trades" component={Trades} />
       <Route path="/form" component={FormGuide} />
       <Route path="/intel" component={IntelHub} />
+      <Route path="/analyze" component={TeamAnalyzer} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
@@ -31,7 +33,7 @@ function Router() {
 }
 
 const sidebarStyle = {
-  "--sidebar-width": "16rem",
+  "--sidebar-width": "15rem",
   "--sidebar-width-icon": "3rem",
 };
 
@@ -43,8 +45,8 @@ function App() {
           <div className="flex h-screen w-full">
             <AppSidebar />
             <div className="flex flex-col flex-1 min-w-0">
-              <header className="flex items-center justify-between gap-1 p-2 border-b h-12 shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <header className="flex items-center justify-between gap-2 px-3 py-2 border-b h-12 shrink-0">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
                 <ThemeToggle />
               </header>
               <main className="flex-1 overflow-auto">

@@ -84,20 +84,22 @@ function PlayerRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="hidden sm:flex items-center gap-3 text-right">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 text-right">
           <div>
-            <p className="text-sm font-mono font-medium">{player.avgScore?.toFixed(1)}</p>
+            <p className="text-xs sm:text-sm font-mono font-medium">{player.avgScore?.toFixed(1)}</p>
             <p className="text-[10px] text-muted-foreground">Avg</p>
           </div>
-          <div>
+          <div className="hidden sm:block">
             <p className="text-sm font-mono font-medium">{player.last3Avg?.toFixed(1)}</p>
             <p className="text-[10px] text-muted-foreground">L3</p>
           </div>
-          <FormBadge trend={player.formTrend} />
+          <div className="hidden sm:block">
+            <FormBadge trend={player.formTrend} />
+          </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 sm:gap-1">
           <Button
             size="icon"
             variant="ghost"
@@ -189,7 +191,7 @@ export default function MyTeam() {
   const remaining = salaryCap - totalSalary;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="page-my-team">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-my-team">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">My Team</h1>
@@ -211,16 +213,18 @@ export default function MyTeam() {
       </div>
 
       <Tabs defaultValue="DEF">
-        <TabsList className="w-full grid grid-cols-5">
-          {positions.map((pos) => (
-            <TabsTrigger key={pos} value={pos} data-testid={`tab-${pos.toLowerCase()}`}>
-              {pos} ({getPlayersByPosition(pos).length})
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="inline-flex w-auto min-w-full sm:grid sm:grid-cols-5 sm:w-full">
+            {positions.map((pos) => (
+              <TabsTrigger key={pos} value={pos} className="min-w-[4.5rem] text-xs sm:text-sm" data-testid={`tab-${pos.toLowerCase()}`}>
+                {pos} ({getPlayersByPosition(pos).length})
+              </TabsTrigger>
+            ))}
+            <TabsTrigger value="BENCH" className="min-w-[4.5rem] text-xs sm:text-sm" data-testid="tab-bench">
+              Bench ({benchPlayers.length})
             </TabsTrigger>
-          ))}
-          <TabsTrigger value="BENCH" data-testid="tab-bench">
-            Bench ({benchPlayers.length})
-          </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         {positions.map((pos) => (
           <TabsContent key={pos} value={pos}>

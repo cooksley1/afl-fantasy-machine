@@ -97,7 +97,7 @@ export default function Trades() {
   const lowConfidence = (trades || []).filter((t) => t.confidence < 0.4);
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="page-trades">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-trades">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Trade Centre</h1>
@@ -105,11 +105,12 @@ export default function Trades() {
             AI-powered trade recommendations for your team
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             onClick={() => generateMutation.mutate()}
             disabled={generateMutation.isPending}
+            className="flex-1 sm:flex-initial"
             data-testid="button-generate-trades"
           >
             {generateMutation.isPending ? (
@@ -122,6 +123,7 @@ export default function Trades() {
           <Button
             onClick={() => aiGenerateMutation.mutate()}
             disabled={aiGenerateMutation.isPending}
+            className="flex-1 sm:flex-initial"
             data-testid="button-generate-ai-trades"
           >
             {aiGenerateMutation.isPending ? (
@@ -241,54 +243,58 @@ function TradeCard({
 }) {
   return (
     <Card data-testid={`card-trade-${trade.id}`}>
-      <CardContent className="p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="destructive" className="text-[10px]">OUT</Badge>
-                <p className="text-sm font-semibold truncate">{trade.playerOut.name}</p>
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="destructive" className="text-[10px]">OUT</Badge>
+                  <p className="text-sm font-semibold truncate">{trade.playerOut.name}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {trade.playerOut.team} | {trade.playerOut.position} | Avg: {trade.playerOut.avgScore?.toFixed(1)} | ${(trade.playerOut.price / 1000).toFixed(0)}K
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {trade.playerOut.team} | {trade.playerOut.position} | Avg: {trade.playerOut.avgScore?.toFixed(1)} | ${(trade.playerOut.price / 1000).toFixed(0)}K
-              </p>
-            </div>
 
-            <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+              <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="default" className="bg-green-600 dark:bg-green-700 text-white text-[10px]">IN</Badge>
-                <p className="text-sm font-semibold truncate">{trade.playerIn.name}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="default" className="bg-green-600 dark:bg-green-700 text-white text-[10px]">IN</Badge>
+                  <p className="text-sm font-semibold truncate">{trade.playerIn.name}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {trade.playerIn.team} | {trade.playerIn.position} | Avg: {trade.playerIn.avgScore?.toFixed(1)} | ${(trade.playerIn.price / 1000).toFixed(0)}K
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {trade.playerIn.team} | {trade.playerIn.position} | Avg: {trade.playerIn.avgScore?.toFixed(1)} | ${(trade.playerIn.price / 1000).toFixed(0)}K
-              </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 lg:w-48 shrink-0">
-            <ConfidenceBar confidence={trade.confidence} />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className={trade.scoreDifference > 0 ? "text-green-500" : trade.scoreDifference < 0 ? "text-red-500" : ""}>
-                {trade.scoreDifference > 0 ? "+" : ""}
-                {trade.scoreDifference?.toFixed(1)} pts
-              </span>
-              <span>|</span>
-              <span className={trade.priceChange > 0 ? "text-green-500" : trade.priceChange < 0 ? "text-red-500" : ""}>
-                {trade.priceChange > 0 ? "+" : ""}${(trade.priceChange / 1000).toFixed(0)}K
-              </span>
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            <div className="flex-1 max-w-48">
+              <ConfidenceBar confidence={trade.confidence} />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                <span className={trade.scoreDifference > 0 ? "text-green-500" : trade.scoreDifference < 0 ? "text-red-500" : ""}>
+                  {trade.scoreDifference > 0 ? "+" : ""}
+                  {trade.scoreDifference?.toFixed(1)} pts
+                </span>
+                <span>|</span>
+                <span className={trade.priceChange > 0 ? "text-green-500" : trade.priceChange < 0 ? "text-red-500" : ""}>
+                  {trade.priceChange > 0 ? "+" : ""}${(trade.priceChange / 1000).toFixed(0)}K
+                </span>
+              </div>
             </div>
-          </div>
 
-          <Button
-            size="sm"
-            onClick={onExecute}
-            disabled={isPending}
-            data-testid={`button-execute-trade-${trade.id}`}
-          >
-            Execute Trade
-          </Button>
+            <Button
+              size="sm"
+              onClick={onExecute}
+              disabled={isPending}
+              data-testid={`button-execute-trade-${trade.id}`}
+            >
+              Execute Trade
+            </Button>
+          </div>
         </div>
 
         <p className="text-xs text-muted-foreground mt-3 leading-relaxed border-t pt-3">

@@ -75,7 +75,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl mx-auto" data-testid="page-settings">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-2xl mx-auto" data-testid="page-settings">
       <div>
         <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -138,7 +138,7 @@ export default function SettingsPage() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="currentRound"

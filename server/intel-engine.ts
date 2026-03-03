@@ -318,6 +318,82 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
   }
 }
 
+export async function analyzeTeamScreenshot(base64Image: string): Promise<{
+  players: { name: string; position: string; score?: number }[];
+  analysis: string;
+  recommendations: { type: string; detail: string; priority: string }[];
+  captainTip: string;
+  tradeSuggestions: string[];
+}> {
+  const allPlayers = await storage.getAllPlayers();
+  const playerNames = allPlayers.map(p => p.name).join(', ');
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert AFL Fantasy team analyzer. You analyze screenshots of AFL Fantasy teams (from SuperCoach or AFL Fantasy platforms) and provide strategic advice.
+
+Known players in the database: ${playerNames}
+
+When analyzing, identify:
+1. Players visible in the screenshot (name, position, any visible scores/prices)
+2. Team structure strengths and weaknesses
+3. Captain/VC recommendations using the loophole strategy
+4. Trade targets - who to trade in/out
+5. DPP exploitation opportunities
+6. Break-even and price movement concerns
+
+If the image is not an AFL Fantasy screenshot, still provide helpful AFL Fantasy advice based on any football content visible, or explain what you see and offer general tips.
+
+Return ONLY valid JSON.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Analyze this AFL Fantasy team screenshot. Identify all players, assess the team structure, and provide actionable recommendations.
+
+Return JSON:
+{
+  "players": [{"name": "Player Name", "position": "DEF/MID/RUC/FWD", "score": 0}],
+  "analysis": "Overall team assessment - strengths, weaknesses, salary situation, structure",
+  "recommendations": [{"type": "trade|captain|structure|cash_cow|upgrade", "detail": "Specific recommendation", "priority": "high|medium|low"}],
+  "captainTip": "Best captain loophole strategy for this team",
+  "tradeSuggestions": ["Trade suggestion 1", "Trade suggestion 2"]
+}`
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: "high" }
+          }
+        ]
+      }
+    ],
+    temperature: 0.5,
+    max_tokens: 4000,
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("No response from AI vision analysis");
+
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      players: Array.isArray(parsed.players) ? parsed.players : [],
+      analysis: parsed.analysis || "Analysis could not be completed.",
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+      captainTip: parsed.captainTip || "",
+      tradeSuggestions: Array.isArray(parsed.tradeSuggestions) ? parsed.tradeSuggestions : [],
+    };
+  } catch {
+    throw new Error("Failed to parse AI analysis response");
+  }
+}
+
 export async function generateCaptainAdvice(): Promise<{
   vcPick: { name: string; reason: string; gameTime: string; projectedScore: number };
   captainPick: { name: string; reason: string; gameTime: string; projectedScore: number };

@@ -187,7 +187,7 @@ export default function IntelHub() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="page-intel-hub">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-intel-hub">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
@@ -200,6 +200,7 @@ export default function IntelHub() {
         <Button
           onClick={() => generateMutation.mutate()}
           disabled={generateMutation.isPending}
+          className="w-full sm:w-auto"
           data-testid="button-generate-intel"
         >
           {generateMutation.isPending ? (
@@ -207,12 +208,12 @@ export default function IntelHub() {
           ) : (
             <Brain className="w-4 h-4 mr-2" />
           )}
-          {generateMutation.isPending ? "Analyzing..." : "Generate Intelligence"}
+          {generateMutation.isPending ? "Analyzing..." : "Generate Intel"}
         </Button>
       </div>
 
       {reports && reports.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-3">
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
               <div className="p-2 rounded-md bg-destructive/10">
@@ -250,7 +251,7 @@ export default function IntelHub() {
       )}
 
       <ScrollArea className="w-full">
-        <div className="flex gap-2 pb-2">
+        <div className="flex gap-1.5 sm:gap-2 pb-2">
           {CATEGORIES.map((cat) => {
             const count =
               cat.id === "all"
@@ -263,12 +264,13 @@ export default function IntelHub() {
                 variant={isActive ? "default" : "secondary"}
                 size="sm"
                 onClick={() => setActiveCategory(cat.id)}
+                className="whitespace-nowrap text-xs sm:text-sm"
                 data-testid={`button-category-${cat.id}`}
               >
-                <cat.icon className="w-3.5 h-3.5 mr-1.5" />
+                <cat.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5" />
                 {cat.label}
                 {count > 0 && (
-                  <span className="ml-1.5 text-[10px] opacity-70">({count})</span>
+                  <span className="ml-1 sm:ml-1.5 text-[10px] opacity-70">({count})</span>
                 )}
               </Button>
             );

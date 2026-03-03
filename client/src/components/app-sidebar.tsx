@@ -8,6 +8,7 @@ import {
   Trophy,
   Zap,
   Brain,
+  Camera,
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,6 +31,7 @@ const navItems = [
   { title: "Trade Centre", url: "/trades", icon: ArrowLeftRight },
   { title: "Form Guide", url: "/form", icon: TrendingUp },
   { title: "Intel Hub", url: "/intel", icon: Brain },
+  { title: "Team Analyzer", url: "/analyze", icon: Camera },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -48,7 +50,7 @@ export function AppSidebar() {
               <h1 className="text-base font-bold tracking-tight text-sidebar-foreground">
                 AFL Fantasy
               </h1>
-              <p className="text-xs text-sidebar-foreground/60">Trade Advisor</p>
+              <p className="text-xs text-sidebar-foreground/60">Machine</p>
             </div>
           </div>
         </Link>

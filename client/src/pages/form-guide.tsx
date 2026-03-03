@@ -72,7 +72,7 @@ export default function FormGuide() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto" data-testid="page-form-guide">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-6xl mx-auto" data-testid="page-form-guide">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Form Guide</h1>
@@ -95,20 +95,22 @@ export default function FormGuide() {
       </div>
 
       <Tabs defaultValue="hot">
-        <TabsList className="w-full grid grid-cols-4">
-          <TabsTrigger value="hot" data-testid="tab-hot">
-            <Flame className="w-4 h-4 mr-1.5" /> Hot
-          </TabsTrigger>
-          <TabsTrigger value="cold" data-testid="tab-cold">
-            <Snowflake className="w-4 h-4 mr-1.5" /> Cold
-          </TabsTrigger>
-          <TabsTrigger value="top" data-testid="tab-top">
-            <BarChart3 className="w-4 h-4 mr-1.5" /> Top Scorers
-          </TabsTrigger>
-          <TabsTrigger value="rising" data-testid="tab-rising">
-            <TrendingUp className="w-4 h-4 mr-1.5" /> Rising
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="inline-flex w-auto min-w-full sm:grid sm:grid-cols-4 sm:w-full">
+            <TabsTrigger value="hot" className="text-xs sm:text-sm" data-testid="tab-hot">
+              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Hot
+            </TabsTrigger>
+            <TabsTrigger value="cold" className="text-xs sm:text-sm" data-testid="tab-cold">
+              <Snowflake className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Cold
+            </TabsTrigger>
+            <TabsTrigger value="top" className="text-xs sm:text-sm" data-testid="tab-top">
+              <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Top
+            </TabsTrigger>
+            <TabsTrigger value="rising" className="text-xs sm:text-sm" data-testid="tab-rising">
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Rising
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="hot">
           <FormList
@@ -191,26 +193,26 @@ function FormList({
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-mono font-medium">{player.avgScore?.toFixed(1)}</p>
                 <p className="text-[10px] text-muted-foreground">Season Avg</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-mono font-medium">{player.last3Avg?.toFixed(1)}</p>
-                <p className="text-[10px] text-muted-foreground">Last 3</p>
+                <p className="text-xs sm:text-sm font-mono font-medium">{player.last3Avg?.toFixed(1)}</p>
+                <p className="text-[10px] text-muted-foreground">L3</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-mono font-medium">{player.last5Avg?.toFixed(1)}</p>
-                <p className="text-[10px] text-muted-foreground">Last 5</p>
+                <p className="text-xs sm:text-sm font-mono font-medium">{player.last5Avg?.toFixed(1)}</p>
+                <p className="text-[10px] text-muted-foreground">L5</p>
               </div>
-              <div className="w-10 flex justify-center">
+              <div className="w-6 sm:w-10 flex justify-center">
                 {player.formTrend === "up" ? (
-                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
                 ) : player.formTrend === "down" ? (
-                  <TrendingDown className="w-4 h-4 text-red-500" />
+                  <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
                 ) : (
-                  <Minus className="w-4 h-4 text-muted-foreground" />
+                  <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                 )}
               </div>
             </div>

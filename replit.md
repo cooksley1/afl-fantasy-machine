@@ -1,14 +1,14 @@
-# AFL Fantasy Trade Advisor
+# AFL Fantasy Machine
 
 ## Overview
-A Fantasy AFL assistant app that helps users manage their fantasy football team, analyze player form, and get AI-powered trade recommendations and strategic intelligence to win their league. Incorporates advanced AFL Fantasy concepts: captain loophole strategy, DPP exploitation, break-even price analysis, late change monitoring, and rolling lockout decision trees.
+A mobile-first Fantasy AFL advisor app that helps users manage their fantasy football team, analyze player form, and get AI-powered trade recommendations and strategic intelligence. Incorporates advanced AFL Fantasy concepts: captain loophole strategy, DPP exploitation, break-even price analysis, late change monitoring, screenshot-based team analysis via GPT-4o vision, and rolling lockout decision trees.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, Wouter routing
-- **Backend**: Express.js, Node.js
+- **Backend**: Express.js, Node.js, multer (file uploads)
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI**: OpenAI (via Replit AI Integrations) for intel generation and trade analysis
-- **Styling**: Custom navy/gold AFL-themed color scheme with dark mode support
+- **AI**: OpenAI GPT-4o-mini (text analysis), GPT-4o (vision/screenshot analysis) via Replit AI Integrations
+- **Styling**: Custom navy/gold AFL-themed color scheme with dark mode support, mobile-first responsive design
 
 ## Architecture
 - `shared/schema.ts` - Drizzle schemas and TypeScript types for Players (with DPP, BE, venue, gameTime, projectedScore, ceilingScore, priceChange, lateChange, isNamedTeam), MyTeamPlayers, TradeRecommendations, LeagueSettings, IntelReports, LateChanges, Conversations, Messages
@@ -16,9 +16,9 @@ A Fantasy AFL assistant app that helps users manage their fantasy football team,
 - `server/storage.ts` - DatabaseStorage class implementing IStorage interface
 - `server/routes.ts` - Express API routes (all prefixed with /api)
 - `server/seed.ts` - Seeds database with 43 real AFL players (with DPP, venues, game times, BEs, ceilings) and a starting team
-- `server/intel-engine.ts` - AI-powered intelligence engine using OpenAI for strategic analysis including captain loophole decision trees, DPP exploitation, break-even arbitrage, and trade recommendations
+- `server/intel-engine.ts` - AI-powered intelligence engine using OpenAI for strategic analysis including captain loophole decision trees, DPP exploitation, break-even arbitrage, trade recommendations, and screenshot team analysis
 - `client/src/App.tsx` - Main app with sidebar navigation and routing
-- `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, Settings pages
+- `client/src/pages/` - Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, Settings pages
 - `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
 
 ## Key Strategic Features
@@ -29,15 +29,17 @@ A Fantasy AFL assistant app that helps users manage their fantasy football team,
 5. **Price Movement Tracking** - Price change indicators (+/-) shown on player cards
 6. **Projected Scores & Ceiling Scores** - Used by AI for optimized captain/trade decisions
 7. **Venue & Game Time Data** - Ground-specific analysis and rolling lockout slot awareness
+8. **Screenshot Team Analysis** - Upload team screenshot for GPT-4o vision analysis with player identification and strategy recommendations
 
 ## Pages
 1. **Dashboard** - Team overview, projected score, captain loophole strategy (VC/C), late change alerts, top performers, suggested trades
 2. **My Team** - View/manage roster by position (DEF/MID/RUC/FWD), set captain/VC, remove players
-3. **Players** - Browse all players with DPP badges, break-even, price changes, venue info, search/filter/sort
+3. **Players** - Browse all players with DPP badges, break-even, price changes, venue info, search/filter/sort (card layout on mobile)
 4. **Trade Centre** - Quick algorithmic + AI-powered deep trade recommendations (with BE arbitrage, DPP value, bye coverage), execute trades
 5. **Form Guide** - Hot/cold players, top scorers, rising stars with team filtering
 6. **Intel Hub** - AI-powered strategic intelligence: captain loophole analysis, cash cows, DPP exploitation, break-even arbitrage, bye strategy, POD players, breakout candidates, ground/conditions analysis, tactical insights, late change risk
-7. **Settings** - Configure team name, salary cap, current round, trades remaining
+7. **Team Analyzer** - Upload team screenshot for AI-powered analysis using GPT-4o vision (player identification, strategy recommendations, trade suggestions)
+8. **Settings** - Configure team name, salary cap, current round, trades remaining
 
 ## API Endpoints
 - `GET /api/players` - All players (includes DPP, BE, venue, gameTime, projectedScore, ceilingScore, priceChange)
@@ -56,7 +58,10 @@ A Fantasy AFL assistant app that helps users manage their fantasy football team,
 - `GET /api/intel/:category` - Get intel by category (validated)
 - `POST /api/intel/generate` - Generate new AI intel reports (10-14 reports with loophole/DPP/BE analysis)
 - `GET /api/captain-advice` - AI-powered captain loophole analysis with decision tree
+- `POST /api/analyze-screenshot` - Upload team screenshot for GPT-4o vision analysis (multipart/form-data)
 - `POST /api/players/refresh-data` - Refresh player data with DPP, venues, game times, BEs, ceilings
+- `GET /api/late-changes` - Get late changes for current round
+- `POST /api/late-changes` - Create late change alert
 
 ## Intel Categories
 injuries, cash_cows, captain_picks, bye_strategy, pod_players, breakout, premium_trades, ground_conditions, tactical, historical

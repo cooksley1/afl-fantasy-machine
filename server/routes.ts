@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertMyTeamPlayerSchema } from "@shared/schema";
 import { z } from "zod";
+import multer from "multer";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -416,6 +417,32 @@ export async function registerRoutes(
       res.json(advice);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+  });
+
+  app.post("/api/analyze-screenshot", upload.single("screenshot"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No screenshot uploaded" });
+      }
+
+      const allowedMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+      if (!allowedMimes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: "Unsupported file type. Please upload a PNG, JPG, or WebP image." });
+      }
+
+      const base64Image = req.file.buffer.toString("base64");
+      const { analyzeTeamScreenshot } = await import("./intel-engine");
+      const analysis = await analyzeTeamScreenshot(base64Image);
+      res.json(analysis);
+    } catch (error: any) {
+      console.error("Screenshot analysis error:", error.message);
+      res.status(500).json({ message: "Failed to analyze screenshot. Please try again with a clearer image." });
     }
   });
 
