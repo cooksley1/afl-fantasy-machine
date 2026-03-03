@@ -50,10 +50,37 @@ export const leagueSettings = pgTable("league_settings", {
   totalTradesUsed: integer("total_trades_used").notNull().default(0),
 });
 
+export const intelReports = pgTable("intel_reports", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  playerNames: text("player_names").default(null),
+  source: text("source").default(null),
+  actionable: boolean("actionable").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({ id: true });
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
 export const insertLeagueSettingsSchema = createInsertSchema(leagueSettings).omit({ id: true });
+export const insertIntelReportSchema = createInsertSchema(intelReports).omit({ id: true, createdAt: true });
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
@@ -63,6 +90,8 @@ export type TradeRecommendation = typeof tradeRecommendations.$inferSelect;
 export type InsertTradeRec = z.infer<typeof insertTradeRecSchema>;
 export type LeagueSettings = typeof leagueSettings.$inferSelect;
 export type InsertLeagueSettings = z.infer<typeof insertLeagueSettingsSchema>;
+export type IntelReport = typeof intelReports.$inferSelect;
+export type InsertIntelReport = z.infer<typeof insertIntelReportSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;

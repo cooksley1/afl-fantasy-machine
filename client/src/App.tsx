@@ -12,6 +12,7 @@ import MyTeam from "@/pages/my-team";
 import Players from "@/pages/players";
 import Trades from "@/pages/trades";
 import FormGuide from "@/pages/form-guide";
+import IntelHub from "@/pages/intel-hub";
 import SettingsPage from "@/pages/settings-page";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/players" component={Players} />
       <Route path="/trades" component={Trades} />
       <Route path="/form" component={FormGuide} />
+      <Route path="/intel" component={IntelHub} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>

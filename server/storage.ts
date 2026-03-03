@@ -5,6 +5,7 @@ import {
   myTeamPlayers,
   tradeRecommendations,
   leagueSettings,
+  intelReports,
   type Player,
   type InsertPlayer,
   type MyTeamPlayer,
@@ -15,6 +16,8 @@ import {
   type InsertLeagueSettings,
   type PlayerWithTeamInfo,
   type TradeRecommendationWithPlayers,
+  type IntelReport,
+  type InsertIntelReport,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -36,6 +39,11 @@ export interface IStorage {
 
   getSettings(): Promise<LeagueSettings>;
   updateSettings(settings: Partial<InsertLeagueSettings>): Promise<LeagueSettings>;
+
+  getIntelReports(): Promise<IntelReport[]>;
+  getIntelReportsByCategory(category: string): Promise<IntelReport[]>;
+  createIntelReport(report: InsertIntelReport): Promise<IntelReport>;
+  clearIntelReports(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -186,6 +194,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(leagueSettings.id, existing.id))
       .returning();
     return updated;
+  }
+
+  async getIntelReports(): Promise<IntelReport[]> {
+    return db.select().from(intelReports).orderBy(desc(intelReports.createdAt));
+  }
+
+  async getIntelReportsByCategory(category: string): Promise<IntelReport[]> {
+    return db
+      .select()
+      .from(intelReports)
+      .where(eq(intelReports.category, category))
+      .orderBy(desc(intelReports.createdAt));
+  }
+
+  async createIntelReport(report: InsertIntelReport): Promise<IntelReport> {
+    const [created] = await db.insert(intelReports).values(report).returning();
+    return created;
+  }
+
+  async clearIntelReports(): Promise<void> {
+    await db.delete(intelReports);
   }
 }
 

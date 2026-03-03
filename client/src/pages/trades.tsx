@@ -13,6 +13,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  Brain,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +45,17 @@ export default function Trades() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trade-recommendations"] });
       toast({ title: "Trade recommendations generated", description: "New suggestions based on current form and data" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const aiGenerateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/trade-recommendations/generate-ai"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trade-recommendations"] });
+      toast({ title: "AI trade analysis complete", description: "Deep analysis of form, matchups, bye strategy, and more" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -93,18 +105,33 @@ export default function Trades() {
             AI-powered trade recommendations for your team
           </p>
         </div>
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
-          data-testid="button-generate-trades"
-        >
-          {generateMutation.isPending ? (
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Zap className="w-4 h-4 mr-2" />
-          )}
-          Generate Recommendations
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            data-testid="button-generate-trades"
+          >
+            {generateMutation.isPending ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4 mr-2" />
+            )}
+            Quick
+          </Button>
+          <Button
+            onClick={() => aiGenerateMutation.mutate()}
+            disabled={aiGenerateMutation.isPending}
+            data-testid="button-generate-ai-trades"
+          >
+            {aiGenerateMutation.isPending ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Brain className="w-4 h-4 mr-2" />
+            )}
+            {aiGenerateMutation.isPending ? "Analyzing..." : "AI Analysis"}
+          </Button>
+        </div>
       </div>
 
       <Card>

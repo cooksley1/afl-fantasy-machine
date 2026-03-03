@@ -244,5 +244,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/intel", async (_req, res) => {
+    try {
+      const reports = await storage.getIntelReports();
+      res.json(reports);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/intel/:category", async (req, res) => {
+    try {
+      const validCategories = ["injuries", "cash_cows", "captain_picks", "bye_strategy", "pod_players", "breakout", "premium_trades", "ground_conditions", "tactical", "historical"];
+      if (!validCategories.includes(req.params.category)) {
+        return res.status(400).json({ message: "Invalid intel category" });
+      }
+      const reports = await storage.getIntelReportsByCategory(req.params.category);
+      res.json(reports);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/intel/generate", async (_req, res) => {
+    try {
+      const { generateIntelReports } = await import("./intel-engine");
+      await generateIntelReports();
+      const reports = await storage.getIntelReports();
+      res.json(reports);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/trade-recommendations/generate-ai", async (_req, res) => {
+    try {
+      const { generateAITradeRecommendations } = await import("./intel-engine");
+      await generateAITradeRecommendations();
+      const recs = await storage.getTradeRecommendations();
+      res.json(recs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }

@@ -7,6 +7,7 @@ import {
   Settings,
   Trophy,
   Zap,
+  Brain,
 } from "lucide-react";
 import {
   Sidebar,
@@ -28,6 +29,7 @@ const navItems = [
   { title: "Players", url: "/players", icon: Trophy },
   { title: "Trade Centre", url: "/trades", icon: ArrowLeftRight },
   { title: "Form Guide", url: "/form", icon: TrendingUp },
+  { title: "Intel Hub", url: "/intel", icon: Brain },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -90,7 +92,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="rounded-md bg-sidebar-accent/50 p-3">
           <p className="text-[11px] text-sidebar-foreground/60 leading-relaxed">
-            Powered by statistical analysis and form algorithms to help you win your league.
+            Powered by AI analysis covering form, injuries, byes, captains, cash cows, and tactical insights.
           </p>
         </div>
       </SidebarFooter>
