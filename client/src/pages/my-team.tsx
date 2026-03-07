@@ -34,9 +34,10 @@ import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, LeagueSettings } from "@shared/schema";
 
-type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price";
+type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price" | "last";
 
 const STAT_OPTIONS: { key: StatKey; label: string; shortLabel: string }[] = [
+  { key: "last", label: "Last Score", shortLabel: "LAST" },
   { key: "price", label: "Price", shortLabel: "PRC" },
   { key: "avg", label: "Season Average", shortLabel: "AVG" },
   { key: "l3", label: "Last 3 Average", shortLabel: "L3" },
@@ -45,7 +46,7 @@ const STAT_OPTIONS: { key: StatKey; label: string; shortLabel: string }[] = [
   { key: "priceChange", label: "Price Change", shortLabel: "+/-" },
 ];
 
-const DEFAULT_VISIBLE_STATS: StatKey[] = ["price", "avg", "be"];
+const DEFAULT_VISIBLE_STATS: StatKey[] = ["last", "avg", "be"];
 
 interface PlayerAdvice {
   name: string;
@@ -143,6 +144,7 @@ function CaptaincyBadge({ captaincy }: { captaincy: string }) {
 
 function getStatValue(player: PlayerWithTeamInfo, key: StatKey): string {
   switch (key) {
+    case "last": return player.lastRoundScore != null ? player.lastRoundScore.toString() : "-";
     case "price": return formatPrice(player.price);
     case "avg": return player.avgScore?.toFixed(1) || "0.0";
     case "l3": return player.last3Avg ? Math.round(player.last3Avg).toString() : "0";
@@ -159,6 +161,15 @@ function getStatValue(player: PlayerWithTeamInfo, key: StatKey): string {
 }
 
 function getStatColor(player: PlayerWithTeamInfo, key: StatKey): string {
+  if (key === "last") {
+    const score = player.lastRoundScore;
+    if (score != null) {
+      if (score >= 100) return "text-green-600 dark:text-green-400";
+      if (score >= 70) return "text-foreground font-bold";
+      if (score < 50) return "text-red-500 dark:text-red-400";
+    }
+    return "";
+  }
   if (key === "priceChange") {
     const val = player.priceChange || 0;
     if (val > 0) return "text-green-600 dark:text-green-400";
@@ -413,13 +424,23 @@ function ListViewRow({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-        <div className="text-center hidden sm:block">
-          <p className="text-xs font-bold text-muted-foreground">LRD</p>
-          <p className="text-sm font-mono font-semibold">{player.last3Avg ? Math.round(player.last3Avg) : 0}</p>
-        </div>
         <div className="text-center">
-          <p className="text-[10px] sm:text-xs font-bold text-muted-foreground">AVG</p>
-          <p className="text-xs sm:text-sm font-mono font-semibold">{player.avgScore?.toFixed(1) || "0.0"}</p>
+          <p className="text-[10px] sm:text-xs font-bold text-muted-foreground">LAST</p>
+          <p className={`text-sm sm:text-base font-mono font-bold ${
+            player.lastRoundScore != null
+              ? player.lastRoundScore >= 100
+                ? "text-green-600 dark:text-green-400"
+                : player.lastRoundScore < 50
+                  ? "text-red-500 dark:text-red-400"
+                  : ""
+              : "text-muted-foreground"
+          }`} data-testid={`text-last-score-${player.id}`}>
+            {player.lastRoundScore != null ? player.lastRoundScore : "-"}
+          </p>
+        </div>
+        <div className="text-center hidden sm:block">
+          <p className="text-xs font-bold text-muted-foreground">AVG</p>
+          <p className="text-sm font-mono font-semibold">{player.avgScore?.toFixed(1) || "0.0"}</p>
         </div>
         <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
           <Button
@@ -461,6 +482,19 @@ function ListViewRow({
   );
 }
 
+function getNumericStatForSort(player: PlayerWithTeamInfo, key: StatKey): number {
+  switch (key) {
+    case "last": return player.lastRoundScore ?? -1;
+    case "price": return player.price || 0;
+    case "avg": return player.avgScore || 0;
+    case "l3": return player.last3Avg || 0;
+    case "be": return player.breakEven || 0;
+    case "proj": return player.projectedScore || 0;
+    case "priceChange": return player.priceChange || 0;
+    default: return 0;
+  }
+}
+
 function ListView({
   teamPlayers,
   analysis,
@@ -468,6 +502,7 @@ function ListView({
   onSetCaptain,
   onSetViceCaptain,
   onViewReport,
+  sortBy,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   analysis: TeamAnalysisResult | null;
@@ -475,10 +510,36 @@ function ListView({
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
   onViewReport: (id: number) => void;
+  sortBy: "position" | StatKey;
 }) {
   const getAdvice = (playerId: number) => analysis?.playerAdvice.find(a => a.playerId === playerId);
 
   const positionGroups = ["DEF", "MID", "RUC", "FWD", "UTIL"];
+
+  if (sortBy !== "position") {
+    const sorted = [...teamPlayers].sort((a, b) => getNumericStatForSort(b, sortBy) - getNumericStatForSort(a, sortBy));
+    const statOpt = STAT_OPTIONS.find(s => s.key === sortBy);
+    return (
+      <div className="space-y-0" data-testid="view-list">
+        <div className="bg-gradient-to-r from-sky-500 to-sky-400 dark:from-sky-700 dark:to-sky-600 px-3 py-1.5">
+          <span className="text-xs font-bold text-white tracking-wide">Sorted by {statOpt?.label || sortBy}</span>
+        </div>
+        <div>
+          {sorted.map((player) => (
+            <ListViewRow
+              key={player.myTeamPlayerId}
+              player={player}
+              advice={getAdvice(player.id)}
+              onRemove={onRemove}
+              onSetCaptain={onSetCaptain}
+              onSetViceCaptain={onSetViceCaptain}
+              onViewReport={onViewReport}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0" data-testid="view-list">
@@ -630,6 +691,7 @@ export default function MyTeam() {
   const [analysis, setAnalysis] = useState<TeamAnalysisResult | null>(null);
   const [viewMode, setViewMode] = useState<"field" | "list">("field");
   const [visibleStats, setVisibleStats] = useState<StatKey[]>(DEFAULT_VISIBLE_STATS);
+  const [sortBy, setSortBy] = useState<"position" | StatKey>("position");
 
   const toggleStat = (key: StatKey) => {
     setVisibleStats(prev =>
@@ -822,6 +884,39 @@ export default function MyTeam() {
               </PopoverContent>
             </Popover>
           )}
+
+          {viewMode === "list" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 px-2" data-testid="button-sort-config">
+                  <SlidersHorizontal className="w-3 h-3" />
+                  Sort: {sortBy === "position" ? "Position" : STAT_OPTIONS.find(s => s.key === sortBy)?.label || sortBy}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-3" align="start">
+                <p className="text-xs font-semibold mb-2">Sort Players By</p>
+                <div className="space-y-1">
+                  <button
+                    className={`w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors ${sortBy === "position" ? "bg-primary/10 font-semibold" : ""}`}
+                    onClick={() => setSortBy("position")}
+                    data-testid="sort-position"
+                  >
+                    Position Group
+                  </button>
+                  {STAT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.key}
+                      className={`w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors ${sortBy === opt.key ? "bg-primary/10 font-semibold" : ""}`}
+                      onClick={() => setSortBy(opt.key)}
+                      data-testid={`sort-${opt.key}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -894,6 +989,7 @@ export default function MyTeam() {
             onSetCaptain={(id) => captainMutation.mutate(id)}
             onSetViceCaptain={(id) => viceCaptainMutation.mutate(id)}
             onViewReport={(id) => navigate(`/player/${id}`)}
+            sortBy={sortBy}
           />
         )}
       </Card>

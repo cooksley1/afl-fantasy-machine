@@ -117,12 +117,36 @@ export class DatabaseStorage implements IStorage {
     const teamEntries = await db.select().from(myTeamPlayers);
     const result: PlayerWithTeamInfo[] = [];
 
+    const playerIds = teamEntries.map(e => e.playerId);
+    const lastScoreMap = new Map<number, { score: number; round: number }>();
+    if (playerIds.length > 0) {
+      const allPlayerStats = await db
+        .select({
+          playerId: weeklyStats.playerId,
+          round: weeklyStats.round,
+          fantasyScore: weeklyStats.fantasyScore,
+        })
+        .from(weeklyStats);
+
+      for (const stat of allPlayerStats) {
+        if (!playerIds.includes(stat.playerId)) continue;
+        const existing = lastScoreMap.get(stat.playerId);
+        if (!existing || stat.round > existing.round) {
+          lastScoreMap.set(stat.playerId, {
+            score: stat.fantasyScore || 0,
+            round: stat.round,
+          });
+        }
+      }
+    }
+
     for (const entry of teamEntries) {
       const [player] = await db
         .select()
         .from(players)
         .where(eq(players.id, entry.playerId));
       if (player) {
+        const lastScore = lastScoreMap.get(player.id);
         result.push({
           ...player,
           isOnField: entry.isOnField,
@@ -130,6 +154,8 @@ export class DatabaseStorage implements IStorage {
           isViceCaptain: entry.isViceCaptain,
           fieldPosition: entry.fieldPosition,
           myTeamPlayerId: entry.id,
+          lastRoundScore: lastScore?.score ?? null,
+          lastRoundNumber: lastScore?.round ?? null,
         });
       }
     }

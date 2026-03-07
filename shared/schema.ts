@@ -259,6 +259,8 @@ export type PlayerWithTeamInfo = Player & {
   isViceCaptain?: boolean;
   fieldPosition?: string;
   myTeamPlayerId?: number;
+  lastRoundScore?: number | null;
+  lastRoundNumber?: number | null;
 };
 
 export type TradeRecommendationWithPlayers = TradeRecommendation & {
