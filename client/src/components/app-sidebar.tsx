@@ -6,7 +6,6 @@ import {
   TrendingUp,
   Settings,
   Trophy,
-  Zap,
   Brain,
   Camera,
   Radio,
@@ -15,6 +14,7 @@ import {
   LogOut,
   HelpCircle,
 } from "lucide-react";
+import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import {
   Sidebar,
   SidebarContent,

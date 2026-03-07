@@ -1,4 +1,5 @@
-import { Zap, TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users, ChevronDown } from "lucide-react";
+import { TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users, ChevronDown, Zap } from "lucide-react";
+import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
