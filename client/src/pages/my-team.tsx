@@ -198,7 +198,7 @@ function FieldViewCard({
     >
       <div className="relative">
         <div
-          className="w-[76px] sm:w-[88px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
+          className="w-[72px] sm:w-[88px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
           style={{ background: `linear-gradient(135deg, ${teamColors.primary} 0%, ${teamColors.primary}dd 100%)` }}
         >
           <div className="relative h-[52px] sm:h-[58px] flex items-center justify-center overflow-hidden">
@@ -298,56 +298,52 @@ function FieldView({
 
         return (
           <div key={pos} className="relative" data-testid={`field-group-${pos.toLowerCase()}`}>
-            <div className="flex items-stretch gap-2">
-              <div className="w-[72px] sm:w-[90px] shrink-0 flex items-center justify-center rounded-l-lg bg-gradient-to-b from-primary/15 to-primary/5 border-r border-border/50">
-                <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider [writing-mode:vertical-lr] rotate-180">
-                  {positionLabel(pos)}
-                </span>
-              </div>
-
-              <div className="flex-1 py-3">
-                <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
-                  {topRow.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
-                  ))}
-                </div>
-                {bottomRow.length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mt-3">
-                    {bottomRow.map((p) => (
-                      <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
-                    ))}
-                  </div>
-                )}
-              </div>
-
+            <div className="flex items-center gap-1 mb-1.5">
+              <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider px-2">
+                {positionLabel(pos)}
+              </span>
+              <div className="flex-1 h-px bg-border/40" />
               {bench.length > 0 && (
-                <div className="w-[86px] sm:w-[100px] shrink-0 border-l border-border/50 flex flex-col items-center justify-center gap-2 py-2 bg-muted/20 rounded-r-lg">
-                  {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
-                  ))}
-                </div>
+                <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide px-2">
+                  Bench ({bench.length})
+                </span>
               )}
             </div>
+            <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
+              {topRow.map((p) => (
+                <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+              ))}
+            </div>
+            {bottomRow.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
+                {bottomRow.map((p) => (
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                ))}
+              </div>
+            )}
+            {bench.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2 pt-2 border-t border-dashed border-border/40">
+                {bench.map((p) => (
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
 
       {utilPlayers.length > 0 && (
         <div className="relative" data-testid="field-group-util">
-          <div className="flex items-stretch gap-2">
-            <div className="w-[72px] sm:w-[90px] shrink-0 flex items-center justify-center rounded-l-lg bg-gradient-to-b from-primary/15 to-primary/5 border-r border-border/50">
-              <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider [writing-mode:vertical-lr] rotate-180">
-                UTILITY
-              </span>
-            </div>
-            <div className="flex-1 py-3">
-              <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
-                {utilPlayers.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
-                ))}
-              </div>
-            </div>
-            <div className="w-[72px] sm:w-[90px] shrink-0" />
+          <div className="flex items-center gap-1 mb-1.5">
+            <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider px-2">
+              UTILITY
+            </span>
+            <div className="flex-1 h-px bg-border/40" />
+          </div>
+          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
+            {utilPlayers.map((p) => (
+              <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+            ))}
           </div>
         </div>
       )}
@@ -416,42 +412,42 @@ function ListViewRow({
         </p>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-        <div className="text-center">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="text-center hidden sm:block">
           <p className="text-xs font-bold text-muted-foreground">LRD</p>
           <p className="text-sm font-mono font-semibold">{player.last3Avg ? Math.round(player.last3Avg) : 0}</p>
         </div>
         <div className="text-center">
-          <p className="text-xs font-bold text-muted-foreground">AVG</p>
-          <p className="text-sm font-mono font-semibold">{player.avgScore?.toFixed(1) || "0.0"}</p>
+          <p className="text-[10px] sm:text-xs font-bold text-muted-foreground">AVG</p>
+          <p className="text-xs sm:text-sm font-mono font-semibold">{player.avgScore?.toFixed(1) || "0.0"}</p>
         </div>
         <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-6 w-6 sm:h-7 sm:w-7"
             onClick={() => onSetCaptain(player.myTeamPlayerId!)}
             data-testid={`button-captain-${player.id}`}
           >
-            <Crown className={`w-3.5 h-3.5 ${player.isCaptain ? "text-red-500" : "text-muted-foreground"}`} />
+            <Crown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${player.isCaptain ? "text-red-500" : "text-muted-foreground"}`} />
           </Button>
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-6 w-6 sm:h-7 sm:w-7"
             onClick={() => onSetViceCaptain(player.myTeamPlayerId!)}
             data-testid={`button-vc-${player.id}`}
           >
-            <Shield className={`w-3.5 h-3.5 ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`} />
+            <Shield className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`} />
           </Button>
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-6 w-6 sm:h-7 sm:w-7"
             onClick={() => onRemove(player.myTeamPlayerId!)}
             data-testid={`button-remove-${player.id}`}
           >
-            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+            <MoreVertical className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
           </Button>
         </div>
       </div>
@@ -771,27 +767,27 @@ export default function MyTeam() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-0.5 bg-muted rounded-lg p-0.5">
             <Button
               size="sm"
               variant={viewMode === "field" ? "default" : "ghost"}
-              className="gap-1.5 text-xs"
+              className="gap-1 text-xs h-7 px-2"
               onClick={() => setViewMode("field")}
               data-testid="button-field-view"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-3 h-3" />
               Field
             </Button>
             <Button
               size="sm"
               variant={viewMode === "list" ? "default" : "ghost"}
-              className="gap-1.5 text-xs"
+              className="gap-1 text-xs h-7 px-2"
               onClick={() => setViewMode("list")}
               data-testid="button-list-view"
             >
-              <List className="w-3.5 h-3.5" />
+              <List className="w-3 h-3" />
               List
             </Button>
           </div>
@@ -799,10 +795,10 @@ export default function MyTeam() {
           {viewMode === "field" && (
             <Popover>
               <PopoverTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs" data-testid="button-stats-config">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 px-2" data-testid="button-stats-config">
+                  <SlidersHorizontal className="w-3 h-3" />
                   Stats
-                  <Badge variant="secondary" className="text-[9px] ml-0.5">{visibleStats.length}</Badge>
+                  <Badge variant="secondary" className="text-[9px] ml-0.5 h-4 px-1">{visibleStats.length}</Badge>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-52 p-3" align="start">
@@ -828,35 +824,35 @@ export default function MyTeam() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Button
             onClick={() => setupTeamMutation.mutate()}
             disabled={setupTeamMutation.isPending}
             size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-1 h-7 px-2 text-xs"
             data-testid="button-reload-team"
           >
             {setupTeamMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-3.5 h-3.5" />
             )}
-            {setupTeamMutation.isPending ? "Loading..." : "Reload"}
+            <span className="hidden sm:inline">{setupTeamMutation.isPending ? "Loading..." : "Reload"}</span>
           </Button>
           <Button
             onClick={() => analyzeMutation.mutate()}
             disabled={analyzeMutation.isPending || !teamPlayers?.length}
             size="sm"
-            className="gap-1.5"
+            className="gap-1 h-7 px-2 text-xs"
             data-testid="button-analyze-team"
           >
             {analyzeMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Brain className="w-4 h-4" />
+              <Brain className="w-3.5 h-3.5" />
             )}
-            {analyzeMutation.isPending ? "Analysing..." : "Analyse Team"}
+            <span>{analyzeMutation.isPending ? "..." : "Analyse"}</span>
           </Button>
         </div>
       </div>
@@ -877,10 +873,10 @@ export default function MyTeam() {
         {viewMode === "field" && teamPlayers && (
           <>
             <div className="flex justify-between items-center px-3 py-2 bg-muted/30 border-b">
-              <span className="text-xs font-bold text-muted-foreground">{teamPlayers.length} PLAYERS</span>
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">INTERCHANGE</span>
+              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">{teamPlayers.length} PLAYERS</span>
+              <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">ON FIELD + BENCH</span>
             </div>
-            <CardContent className="p-2 sm:p-4">
+            <CardContent className="p-1.5 sm:p-4">
               <FieldView
                 teamPlayers={teamPlayers}
                 onViewReport={(id) => navigate(`/player/${id}`)}

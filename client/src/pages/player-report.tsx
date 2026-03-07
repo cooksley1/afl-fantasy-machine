@@ -97,7 +97,7 @@ function PerformanceCharts({ player }: { player: Player }) {
 
   const scoreHistoryData = useMemo(() => {
     return scores.map((score, i) => ({
-      round: `R${i + 1}`,
+      round: `'25 R${i + 1}`,
       score,
     }));
   }, [scores]);
@@ -158,7 +158,7 @@ function PerformanceCharts({ player }: { player: Player }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-primary" />
-              Score History
+              Score History <span className="text-[10px] font-normal text-muted-foreground">(2025 baseline)</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -351,7 +351,7 @@ export default function PlayerReport() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-player-name">{player.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-player-name">{player.name}</h1>
             <VerdictBadge verdict={report.verdict} />
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -373,7 +373,7 @@ export default function PlayerReport() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <StatCard label="Avg" value={player.avgScore?.toFixed(1) || "0"} />
         <StatCard label="L3 Avg" value={player.last3Avg?.toFixed(1) || "0"} />
         <StatCard label="Projected" value={player.projectedScore?.toFixed(0) || "N/A"} />

@@ -15,8 +15,11 @@ import {
   Loader2,
   X,
   ImageIcon,
+  Save,
+  CheckCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AnalysisResult {
   players: { name: string; position: string; score?: number }[];
@@ -44,6 +47,7 @@ export default function TeamAnalyzer() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [teamSaved, setTeamSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -71,6 +75,24 @@ export default function TeamAnalyzer() {
     },
   });
 
+  const saveMutation = useMutation({
+    mutationFn: async (players: { name: string; position: string }[]) => {
+      const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", { players });
+      return res.json() as Promise<{ success: boolean; savedCount: number; notFound: string[]; totalOnTeam: number }>;
+    },
+    onSuccess: (data) => {
+      setTeamSaved(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      const msg = data.notFound.length > 0
+        ? `Saved ${data.savedCount} players. ${data.notFound.length} not matched: ${data.notFound.join(", ")}`
+        : `Saved ${data.savedCount} players to your team`;
+      toast({ title: "Team saved!", description: msg });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -94,6 +116,7 @@ export default function TeamAnalyzer() {
     setSelectedFile(null);
     setPreviewUrl(null);
     setResult(null);
+    setTeamSaved(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -195,10 +218,32 @@ export default function TeamAnalyzer() {
           {result.players.length > 0 && (
             <Card>
               <CardHeader className="pb-2 px-4 pt-4">
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" />
-                  Players Identified ({result.players.length})
-                </CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" />
+                    Players Identified ({result.players.length})
+                  </CardTitle>
+                  {teamSaved ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0 gap-1" data-testid="badge-team-saved">
+                      <CheckCircle className="w-3 h-3" />
+                      Saved
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => saveMutation.mutate(result.players)}
+                      disabled={saveMutation.isPending}
+                      data-testid="button-save-team"
+                    >
+                      {saveMutation.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Save as My Team
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <div className="flex flex-wrap gap-1.5">
@@ -212,6 +257,11 @@ export default function TeamAnalyzer() {
                     </Badge>
                   ))}
                 </div>
+                {!teamSaved && (
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    Saving will replace your current team with these {result.players.length} identified players.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

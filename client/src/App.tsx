@@ -64,7 +64,7 @@ function AuthenticatedApp() {
             </div>
             <ThemeToggle />
           </header>
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden">
             <Router />
           </main>
         </div>

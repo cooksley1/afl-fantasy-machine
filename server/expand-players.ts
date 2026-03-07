@@ -183,7 +183,7 @@ export async function repairPlayerData(): Promise<number> {
       updates.startingPrice = p.price;
     }
 
-    if (p.recentScores && p.recentScores.length > 0) {
+    if (p.gamesPlayed === 0 && p.recentScores && p.recentScores.length > 0) {
       updates.recentScores = '';
     }
 

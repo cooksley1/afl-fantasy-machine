@@ -678,6 +678,67 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/my-team/save-from-analyzer", async (req, res) => {
+    try {
+      const { players: identifiedPlayers } = req.body as {
+        players: { name: string; position: string }[];
+      };
+      if (!identifiedPlayers || identifiedPlayers.length === 0) {
+        return res.status(400).json({ message: "No players identified to save" });
+      }
+
+      const allPlayers = await storage.getAllPlayers();
+      await storage.clearMyTeam();
+
+      const posMap: Record<string, string> = {
+        DEF: "DEF", DEFENDER: "DEF", BACK: "DEF",
+        MID: "MID", MIDFIELDER: "MID",
+        RUC: "RUC", RUCK: "RUC",
+        FWD: "FWD", FORWARD: "FWD",
+      };
+
+      let savedCount = 0;
+      const notFound: string[] = [];
+
+      for (const ip of identifiedPlayers) {
+        const normalName = ip.name.trim().toLowerCase();
+        const match = allPlayers.find(p => p.name.toLowerCase() === normalName) ||
+          allPlayers.find(p => {
+            const parts = p.name.toLowerCase().split(" ");
+            return parts[parts.length - 1] === normalName.split(" ").pop();
+          });
+
+        if (!match) {
+          notFound.push(ip.name);
+          continue;
+        }
+
+        const posRaw = (ip.position || match.position || "MID").toUpperCase();
+        const fieldPos = posMap[posRaw] || "MID";
+        const isOnField = savedCount < 22;
+
+        await storage.addToMyTeam({
+          playerId: match.id,
+          isOnField,
+          isCaptain: false,
+          isViceCaptain: false,
+          fieldPosition: fieldPos,
+        });
+        savedCount++;
+      }
+
+      const team = await storage.getMyTeam();
+      res.json({
+        success: true,
+        savedCount,
+        notFound,
+        totalOnTeam: team.length,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/my-team/analyze", async (_req, res) => {
     try {
       const myTeam = await storage.getMyTeam();
