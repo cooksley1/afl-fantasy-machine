@@ -34,7 +34,7 @@ async function fetchSquiggleGames(round?: number): Promise<FetchedItem[]> {
   try {
     const year = new Date().getFullYear();
     let url = `https://api.squiggle.com.au/?q=games;year=${year}`;
-    if (round) url += `;round=${round}`;
+    if (round != null) url += `;round=${round}`;
     const res = await fetchWithTimeout(url, { headers: { "User-Agent": UA } });
     if (!res.ok) return items;
     const data = await res.json();
@@ -62,7 +62,7 @@ async function fetchSquiggleTips(round?: number): Promise<FetchedItem[]> {
   try {
     const year = new Date().getFullYear();
     let url = `https://api.squiggle.com.au/?q=tips;year=${year}`;
-    if (round) url += `;round=${round}`;
+    if (round != null) url += `;round=${round}`;
     const res = await fetchWithTimeout(url, { headers: { "User-Agent": UA } });
     if (!res.ok) return items;
     const data = await res.json();

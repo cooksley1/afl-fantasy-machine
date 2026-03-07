@@ -14,6 +14,7 @@ import {
   calcCaptainProbability,
   bayesianAdjustedAvg,
   calcBlendedProjection,
+  calcMultiplierProjection,
   classifyCashGeneration,
   isDebutantCandidate,
   generateRecentScores,
@@ -173,13 +174,35 @@ export async function populateConsistencyData(): Promise<number> {
     }
   }
 
+  const { positionConcessions: pcTable } = await import("@shared/schema");
+  const concessions = await db.select().from(pcTable);
+  const concessionMap = new Map<string, number>();
+  const positionTotals: Record<string, { sum: number; count: number }> = {};
+  for (const c of concessions) {
+    concessionMap.set(`${c.team}:${c.position}`, c.avgPointsConceded || 0);
+    if (!positionTotals[c.position]) positionTotals[c.position] = { sum: 0, count: 0 };
+    positionTotals[c.position].sum += c.avgPointsConceded || 0;
+    positionTotals[c.position].count++;
+  }
+  const leagueAvgByPos: Record<string, number> = {};
+  for (const [pos, totals] of Object.entries(positionTotals)) {
+    leagueAvgByPos[pos] = totals.count > 0 ? totals.sum / totals.count : 80;
+  }
+
   const needsAdvancedUpdate = allPlayers.filter(p => p.volatilityScore === null || p.captainProbability === null);
   for (const p of needsAdvancedUpdate) {
     const avg = p.avgScore || 50;
     const stdDev = p.scoreStdDev || 15;
     const proj = p.projectedScore || avg;
     const bayesianProj = bayesianAdjustedAvg(p.last3Avg || avg, p.last5Avg || avg, avg, w);
-    const adjustedProj = calcBlendedProjection(proj, bayesianProj, w);
+    const blendedProj = calcBlendedProjection(proj, bayesianProj, w);
+
+    const opponentConceded = p.nextOpponent ? (concessionMap.get(`${p.nextOpponent}:${p.position}`) ?? null) : null;
+    const leagueAvg = leagueAvgByPos[p.position] ?? null;
+    const { adjustedScore: adjustedProj } = calcMultiplierProjection(
+      blendedProj, avg, p.last3Avg, p.last5Avg, opponentConceded, leagueAvg
+    );
+
     const volatility = calcVolatilityScore(stdDev, avg, w);
     const floor = calcProjectedFloor(adjustedProj, stdDev, w);
     const ceiling = calcProjectedCeiling(adjustedProj, stdDev, w);
@@ -241,7 +264,14 @@ export async function populateConsistencyData(): Promise<number> {
 
     const proj = p.projectedScore || avg;
     const bayesianProj = bayesianAdjustedAvg(p.last3Avg || avg, p.last5Avg || avg, avg, w);
-    const adjustedProj = calcBlendedProjection(proj, bayesianProj, w);
+    const blendedProj = calcBlendedProjection(proj, bayesianProj, w);
+
+    const opponentConceded = p.nextOpponent ? (concessionMap.get(`${p.nextOpponent}:${p.position}`) ?? null) : null;
+    const leagueAvg = leagueAvgByPos[p.position] ?? null;
+    const { adjustedScore: adjustedProj } = calcMultiplierProjection(
+      blendedProj, avg, p.last3Avg, p.last5Avg, opponentConceded, leagueAvg
+    );
+
     const volatility = calcVolatilityScore(actualStdDev, avg, w);
     const floor = calcProjectedFloor(adjustedProj, actualStdDev, w);
     const ceiling = calcProjectedCeiling(adjustedProj, actualStdDev, w);

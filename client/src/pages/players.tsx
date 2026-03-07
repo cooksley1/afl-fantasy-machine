@@ -54,7 +54,8 @@ const AFL_TEAMS = [
 
 const POSITIONS = ["All Positions", "DEF", "MID", "RUC", "FWD"];
 
-type SortField = "avgScore" | "price" | "last3Avg" | "ownedByPercent" | "name" | "consistencyRating";
+type PlayerWithValueGap = Player & { valueGap?: number; priceImpliedAvg?: number };
+type SortField = "avgScore" | "price" | "last3Avg" | "ownedByPercent" | "name" | "consistencyRating" | "valueGap";
 
 export default function Players() {
   const { toast } = useToast();
@@ -65,7 +66,7 @@ export default function Players() {
   const [sortBy, setSortBy] = useState<SortField>("avgScore");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const { data: players, isLoading } = useQuery<Player[]>({
+  const { data: players, isLoading } = useQuery<PlayerWithValueGap[]>({
     queryKey: ["/api/players"],
   });
 
@@ -313,8 +314,16 @@ export default function Players() {
               </p>
             </div>
             <div className="text-center">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Con</p>
-              <ConsistencyIndicator rating={player.consistencyRating} stdDev={player.scoreStdDev} avg={player.avgScore || 0} />
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">VGap</p>
+              <p className={`text-sm font-mono font-medium ${
+                (player as PlayerWithValueGap).valueGap != null && (player as PlayerWithValueGap).valueGap! > 5
+                  ? 'text-green-500'
+                  : (player as PlayerWithValueGap).valueGap != null && (player as PlayerWithValueGap).valueGap! < -5
+                  ? 'text-red-500'
+                  : 'text-muted-foreground'
+              }`} data-testid={`text-vgap-${player.id}`}>
+                {(player as PlayerWithValueGap).valueGap != null ? `${(player as PlayerWithValueGap).valueGap! > 0 ? '+' : ''}${(player as PlayerWithValueGap).valueGap!.toFixed(1)}` : '-'}
+              </p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">P120</p>
@@ -395,6 +404,17 @@ export default function Players() {
             {player.ownedByPercent?.toFixed(0)}%
           </span>
         </div>
+        <div className="hidden xl:block w-16 text-center">
+          <span className={`text-sm font-mono font-medium ${
+            (player as PlayerWithValueGap).valueGap != null && (player as PlayerWithValueGap).valueGap! > 5
+              ? 'text-green-500'
+              : (player as PlayerWithValueGap).valueGap != null && (player as PlayerWithValueGap).valueGap! < -5
+              ? 'text-red-500'
+              : 'text-muted-foreground'
+          }`} data-testid={`text-vgap-${player.id}`}>
+            {(player as PlayerWithValueGap).valueGap != null ? `${(player as PlayerWithValueGap).valueGap! > 0 ? '+' : ''}${(player as PlayerWithValueGap).valueGap!.toFixed(1)}` : '-'}
+          </span>
+        </div>
         <div className="w-12 flex justify-center">
           <FormIcon trend={player.formTrend} />
         </div>
@@ -468,7 +488,7 @@ export default function Players() {
         </div>
         {isMobile && (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {(["avgScore", "price", "consistencyRating", "name"] as SortField[]).map((field) => (
+            {(["avgScore", "price", "valueGap", "consistencyRating", "name"] as SortField[]).map((field) => (
               <Button
                 key={field}
                 variant={sortBy === field ? "default" : "outline"}
@@ -477,7 +497,7 @@ export default function Players() {
                 className="shrink-0"
                 data-testid={`button-sort-${field}`}
               >
-                {field === "avgScore" ? "Avg" : field === "price" ? "Price" : field === "consistencyRating" ? "Consistency" : "Name"}
+                {field === "avgScore" ? "Avg" : field === "price" ? "Price" : field === "valueGap" ? "VGap" : field === "consistencyRating" ? "Consistency" : "Name"}
                 <ArrowUpDown className="w-3 h-3 ml-1" />
               </Button>
             ))}
@@ -538,6 +558,15 @@ export default function Players() {
                 </button>
               </div>
               <div className="hidden lg:block w-14 text-center">Own%</div>
+              <div className="hidden xl:block w-16 text-center">
+                <button
+                  onClick={() => toggleSort("valueGap")}
+                  className="flex items-center gap-1 mx-auto"
+                  data-testid="button-sort-vgap"
+                >
+                  VGap <ArrowUpDown className="w-3 h-3" />
+                </button>
+              </div>
               <div className="w-12 text-center">Form</div>
               <div className="w-10"></div>
             </div>

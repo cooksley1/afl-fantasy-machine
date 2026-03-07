@@ -118,6 +118,7 @@ export const tradeRecommendations = pgTable("trade_recommendations", {
   urgency: text("urgency").notNull().default("medium"),
   projectedImpact: real("projected_impact").default(null),
   cashImpact: integer("cash_impact").default(null),
+  seasonTradeGain: real("season_trade_gain").default(null),
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -14,7 +14,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 
 ## Architecture
 - `shared/schema.ts` - Drizzle schemas for Players, WeeklyStats, TeamContext, PositionConcessions, Projections, ModelWeights, MyTeamPlayers, TradeRecommendations, LeagueSettings, IntelReports, IntelSources, LateChanges, Conversations, Messages, Users
-- `server/services/projection-engine.ts` - All projection/scoring calculation functions with configurable weights: normalCDF, bayesianAdjustedAvg, calcProjectedFloor, calcProjectedCeiling, calcVolatilityScore, calcCaptainProbability, calcConsistencyRating, calcTradeEV, calcTradeRankingScore, calcTradeConfidence, calcBlendedProjection, classifyCashGeneration, isDebutantCandidate, generateRecentScores, generateAge, generateYearsExperience, generateDurabilityScore, generateInjuryRiskScore
+- `server/services/projection-engine.ts` - All projection/scoring calculation functions with configurable weights: normalCDF, bayesianAdjustedAvg, calcProjectedFloor, calcProjectedCeiling, calcVolatilityScore, calcCaptainProbability, calcConsistencyRating, calcTradeEV, calcTradeRankingScore, calcTradeConfidence, calcBlendedProjection, calcMultiplierProjection (Base × Matchup × Form × TOG), calcValueGap (projected avg - price-implied avg), calcSeasonTradeGain (projDiff × remainingRounds), classifyCashGeneration, isDebutantCandidate, generateRecentScores, generateAge, generateYearsExperience, generateDurabilityScore, generateInjuryRiskScore
 - `server/services/__tests__/projection-engine.test.ts` - 85 unit tests covering all calculation functions
 - `vitest.config.ts` - Vitest config for server-side unit tests
 - `server/db.ts` - Database connection pool
@@ -61,11 +61,15 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
    - **Diversification**: Max 2 appearances per playerIn/playerOut, up to 15 recommendations
    - **Categories**: urgent/upgrade/cash_gen/structure with urgency critical/high/medium/low
    - **Round 0 support**: Preseason trade evaluation with early-season specific logic, preseason hold protection for premium-priced players
+   - **Season Phase Engine**: getSeasonPhase() returns phase-specific priorities and trade strategy for Launch (R0-5), CashGen (R6-10), ByeWarfare (R11-15), RunHome (R16-24)
+   - **Trade Gain × Remaining Rounds**: seasonTradeGain = (projIn - projOut) × remainingRounds — stored in trade_recommendations table
+   - **Multiplier Projections**: calcMultiplierProjection() applies Matchup × Form × TOG factors to base projection using position concessions data
+   - **Value Gap**: calcValueGap() computes projected avg - (price / magicNumber) — surfaced in /api/players response and Players page
    - **Strategic Hold System**: assessPlayerRole() determines keeper/hold_for_value/stepping_stone/monitor verdicts with sell-price targets and upgrade paths
-   - **Detailed Reasoning**: buildDetailedReason() generates comprehensive OUT/IN summaries with avg, BE, proj, fixture info, price trajectory, long-term plans, DPP value
+   - **Detailed Reasoning**: buildDetailedReason() generates comprehensive OUT/IN summaries with avg, BE, proj, fixture info, price trajectory, long-term plans, DPP value, season phase context
 
 ## API Endpoints
-- `GET /api/players` - All players with advanced metrics
+- `GET /api/players` - All players with advanced metrics + valueGap + priceImpliedAvg
 - `GET /api/players/:id` - Single player
 - `GET /api/players/:id/report` - AI scouting report
 - `GET /api/my-team` - Current team with player details (30 players: Glen's 2026 starting team)

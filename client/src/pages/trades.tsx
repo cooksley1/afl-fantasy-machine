@@ -329,6 +329,14 @@ function TradeCard({
                 <span className={(trade.priceChange || 0) < 0 ? "text-green-500" : (trade.priceChange || 0) > 0 ? "text-red-400" : ""}>
                   {(trade.priceChange || 0) < 0 ? "saves " : "+"}${Math.abs((trade.priceChange || 0) / 1000).toFixed(0)}K
                 </span>
+                {(trade as any).seasonTradeGain != null && (trade as any).seasonTradeGain !== 0 && (
+                  <>
+                    <span className="opacity-40">•</span>
+                    <span className={(trade as any).seasonTradeGain > 0 ? "text-green-500 font-medium" : "text-red-400"} data-testid={`text-season-gain-${trade.id}`}>
+                      {(trade as any).seasonTradeGain > 0 ? "+" : ""}{(trade as any).seasonTradeGain.toFixed(0)} szn pts
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 

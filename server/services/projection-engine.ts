@@ -158,6 +158,56 @@ export function getDefaultWeightEntries(): Array<{ key: string; value: number; d
   return entries;
 }
 
+export interface MultiplierFactors {
+  matchupFactor: number;
+  formFactor: number;
+  togFactor: number;
+  combined: number;
+}
+
+export function calcMultiplierProjection(
+  baseProjection: number,
+  avgScore: number,
+  last3Avg: number | null,
+  last5Avg: number | null,
+  opponentAvgConceded: number | null,
+  leagueAvgConceded: number | null,
+): { adjustedScore: number; factors: MultiplierFactors } {
+  let matchupFactor = 1.0;
+  if (opponentAvgConceded != null && leagueAvgConceded != null && leagueAvgConceded > 0) {
+    const rawMatchup = opponentAvgConceded / leagueAvgConceded;
+    matchupFactor = 0.7 + (rawMatchup - 1.0) * 0.6 + 0.3;
+    matchupFactor = Math.max(0.85, Math.min(1.20, matchupFactor));
+  }
+
+  let formFactor = 1.0;
+  if (avgScore > 0) {
+    const recentAvg = last3Avg ?? last5Avg ?? avgScore;
+    const rawForm = recentAvg / avgScore;
+    formFactor = Math.max(0.85, Math.min(1.20, rawForm));
+  }
+
+  const togFactor = 1.0;
+
+  const combined = matchupFactor * formFactor * togFactor;
+  const adjustedScore = Math.round(baseProjection * combined * 10) / 10;
+
+  return {
+    adjustedScore,
+    factors: { matchupFactor, formFactor, togFactor, combined },
+  };
+}
+
+export function calcValueGap(projectedAvg: number, price: number, magicNumber: number): number {
+  if (magicNumber <= 0 || price <= 0) return 0;
+  const priceImpliedAvg = price / magicNumber;
+  return Math.round((projectedAvg - priceImpliedAvg) * 10) / 10;
+}
+
+export function calcSeasonTradeGain(projIn: number, projOut: number, remainingRounds: number): number {
+  return Math.round((projIn - projOut) * remainingRounds * 10) / 10;
+}
+
 export function normalCDF(z: number): number {
   const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
   const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;

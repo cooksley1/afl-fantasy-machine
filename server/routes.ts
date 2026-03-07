@@ -24,8 +24,16 @@ export async function registerRoutes(
 
   app.get("/api/players", async (_req, res) => {
     try {
-      const players = await storage.getAllPlayers();
-      res.json(players);
+      const allPlayers = await storage.getAllPlayers();
+      const { calcValueGap } = await import("./services/projection-engine");
+      const { AFL_FANTASY_CLASSIC_2026 } = await import("@shared/game-rules");
+      const magicNumber = AFL_FANTASY_CLASSIC_2026.magicNumber;
+      const enriched = allPlayers.map(p => ({
+        ...p,
+        valueGap: calcValueGap(p.projectedScore || p.avgScore || 0, p.price, magicNumber),
+        priceImpliedAvg: magicNumber > 0 ? Math.round((p.price / magicNumber) * 10) / 10 : 0,
+      }));
+      res.json(enriched);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -271,6 +279,7 @@ export async function registerRoutes(
           urgency: trade.urgency,
           projectedImpact: trade.projectedImpact,
           cashImpact: trade.cashImpact,
+          seasonTradeGain: trade.seasonTradeGain,
           status: "pending",
         });
       }
@@ -344,7 +353,7 @@ export async function registerRoutes(
       const schema = z.object({
         teamName: z.string().min(1).max(50).optional(),
         salaryCap: z.number().min(1000000).max(20000000).optional(),
-        currentRound: z.number().min(1).max(24).optional(),
+        currentRound: z.number().min(0).max(24).optional(),
         tradesRemaining: z.number().min(0).max(100).optional(),
         totalTradesUsed: z.number().min(0).optional(),
       });
@@ -792,7 +801,7 @@ export async function registerRoutes(
 
   app.get("/api/live-scores", async (req, res) => {
     try {
-      const round = req.query.round ? parseInt(req.query.round as string) : undefined;
+      const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
       const data = await getLiveRoundData(round);
       res.json(data);
     } catch (error: any) {
@@ -802,7 +811,7 @@ export async function registerRoutes(
 
   app.get("/api/live-scores/matches", async (req, res) => {
     try {
-      const round = req.query.round ? parseInt(req.query.round as string) : undefined;
+      const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
       const matches = await fetchMatchStatuses(round);
       res.json(matches);
     } catch (error: any) {

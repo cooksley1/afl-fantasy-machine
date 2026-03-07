@@ -77,7 +77,7 @@ export async function fetchMatchStatuses(round?: number): Promise<MatchStatus[]>
   try {
     const year = new Date().getFullYear();
     let url = `https://api.squiggle.com.au/?q=games;year=${year}`;
-    if (round) url += `;round=${round}`;
+    if (round != null) url += `;round=${round}`;
     
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -118,7 +118,7 @@ export async function fetchMatchStatuses(round?: number): Promise<MatchStatus[]>
 
 export async function getLiveRoundData(round?: number): Promise<LiveRoundData> {
   const settings = await db.select().from(leagueSettings).limit(1);
-  const currentRound = round || settings[0]?.currentRound || 1;
+  const currentRound = round != null ? round : (settings[0]?.currentRound ?? 0);
 
   const matches = await fetchMatchStatuses(currentRound);
 

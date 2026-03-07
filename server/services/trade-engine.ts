@@ -1,9 +1,11 @@
 import type { Player, PlayerWithTeamInfo } from "@shared/schema";
-import { AFL_FANTASY_CLASSIC_2026, getFixtureForTeam } from "@shared/game-rules";
+import { AFL_FANTASY_CLASSIC_2026, getFixtureForTeam, getSeasonPhase, getRemainingRounds } from "@shared/game-rules";
 import {
   getCachedWeights,
   calcTradeEV,
   calcTradeConfidence,
+  calcSeasonTradeGain,
+  calcValueGap,
   type WeightConfig,
 } from "./projection-engine";
 
@@ -18,6 +20,7 @@ export interface TradeCandidate {
   priceDiff: number;
   cashImpact: number;
   projectedImpact: number;
+  seasonTradeGain: number;
   reasons: string[];
 }
 
@@ -708,6 +711,43 @@ export function scoreTradeIn(
     return null;
   }
 
+  const phase = getSeasonPhase(ctx.currentRound);
+  const remaining = getRemainingRounds(ctx.currentRound);
+
+  if (phase.phase === "launch") {
+    if (pIn.isDebutant && pIn.isNamedTeam && pIn.price <= 300000) evBonus += 10;
+    if ((pIn.cashGenPotential === "elite" || pIn.cashGenPotential === "high")) evBonus += 8;
+  } else if (phase.phase === "cash_gen") {
+    if (pOut.breakEven != null && pOut.avgScore != null && pOut.breakEven > pOut.avgScore) {
+      evBonus += 15;
+      inReasons.push("Cash Gen phase: sell peaked cows, buy premiums");
+    }
+  } else if (phase.phase === "bye_warfare") {
+    if (pOut.byeRound && pIn.byeRound !== pOut.byeRound) {
+      const outByeCount = ctx.teamByeCounts[pOut.byeRound] || 0;
+      if (outByeCount > 6) {
+        evBonus += 12;
+        inReasons.push(`Bye phase: reduces R${pOut.byeRound} exposure (${outByeCount} players)`);
+      }
+    }
+  } else if (phase.phase === "run_home") {
+    if (scoreDiff < 3 && scoreDiff > -3 && category !== "urgent") {
+      evBonus -= 20;
+      inReasons.push("Run Home: sideways trade penalised — need clear scoring upgrades");
+    }
+    if (pIn.captainProbability && pIn.captainProbability > 0.3) {
+      evBonus += 10;
+      inReasons.push("Run Home: captain target value");
+    }
+  }
+
+  const seasonTradeGain = calcSeasonTradeGain(projIn, projOut, remaining);
+  if (seasonTradeGain > 0) {
+    inReasons.push(`Season impact: +${seasonTradeGain.toFixed(0)} projected pts over ${remaining} remaining rounds`);
+  } else if (seasonTradeGain < -50 && category !== "urgent" && category !== "cash_gen") {
+    evBonus -= 10;
+  }
+
   const adjustedTradeEv = tradeEv + evBonus;
 
   const formDiff = (pIn.last3Avg || 0) - (pOut.last3Avg || 0);
@@ -729,10 +769,12 @@ export function scoreTradeIn(
   const reasons = buildDetailedReason(pOut, pIn, outReasons, inReasons, ctx);
   if (reasons.length === 0) return null;
 
+  reasons.push(`Season Phase: ${phase.name} (${phase.rounds}) — ${phase.tradeStrategy}`);
+
   return {
     playerOut: pOut, playerIn: pIn, category, urgency,
     tradeEv: adjustedTradeEv, confidence, scoreDiff, priceDiff, cashImpact,
-    projectedImpact: scoreDiff, reasons,
+    projectedImpact: scoreDiff, seasonTradeGain, reasons,
   };
 }
 

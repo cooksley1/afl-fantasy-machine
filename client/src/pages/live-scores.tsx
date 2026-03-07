@@ -425,7 +425,7 @@ export default function LiveScoresPage() {
             )}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Round {data?.round || "—"}
+            Round {data?.round != null ? data.round : "—"}
             {data?.lastUpdated && ` • Updated ${new Date(data.lastUpdated).toLocaleTimeString()}`}
           </p>
         </div>
@@ -511,7 +511,7 @@ export default function LiveScoresPage() {
               <PlayerScoreRow
                 key={p.playerId}
                 player={p}
-                round={data?.round || 1}
+                round={data?.round != null ? data.round : 1}
                 expanded={expandedPlayer === p.playerId}
                 onToggle={() => setExpandedPlayer(expandedPlayer === p.playerId ? null : p.playerId)}
               />
