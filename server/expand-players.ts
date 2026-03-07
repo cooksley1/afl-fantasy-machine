@@ -454,7 +454,7 @@ export async function populateConsistencyData(): Promise<number> {
     if (Math.random() < 0.1) baseStdDev *= 1.6;
 
     const scores: number[] = [];
-    const consistencyRating = avg >= 80 ? "reliable" : avg >= 60 ? "average" : "volatile";
+    const consistencyRating = avg >= 80 ? 0.85 : avg >= 60 ? 0.65 : 0.4;
     const actualStdDev = baseStdDev;
 
     const { isCandidate, probability } = isDebutantCandidate(price, w);

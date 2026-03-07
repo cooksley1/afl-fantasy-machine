@@ -423,6 +423,7 @@ async function fetchFootywireMatchIds(year: number): Promise<number[]> {
 
 interface FootywirePlayerStat {
   name: string;
+  team: string;
   kicks: number;
   handballs: number;
   marks: number;
@@ -444,11 +445,15 @@ function parseFootywireMatchPage(html: string): { round: number; team1: string; 
   const team2Name = titleMatch[2].trim();
   const round = parseInt(titleMatch[3]);
 
+  const t1idx = html.indexOf('<a name=t1>');
+  const t2idx = html.indexOf('<a name=t2>');
+
   const allPlayers: FootywirePlayerStat[] = [];
   const rowRegex = /title="([^"]+)">[^<]+<\/a>\s*<\/td>([\s\S]*?)(?=<\/tr>)/g;
   let m;
   while ((m = rowRegex.exec(html))) {
     const name = m[1];
+    const team = (t2idx > 0 && m.index > t2idx) ? team2Name : team1Name;
     const cellsHtml = m[2];
     const vals: number[] = [];
     const cellRegex = /<td[^>]*class="statdata"[^>]*>([^<]*)<\/td>/g;
@@ -459,6 +464,7 @@ function parseFootywireMatchPage(html: string): { round: number; team1: string; 
     if (vals.length >= 15) {
       allPlayers.push({
         name,
+        team,
         kicks: vals[0],
         handballs: vals[1],
         marks: vals[3],
@@ -515,6 +521,14 @@ async function upsertPlayerStats(
       ...data,
     });
   }
+}
+
+function inferPosition(stats: FootywirePlayerStat): string {
+  if (stats.hitouts >= 10) return "RUC";
+  if (stats.goals >= 3) return "FWD";
+  if (stats.rebound50s >= 4 || (stats.kicks > stats.handballs * 2 && stats.inside50s < 3)) return "DEF";
+  if (stats.inside50s >= 5 || stats.goals >= 2) return "FWD";
+  return "MID";
 }
 
 export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
@@ -574,9 +588,35 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
             }
           }
 
-          if (!dbPlayer) continue;
+          if (!dbPlayer) {
+            const inferredPosition = inferPosition(fp);
+            try {
+              const [newPlayer] = await db.insert(players).values({
+                name: fp.name,
+                team: fp.team,
+                position: inferredPosition,
+                price: 200000,
+                avgScore: fp.fantasyScore,
+                last3Avg: fp.fantasyScore,
+                last5Avg: fp.fantasyScore,
+                gamesPlayed: 0,
+                isDebutant: true,
+                isNamedTeam: true,
+              }).returning();
+              dbPlayer = newPlayer;
+              nameMap.set(fp.name.toLowerCase(), newPlayer);
+              const lnParts = fp.name.split(" ");
+              const ln = lnParts[lnParts.length - 1].toLowerCase();
+              if (!lastNameMap.has(ln)) lastNameMap.set(ln, []);
+              lastNameMap.get(ln)!.push(newPlayer);
+              console.log(`[LiveScores] Auto-added missing player: ${fp.name} (${fp.team}, ${inferredPosition})`);
+            } catch (insertErr: any) {
+              console.error(`[LiveScores] Failed to auto-add player ${fp.name}:`, insertErr.message);
+              continue;
+            }
+          }
 
-          const opponent = fp.name === parsed.team1 ? parsed.team2 : parsed.team1;
+          const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
           await upsertPlayerStats(dbPlayer, round, fp, opponent);
           updated++;
         }
@@ -588,7 +628,7 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
     if (fetched === 0) {
       errors.push(`No completed matches found on Footywire for round ${round}. Stats may not be available yet.`);
     } else {
-      console.log(`[LiveScores] Footywire: Fetched ${fetched} player stats, matched ${updated} to DB for round ${round}`);
+      console.log(`[LiveScores] Footywire: Fetched ${fetched} player stats, updated ${updated} in DB for round ${round}`);
     }
   } catch (e: any) {
     errors.push(`Fetch error: ${e.message}`);
