@@ -1369,6 +1369,16 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/sync-fantasysports", isAdmin, async (_req, res) => {
+    try {
+      const { fetchFantasySportsBEs } = await import("./services/fantasysports-scraper");
+      const result = await fetchFantasySportsBEs();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============ TAG PREDICTION TRACKING ============
 
   app.post("/api/admin/tag-predictions/save", isAdmin, async (_req, res) => {

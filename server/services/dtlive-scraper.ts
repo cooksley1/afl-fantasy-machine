@@ -31,7 +31,7 @@ interface DTLivePlayer {
   lastScore: number;
   ppm: number;
   economy: number;
-  breakeven: number;
+  breakeven: number | null;
   roundScores: (number | null)[];
 }
 
@@ -70,7 +70,9 @@ function parsePlayerRow(html: string): DTLivePlayer | null {
     roundScores.push(scoreMatch ? parseInt(scoreMatch[1]) : null);
   }
 
-  const breakeven = calculateBreakeven(currentPrice, average, gamesPlayed, startingPrice);
+  const beCell = cells[13] || "";
+  const beMatch = beCell.match(/>([-\d]+)</);
+  const breakeven = beMatch ? parseInt(beMatch[1]) : null;
 
   return {
     name: shortName,
@@ -90,19 +92,6 @@ function parsePlayerRow(html: string): DTLivePlayer | null {
   };
 }
 
-function calculateBreakeven(currentPrice: number, average: number, gamesPlayed: number, startingPrice: number): number {
-  if (gamesPlayed === 0) {
-    return Math.round(currentPrice / 5500);
-  }
-
-  const totalPointsNeeded = currentPrice / 5500;
-  const remainingGames = Math.max(24 - gamesPlayed, 1);
-  const pointsBanked = average * gamesPlayed;
-  const totalTargetPoints = totalPointsNeeded * (gamesPlayed + remainingGames) / remainingGames;
-  const pointsNeeded = (totalPointsNeeded * 24 - pointsBanked) / remainingGames;
-
-  return Math.round(pointsNeeded);
-}
 
 function expandShortName(shortName: string): string[] {
   const parts = shortName.split(" ");
@@ -189,7 +178,7 @@ export async function fetchDTLiveData(): Promise<{
     if (dtp.startingPrice > 0 && !updates.startingPrice) updates.startingPrice = dtp.startingPrice;
     if (dtp.ownership >= 0) updates.ownedByPercent = dtp.ownership;
     if (dtp.priceChange !== undefined) updates.priceChange = dtp.priceChange;
-    if (dtp.breakeven > 0) updates.breakEven = dtp.breakeven;
+    if (dtp.breakeven !== null) updates.breakEven = dtp.breakeven;
 
     if (Object.keys(updates).length > 0) {
       await db.update(players).set(updates).where(eq(players.id, playerId));

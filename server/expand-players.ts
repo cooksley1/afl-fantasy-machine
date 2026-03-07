@@ -153,10 +153,20 @@ function deriveFormTrend(l5Avg: number, regAvg: number): string {
   return "stable";
 }
 
-function deriveBreakEven(salary: number, avgPoints: number): number {
-  const salaryPerPoint = salary / Math.max(avgPoints, 1);
-  const leagueAvgSPP = 5500;
-  return Math.round(salary / leagueAvgSPP);
+function deriveBreakEven(salary: number, avgPoints: number, gamesPlayed: number = 0, startingPrice?: number): number {
+  const MAGIC_NUMBER = 10490;
+  const TOTAL_ROUNDS = 24;
+  const DIVISOR = 14;
+  const effectiveStartPrice = startingPrice || salary;
+  const initialBE = effectiveStartPrice / MAGIC_NUMBER;
+
+  if (gamesPlayed <= 0 || avgPoints <= 0) {
+    return Math.round(initialBE);
+  }
+
+  const remaining = TOTAL_ROUNDS - gamesPlayed;
+  const factor = remaining / DIVISOR;
+  return Math.round(initialBE + factor * (initialBE - avgPoints));
 }
 
 function deriveLast3Avg(avgPoints: number, l5Avg: number): number {
@@ -188,9 +198,7 @@ export async function repairPlayerData(): Promise<number> {
     }
 
     if (p.breakEven === null && p.price) {
-      const avg = p.avgScore || 0;
-      const leagueAvgSPP = 5500;
-      updates.breakEven = avg > 0 ? Math.round(p.price / leagueAvgSPP) : 0;
+      updates.breakEven = deriveBreakEven(p.price, p.avgScore || 0, p.gamesPlayed || 0, p.startingPrice || p.price);
     }
 
     if (Object.keys(updates).length > 0) {
@@ -219,7 +227,7 @@ export async function expandPlayerDatabase(): Promise<number> {
     if (existing.price !== real.salary || existing.avgScore !== real.avgPoints || existing.startingPrice !== real.salary) {
       const l3Avg = deriveLast3Avg(real.avgPoints, real.l5Avg);
       const formTrend = deriveFormTrend(real.l5Avg, real.regAvg);
-      const breakEven = deriveBreakEven(real.salary, real.avgPoints);
+      const breakEven = deriveBreakEven(real.salary, real.avgPoints, real.games, real.salary);
       const byeRound = BYE_ROUNDS[real.team] || 12;
       await db.update(players)
         .set({
@@ -262,7 +270,7 @@ export async function expandPlayerDatabase(): Promise<number> {
   for (const rp of newPlayers) {
     const l3Avg = deriveLast3Avg(rp.avgPoints, rp.l5Avg);
     const formTrend = deriveFormTrend(rp.l5Avg, rp.regAvg);
-    const breakEven = deriveBreakEven(rp.salary, rp.avgPoints);
+    const breakEven = deriveBreakEven(rp.salary, rp.avgPoints, rp.games, rp.salary);
     const byeRound = BYE_ROUNDS[rp.team] || 12;
     const venue = TEAM_VENUES[rp.team] || "TBC";
 
@@ -596,8 +604,7 @@ export async function recalculatePlayerAverages(): Promise<number> {
     const last5Scores = scores.slice(-5);
     const last5Avg = Math.round((last5Scores.reduce((a, b) => a + b, 0) / last5Scores.length) * 10) / 10;
 
-    const leagueAvgSPP = 5500;
-    const breakEven = avgScore > 0 ? Math.round(p.price / leagueAvgSPP) : 0;
+    const breakEven = deriveBreakEven(p.price, avgScore, gamesPlayed, p.startingPrice || p.price);
 
     const formTrend = deriveFormTrend(last5Avg, avgScore);
 
