@@ -172,11 +172,11 @@ export default function Dashboard() {
   const maxTradesThisRound = currentRound < (gameRules?.trades?.startFromRound || 2) ? 0 : isByeRound ? (gameRules?.trades?.perByeRound || 3) : (gameRules?.trades?.perRound || 2);
 
   const coldPlayers = onFieldPlayers
-    .filter((p) => p.formTrend === "down" || (p.last3Avg || 0) < (p.avgScore || 0) * 0.85)
+    .filter((p) => (p.gamesPlayed ?? 0) >= 3 && (p.formTrend === "down" || (p.last3Avg || 0) < (p.avgScore || 0) * 0.85))
     .sort((a, b) => ((a.last3Avg || 0) - (a.avgScore || 0)) - ((b.last3Avg || 0) - (b.avgScore || 0)));
 
   const hotBenchPlayers = benchPlayers
-    .filter((p) => p.formTrend === "up" || (p.avgScore || 0) > 60)
+    .filter((p) => (p.gamesPlayed ?? 0) >= 2 && (p.formTrend === "up" || (p.avgScore || 0) > 60))
     .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
 
   const byeAffectedPlayers = onFieldPlayers.filter(

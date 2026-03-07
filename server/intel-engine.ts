@@ -9,8 +9,10 @@ const openai = new OpenAI({
 
 function buildPlayerSummary(players: Player[]): string {
   return players.map(p => {
+    const gp = p.gamesPlayed ?? 0;
     const parts = [
       `${p.name} (${p.team}, ${p.position}${p.dualPosition ? '/' + p.dualPosition : ''})`,
+      `GamesPlayed2026: ${gp}${gp === 0 ? ' (ALL STATS ARE 2025 BASELINE — NO 2026 DATA)' : gp <= 2 ? ` (VERY SMALL SAMPLE — only ${gp} game${gp > 1 ? 's' : ''} played)` : ''}`,
       `Avg: ${p.avgScore?.toFixed(1)}, L3: ${p.last3Avg?.toFixed(1)}, L5: ${p.last5Avg?.toFixed(1)}`,
       `Price: $${(p.price/1000).toFixed(0)}K (${p.priceChange >= 0 ? '+' : ''}$${(p.priceChange/1000).toFixed(0)}K)`,
       `BE: ${p.breakEven ?? 'N/A'}, Proj: ${p.projectedScore?.toFixed(0) ?? 'N/A'}, Floor: ${p.projectedFloor?.toFixed(0) ?? 'N/A'}, Ceil: ${p.ceilingScore ?? 'N/A'}`,
@@ -721,6 +723,11 @@ RULES:
 - Compare to same-position players
 - If on my team, advise whether to keep or trade
 - If not on my team, advise whether to buy
+- CRITICAL: If GamesPlayed2026 is 0, ALL stats are from 2025 baseline data — you MUST clearly state this in your analysis. Do NOT say "in the last 3 games" or "recent form" — say "based on 2025 season data" instead.
+- CRITICAL: If GamesPlayed2026 is 1 or 2, note the very small sample size. Do NOT make confident claims about form trends with only 1-2 games of data.
+- NEVER suggest trading IN a player who is listed in MY TEAM above — they are already on the team
+- NEVER include Trade Out suggestions for players other than the one being analysed in this report
+- Trade targets should be relevant alternatives to THIS player specifically
 - Include at least 3 comparison players and 2 trade targets
 - Include at least 5 key stats with trends`;
 
@@ -740,6 +747,20 @@ RULES:
     if (!content) throw new Error("No response from AI");
 
     const parsed = JSON.parse(content);
+
+    const teamNames = new Set(myTeam.map(p => p.name.toLowerCase()));
+    const rawTradeTargets = Array.isArray(parsed.tradeTargets) ? parsed.tradeTargets : [];
+    const filteredTradeTargets = rawTradeTargets.filter((t: any) => {
+      if (t.direction === "in" && teamNames.has((t.name || "").toLowerCase())) return false;
+      if (t.direction === "out" && (t.name || "").toLowerCase() !== player.name.toLowerCase()) return false;
+      return true;
+    });
+
+    const rawComparisons = Array.isArray(parsed.comparisonPlayers) ? parsed.comparisonPlayers : [];
+    const filteredComparisons = rawComparisons.filter((c: any) =>
+      (c.name || "").toLowerCase() !== player.name.toLowerCase()
+    );
+
     return {
       overview: parsed.overview || "",
       verdict: parsed.verdict || "monitor",
@@ -749,8 +770,8 @@ RULES:
       fixtureOutlook: parsed.fixtureOutlook || "",
       captaincyCase: parsed.captaincyCase || "",
       dppValue: parsed.dppValue || "",
-      comparisonPlayers: Array.isArray(parsed.comparisonPlayers) ? parsed.comparisonPlayers : [],
-      tradeTargets: Array.isArray(parsed.tradeTargets) ? parsed.tradeTargets : [],
+      comparisonPlayers: filteredComparisons,
+      tradeTargets: filteredTradeTargets,
       riskFactors: Array.isArray(parsed.riskFactors) ? parsed.riskFactors : [],
       keyStats: Array.isArray(parsed.keyStats) ? parsed.keyStats : [],
     };

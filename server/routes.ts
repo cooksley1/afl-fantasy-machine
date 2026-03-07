@@ -2083,18 +2083,20 @@ export async function registerRoutes(
         }
       } catch {}
 
-      const coldOnField = onField
-        .filter(p => p.formTrend === "down" && (p.last3Avg || 0) < (p.avgScore || 0) * 0.8)
-        .sort((a, b) => ((a.last3Avg || 0) / (a.avgScore || 1)) - ((b.last3Avg || 0) / (b.avgScore || 1)));
+      if (currentRound >= 3) {
+        const coldOnField = onField
+          .filter(p => (p.gamesPlayed ?? 0) >= 3 && p.formTrend === "down" && (p.last3Avg || 0) < (p.avgScore || 0) * 0.8)
+          .sort((a, b) => ((a.last3Avg || 0) / (a.avgScore || 1)) - ((b.last3Avg || 0) / (b.avgScore || 1)));
 
-      if (coldOnField.length > 0 && steps.length < 6) {
-        const worst = coldOnField[0];
-        steps.push({
-          priority: "suggested",
-          action: `Monitor ${worst.name} — form is dropping`,
-          reason: `${worst.name}'s last 3 avg (${worst.last3Avg?.toFixed(1)}) is well below their season avg (${worst.avgScore?.toFixed(1)}). Consider trading next round if form doesn't improve.`,
-          link: `/player/${worst.id}`,
-        });
+        if (coldOnField.length > 0 && steps.length < 6) {
+          const worst = coldOnField[0];
+          steps.push({
+            priority: "suggested",
+            action: `Monitor ${worst.name} — form is dropping`,
+            reason: `${worst.name}'s last 3 avg (${worst.last3Avg?.toFixed(1)}) is well below their season avg (${worst.avgScore?.toFixed(1)}). Consider trading next round if form doesn't improve.`,
+            link: `/player/${worst.id}`,
+          });
+        }
       }
 
       const summary = steps.length === 0

@@ -398,9 +398,9 @@ export default function PlayerReport() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm" data-testid="text-overview">{report.overview}</p>
+          <p className="text-sm break-words" data-testid="text-overview">{report.overview}</p>
           <Separator />
-          <p className="text-sm" data-testid="text-verdict-reasoning">{report.verdictReasoning}</p>
+          <p className="text-sm break-words" data-testid="text-verdict-reasoning">{report.verdictReasoning}</p>
         </CardContent>
       </Card>
 
@@ -437,7 +437,7 @@ export default function PlayerReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm" data-testid="text-form">{report.formBreakdown}</p>
+            <p className="text-sm break-words" data-testid="text-form">{report.formBreakdown}</p>
           </CardContent>
         </Card>
 
@@ -449,7 +449,7 @@ export default function PlayerReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm" data-testid="text-price">{report.priceAnalysis}</p>
+            <p className="text-sm break-words" data-testid="text-price">{report.priceAnalysis}</p>
           </CardContent>
         </Card>
 
@@ -461,7 +461,7 @@ export default function PlayerReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm" data-testid="text-fixture">{report.fixtureOutlook}</p>
+            <p className="text-sm break-words" data-testid="text-fixture">{report.fixtureOutlook}</p>
           </CardContent>
         </Card>
 
@@ -473,7 +473,7 @@ export default function PlayerReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm" data-testid="text-captaincy">{report.captaincyCase}</p>
+            <p className="text-sm break-words" data-testid="text-captaincy">{report.captaincyCase}</p>
           </CardContent>
         </Card>
       </div>
@@ -487,7 +487,7 @@ export default function PlayerReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm" data-testid="text-dpp">{report.dppValue}</p>
+            <p className="text-sm break-words" data-testid="text-dpp">{report.dppValue}</p>
           </CardContent>
         </Card>
       )}
@@ -502,9 +502,9 @@ export default function PlayerReport() {
           </CardHeader>
           <CardContent className="space-y-3">
             {report.comparisonPlayers.map((comp, i) => (
-              <div key={i} className="flex gap-3 items-start" data-testid={`comparison-${i}`}>
-                <Badge variant="outline" className="shrink-0 mt-0.5">{comp.name}</Badge>
-                <p className="text-sm text-muted-foreground">{comp.reason}</p>
+              <div key={i} className="space-y-1" data-testid={`comparison-${i}`}>
+                <Badge variant="outline">{comp.name}</Badge>
+                <p className="text-sm text-muted-foreground break-words">{comp.reason}</p>
               </div>
             ))}
           </CardContent>
@@ -521,11 +521,11 @@ export default function PlayerReport() {
           </CardHeader>
           <CardContent className="space-y-3">
             {report.tradeTargets.map((target, i) => (
-              <div key={i} className="flex gap-3 items-start" data-testid={`trade-target-${i}`}>
-                <Badge variant={target.direction === "in" ? "default" : "destructive"} className="shrink-0 mt-0.5">
+              <div key={i} className="space-y-1" data-testid={`trade-target-${i}`}>
+                <Badge variant={target.direction === "in" ? "default" : "destructive"}>
                   {target.direction === "in" ? "Trade In" : "Trade Out"} {target.name}
                 </Badge>
-                <p className="text-sm text-muted-foreground">{target.reason}</p>
+                <p className="text-sm text-muted-foreground break-words">{target.reason}</p>
               </div>
             ))}
           </CardContent>
