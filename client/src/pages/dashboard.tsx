@@ -100,8 +100,7 @@ export default function Dashboard() {
   const { data: riskData } = useQuery<{
     alerts: { playerId: number; playerName: string; team: string; position: string; fieldPosition: string; reason: string; severity: string; avgScore: number; isCaptain: boolean; isViceCaptain: boolean }[];
     swapSuggestions: { outPlayerId: number; outPlayerName: string; outPosition: string; outAvg: number; inPlayerId: number; inPlayerName: string; inPosition: string; inAvg: number; scoreDiff: number; reason: string }[];
-    tagWarnings: { playerId: number; playerName: string; team: string; position: string; tagRisk: number; avgScore: number; estimatedImpact: number; adjustedProjection: number; isCaptain: boolean; isViceCaptain: boolean; advice: string }[];
-    taggerWarnings: { playerId: number; playerName: string; team: string; position: string; avgScore: number; advice: string }[];
+    tagWarnings: { playerId: number; playerName: string; team: string; position: string; avgScore: number; nextOpponent: string; opponentUsesTaggers: boolean; opponentTagFrequency: number; opponentTagger: string | null; timesTaggedHistorically: number; avgScoreWhenTagged: number | null; avgScoreImpact: number | null; isCaptain: boolean; isViceCaptain: boolean; riskLevel: "high" | "moderate" | "low"; advice: string; evidence: string[] }[];
   }>({
     queryKey: ["/api/my-team/risks"],
   });
@@ -262,7 +261,7 @@ export default function Dashboard() {
       </div>
 
       {(lateChangeAlerts.length > 0 || coldPlayers.length > 0 || byeAffectedPlayers.length > 0 ||
-        (riskData && (riskData.tagWarnings.length > 0 || riskData.taggerWarnings.length > 0))) && (
+        (riskData && riskData.tagWarnings.length > 0)) && (
         <Card className="border-destructive/30" data-testid="card-risk-assessment">
           <CardHeader className="pb-2 px-4 pt-4">
             <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 text-destructive">
@@ -343,53 +342,52 @@ export default function Dashboard() {
                   <span className="text-sm font-medium">Tag Threat Warnings</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground mb-2">
-                  These on-field players are likely tag targets — expect reduced scoring
+                  Based on opponent tagging history and confirmed tag matchups
                 </p>
                 {riskData.tagWarnings.map((tw) => (
-                  <div key={tw.playerId} className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/30 rounded px-1" onClick={() => navigate(`/player/${tw.playerId}`)} data-testid={`tag-warning-${tw.playerId}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${tw.tagRisk >= 0.6 ? 'bg-red-500' : 'bg-orange-400'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm truncate">
-                          {tw.playerName}
-                          {tw.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
-                          {tw.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">{tw.advice}</p>
+                  <div key={tw.playerId} className="cursor-pointer hover:bg-muted/30 rounded px-1 py-2 border-b border-orange-500/10 last:border-0" onClick={() => navigate(`/player/${tw.playerId}`)} data-testid={`tag-warning-${tw.playerId}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${tw.riskLevel === 'high' ? 'bg-red-500' : tw.riskLevel === 'moderate' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm truncate">
+                            {tw.playerName}
+                            {tw.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
+                            {tw.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
+                            <span className="text-[10px] ml-1 text-muted-foreground">vs {tw.nextOpponent}</span>
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{tw.advice}</p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        {tw.avgScoreWhenTagged !== null && (
+                          <p className="text-xs font-mono">
+                            <span className="text-muted-foreground">{tw.avgScore?.toFixed(0)}</span>
+                            <span className="text-red-500 ml-1">→ {tw.avgScoreWhenTagged.toFixed(0)}</span>
+                          </p>
+                        )}
+                        <Badge variant={tw.riskLevel === "high" ? "destructive" : "outline"} className="text-[8px]">
+                          {tw.riskLevel}
+                        </Badge>
                       </div>
                     </div>
-                    <div className="text-right shrink-0 ml-2">
-                      <p className="text-xs font-mono">
-                        <span className="text-muted-foreground">{tw.avgScore?.toFixed(0)}</span>
-                        <span className="text-red-500 ml-1">-{tw.estimatedImpact.toFixed(0)}</span>
-                      </p>
-                      <Badge variant={tw.tagRisk >= 0.6 ? "destructive" : "outline"} className="text-[8px]">
-                        {Math.round(tw.tagRisk * 100)}% risk
-                      </Badge>
+                    <div className="mt-1 flex flex-wrap gap-1 ml-4">
+                      {tw.opponentTagger && (
+                        <span className="text-[9px] bg-orange-500/10 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded">
+                          Tagger: {tw.opponentTagger}
+                        </span>
+                      )}
+                      {tw.timesTaggedHistorically > 0 && (
+                        <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded">
+                          Tagged {tw.timesTaggedHistorically}x previously
+                        </span>
+                      )}
+                      <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded">
+                        {tw.nextOpponent} tag {Math.round(tw.opponentTagFrequency * 100)}% of games
+                      </span>
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {riskData && riskData.taggerWarnings.length > 0 && (
-              <div className="p-2.5 rounded-md bg-purple-500/5 border border-purple-500/20" data-testid="section-tagger-warnings">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                  <span className="text-sm font-medium">Tagger Role Warning</span>
-                </div>
-                {riskData.taggerWarnings.map((tw) => (
-                  <div key={tw.playerId} className="flex items-center justify-between py-1.5" data-testid={`tagger-warning-${tw.playerId}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm truncate">{tw.playerName}</span>
-                      <Badge variant="secondary" className="text-[9px]">{tw.position}</Badge>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">Avg {tw.avgScore?.toFixed(0)}</span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Expected to play a tagging role — scoring output likely reduced. Consider benching if you have better options.
-                </p>
               </div>
             )}
 

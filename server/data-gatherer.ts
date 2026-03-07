@@ -488,6 +488,19 @@ Return JSON:
       }
     }
 
+    try {
+      const { extractTagMentionsFromText, recordTagMatchup } = await import("./services/tag-intelligence");
+      for (const item of unprocessed) {
+        const fullText = `${item.title} ${item.rawContent}`;
+        const tagMention = extractTagMentionsFromText(fullText);
+        if (tagMention && tagMention.possibleTarget) {
+          console.log(`[TagIntel] Detected tag mention: ${tagMention.possibleTagger} → ${tagMention.possibleTarget} from "${item.title}"`);
+        }
+      }
+    } catch (tagErr) {
+      console.log(`[TagIntel] Tag extraction error: ${(tagErr as Error).message}`);
+    }
+
     for (const item of unprocessed) {
       await db.update(intelSources)
         .set({ isProcessed: true, processedAt: new Date() })

@@ -186,6 +186,35 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const teamTagProfiles = pgTable("team_tag_profiles", {
+  id: serial("id").primaryKey(),
+  team: text("team").notNull(),
+  usesTaggers: boolean("uses_taggers").notNull().default(false),
+  tagFrequency: real("tag_frequency").notNull().default(0),
+  primaryTagger: text("primary_tagger").default(null),
+  primaryTaggerPlayerId: integer("primary_tagger_player_id").default(null),
+  secondaryTagger: text("secondary_tagger").default(null),
+  notes: text("notes").default(null),
+  season: integer("season").notNull().default(2026),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const tagMatchupHistory = pgTable("tag_matchup_history", {
+  id: serial("id").primaryKey(),
+  round: integer("round").notNull(),
+  season: integer("season").notNull().default(2026),
+  taggerTeam: text("tagger_team").notNull(),
+  taggerName: text("tagger_name").notNull(),
+  targetName: text("target_name").notNull(),
+  targetTeam: text("target_team").notNull(),
+  targetPlayerId: integer("target_player_id").default(null),
+  targetNormalAvg: real("target_normal_avg").default(null),
+  targetTaggedScore: real("target_tagged_score").default(null),
+  scoreImpact: real("score_impact").default(null),
+  source: text("source").default(null),
+  confirmed: boolean("confirmed").notNull().default(false),
+});
+
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({ id: true });
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
@@ -246,8 +275,14 @@ export const modelWeights = pgTable("model_weights", {
 });
 
 export const insertModelWeightSchema = createInsertSchema(modelWeights).omit({ id: true });
+export const insertTeamTagProfileSchema = createInsertSchema(teamTagProfiles).omit({ id: true, updatedAt: true });
+export const insertTagMatchupHistorySchema = createInsertSchema(tagMatchupHistory).omit({ id: true });
 export type ModelWeight = typeof modelWeights.$inferSelect;
 export type InsertModelWeight = z.infer<typeof insertModelWeightSchema>;
+export type TeamTagProfile = typeof teamTagProfiles.$inferSelect;
+export type InsertTeamTagProfile = z.infer<typeof insertTeamTagProfileSchema>;
+export type TagMatchupHistory = typeof tagMatchupHistory.$inferSelect;
+export type InsertTagMatchupHistory = z.infer<typeof insertTagMatchupHistorySchema>;
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

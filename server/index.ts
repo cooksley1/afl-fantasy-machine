@@ -76,6 +76,9 @@ app.use((req, res, next) => {
   await populateBaselineData();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
+  const { seedTagData } = await import("./services/tag-intelligence");
+  await seedTagData();
+
   await registerRoutes(httpServer, app);
 
   const { startScheduler } = await import("./scheduler");

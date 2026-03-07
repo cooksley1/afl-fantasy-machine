@@ -351,14 +351,6 @@ export default function PlayerReport() {
             {player.lateChange && (
               <Badge variant="destructive" data-testid="badge-late-change">Late Change</Badge>
             )}
-            {(player.tagRisk || 0) >= 0.3 && (
-              <Badge variant={(player.tagRisk || 0) >= 0.6 ? "destructive" : "secondary"} data-testid="badge-tag-risk">
-                Tag Risk {Math.round((player.tagRisk || 0) * 100)}%
-              </Badge>
-            )}
-            {player.isExpectedTagger && (
-              <Badge variant="secondary" data-testid="badge-tagger">Tagger Role</Badge>
-            )}
           </div>
         </div>
       </div>

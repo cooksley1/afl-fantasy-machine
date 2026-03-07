@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
 import { insertMyTeamPlayerSchema } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam } from "@shared/game-rules";
 import { z } from "zod";
@@ -908,10 +909,10 @@ export async function registerRoutes(
 
   app.get("/api/my-team/risks", async (_req, res) => {
     try {
-      const { calcTagScoreImpact } = await import("./services/projection-engine");
+      const { getTagWarningsForTeam } = await import("./services/tag-intelligence");
       const team = await storage.getMyTeam();
       if (team.length === 0) {
-        return res.json({ alerts: [], swapSuggestions: [], tagWarnings: [], taggerWarnings: [] });
+        return res.json({ alerts: [], swapSuggestions: [], tagWarnings: [] });
       }
 
       const onField = team.filter(p => p.isOnField);
@@ -921,8 +922,6 @@ export async function registerRoutes(
 
       const alerts: any[] = [];
       const swapSuggestions: any[] = [];
-      const tagWarnings: any[] = [];
-      const taggerWarnings: any[] = [];
 
       for (const p of onField) {
         const isUnavailable = !!p.injuryStatus || !!p.lateChange || !p.isNamedTeam;
@@ -974,39 +973,22 @@ export async function registerRoutes(
             });
           }
         }
-
-        if ((p.tagRisk || 0) >= 0.3) {
-          const impact = calcTagScoreImpact(p.avgScore || 0, p.tagRisk || 0);
-          tagWarnings.push({
-            playerId: p.id,
-            playerName: p.name,
-            team: p.team,
-            position: p.position,
-            tagRisk: p.tagRisk,
-            avgScore: p.avgScore,
-            estimatedImpact: impact,
-            adjustedProjection: Math.round(((p.avgScore || 0) - impact) * 10) / 10,
-            isCaptain: p.isCaptain,
-            isViceCaptain: p.isViceCaptain,
-            advice: (p.tagRisk || 0) >= 0.6
-              ? "High tag risk — consider captaincy alternatives"
-              : "Moderate tag risk — monitor pre-game reports",
-          });
-        }
-
-        if (p.isExpectedTagger) {
-          taggerWarnings.push({
-            playerId: p.id,
-            playerName: p.name,
-            team: p.team,
-            position: p.position,
-            avgScore: p.avgScore,
-            advice: "Expected tagger role — likely reduced scoring output. Consider bench if better options available.",
-          });
-        }
       }
 
-      res.json({ alerts, swapSuggestions, tagWarnings, taggerWarnings });
+      const tagWarnings = await getTagWarningsForTeam(onField);
+
+      res.json({ alerts, swapSuggestions, tagWarnings });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/tag-profiles", async (_req, res) => {
+    try {
+      const { teamTagProfiles, tagMatchupHistory } = await import("@shared/schema");
+      const profiles = await db.select().from(teamTagProfiles).orderBy(teamTagProfiles.team);
+      const history = await db.select().from(tagMatchupHistory).orderBy(tagMatchupHistory.season, tagMatchupHistory.round);
+      res.json({ profiles, history });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
