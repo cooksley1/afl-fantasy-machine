@@ -74,7 +74,7 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
           >
             {isOut ? "OUT" : "IN"}
           </Badge>
-          <p className="text-sm font-semibold truncate" data-testid={`text-trade-player-${direction}-${player.id}`}>{player.name}</p>
+          <p className="text-sm font-semibold" data-testid={`text-trade-player-${direction}-${player.id}`}>{player.name}</p>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>{player.position}</span>

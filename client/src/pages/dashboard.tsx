@@ -499,7 +499,7 @@ export default function Dashboard() {
                     onClick={() => navigate(`/player/${player.id}`)}
                   >
                     <div className="flex items-center justify-between gap-1 mb-1">
-                      <p className="text-sm font-medium truncate">{player.name}</p>
+                      <p className="text-xs sm:text-sm font-medium line-clamp-2">{player.name}</p>
                       <FormTrendIcon trend={player.formTrend} />
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">

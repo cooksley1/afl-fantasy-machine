@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,30 @@ interface ComparisonData {
   onlyInSaved: Array<{ id: number; name: string; position: string; avgScore: number; price: number }>;
   scoreDiff: number;
   valueDiff: number;
+}
+
+const AI_BUILD_PHASES = [
+  "Selecting premium scorers...",
+  "Adding cash cow rookies...",
+  "Balancing positions and bye rounds...",
+  "Finalising team build...",
+];
+
+function useAiBuildProgress(isActive: boolean) {
+  const [phaseIndex, setPhaseIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      setPhaseIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setPhaseIndex((prev) => (prev + 1) % AI_BUILD_PHASES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return AI_BUILD_PHASES[phaseIndex];
 }
 
 const sourceLabels: Record<string, { label: string; className: string }> = {
@@ -343,6 +367,8 @@ export default function TeamSandbox() {
     onError: (error: Error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
   });
 
+  const aiBuildProgress = useAiBuildProgress(aiBuilMutation.isPending);
+
   const activateMutation = useMutation({
     mutationFn: async (id: number) => {
       setActivatingId(id);
@@ -453,6 +479,16 @@ export default function TeamSandbox() {
               Let AI Build a New Team
             </Button>
           </div>
+          {aiBuilMutation.isPending && (
+            <div className="space-y-0.5">
+              <p className="text-xs text-primary font-medium" data-testid="text-ai-build-progress">
+                {aiBuildProgress}
+              </p>
+              <p className="text-[11px] text-muted-foreground" data-testid="text-ai-build-estimate">
+                This typically takes 20-40 seconds
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

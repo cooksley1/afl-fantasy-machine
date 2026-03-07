@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,30 @@ import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import teamScreenshotImg from "@assets/my_team_null_2026-03-03_21-58-17_1772535572033.png";
 
 const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
+
+const BUILD_PHASES = [
+  "Building your optimal squad...",
+  "Balancing premiums and cash cows...",
+  "Optimising bye coverage...",
+  "Generating season roadmap...",
+];
+
+function useBuildProgress(isActive: boolean) {
+  const [phaseIndex, setPhaseIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      setPhaseIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setPhaseIndex((prev) => (prev + 1) % BUILD_PHASES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return BUILD_PHASES[phaseIndex];
+}
 
 const settingsFormSchema = z.object({
   teamName: z.string().min(1, "Team name is required").max(50),
@@ -108,6 +132,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       toast({ title: "Error building team", description: error.message, variant: "destructive" });
     },
   });
+
+  const buildProgress = useBuildProgress(buildTeamMutation.isPending);
 
   function handleTeamSetupChoice(path: string) {
     completeOnboarding();
@@ -336,9 +362,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                     </div>
                   </div>
                   {buildTeamMutation.isPending && (
-                    <p className="text-xs text-primary font-medium text-center">
-                      Building your optimal squad and generating season plan...
-                    </p>
+                    <div className="space-y-1 text-center">
+                      <p className="text-xs text-primary font-medium" data-testid="text-build-progress">
+                        {buildProgress}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground" data-testid="text-build-estimate">
+                        This typically takes 20-40 seconds
+                      </p>
+                    </div>
                   )}
                 </CardContent>
               </Card>

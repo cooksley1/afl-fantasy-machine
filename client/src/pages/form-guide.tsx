@@ -341,7 +341,7 @@ function FormList({
                 </span>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold truncate">{player.name}</p>
+                <p className="text-sm font-semibold">{player.name}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs text-muted-foreground">
                     {player.team} | ${(player.price / 1000).toFixed(0)}K
@@ -422,7 +422,7 @@ function ConsistentList({ players }: { players: Player[] }) {
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate">{player.name}</p>
+                  <p className="text-sm font-semibold">{player.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {player.team} | ${(player.price / 1000).toFixed(0)}K | Avg: {player.avgScore?.toFixed(1)}
                   </p>
@@ -501,7 +501,7 @@ function DebutantList({ players }: { players: Player[] }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold truncate">{player.name}</p>
+                      <p className="text-sm font-semibold">{player.name}</p>
                       {player.debutRound && (
                         <Badge variant="outline" className="text-[10px] border-purple-500/50 text-purple-600 dark:text-purple-400">
                           Debut R{player.debutRound}
@@ -592,7 +592,7 @@ function BreakoutList({ players }: { players: Player[] }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold truncate">{player.name}</p>
+                      <p className="text-sm font-semibold">{player.name}</p>
                       <Badge
                         variant={isHot ? "destructive" : "secondary"}
                         className="text-[10px]"

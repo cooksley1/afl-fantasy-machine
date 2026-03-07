@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ChevronDown, ChevronRight, ArrowRightLeft, Crown, Shield, TrendingUp, AlertTriangle, Target, Sparkles, BarChart3, DollarSign, Users, Calendar, Map, Check, ChevronUp, BookOpen, ShieldCheck, ShieldAlert, Trophy, ArrowRight, Info, Zap } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, ArrowRightLeft, Crown, Shield, TrendingUp, AlertTriangle, Target, Sparkles, BarChart3, DollarSign, Users, Calendar, Map, Check, ChevronUp, BookOpen, ShieldCheck, ShieldAlert, Trophy, ArrowRight, Info, Zap, Star, Sprout, ArrowUpRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -111,6 +111,45 @@ const phaseBgColors: Record<string, string> = {
   bye_warfare: "border-l-amber-500",
   run_home: "border-l-purple-500",
 };
+
+interface StrategySection {
+  icon: typeof Star;
+  title: string;
+  text: string;
+  color: string;
+}
+
+function parseStrategyIntoSections(text: string): StrategySection[] {
+  const sections: StrategySection[] = [];
+  const sentences = text.split(/\.\s+/).map(s => s.replace(/\.$/, "").trim()).filter(Boolean);
+
+  let premiumText = "";
+  let cowText = "";
+  let midText = "";
+  let projectionText = "";
+
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase();
+    if (lower.includes("premium") || lower.includes("ceiling") || lower.includes("squad is built")) {
+      premiumText += (premiumText ? ". " : "") + sentence;
+    } else if (lower.includes("cash cow") || lower.includes("bench") || lower.includes("peak")) {
+      cowText += (cowText ? ". " : "") + sentence;
+    } else if (lower.includes("mid-pricer") || lower.includes("upgrade")) {
+      midText += (midText ? ". " : "") + sentence;
+    } else if (lower.includes("projected") || lower.includes("winner") || lower.includes("track") || lower.includes("pace") || lower.includes("striking")) {
+      projectionText += (projectionText ? ". " : "") + sentence;
+    } else {
+      premiumText += (premiumText ? ". " : "") + sentence;
+    }
+  }
+
+  if (premiumText) sections.push({ icon: Star, title: "Premium Core", text: premiumText + ".", color: "text-purple-500" });
+  if (cowText) sections.push({ icon: Sprout, title: "Cash Cows", text: cowText + ".", color: "text-emerald-500" });
+  if (midText) sections.push({ icon: ArrowUpRight, title: "Mid-Pricers", text: midText + ".", color: "text-blue-500" });
+  if (projectionText) sections.push({ icon: Trophy, title: "Projection & Benchmark", text: projectionText + ".", color: "text-amber-500" });
+
+  return sections.length > 0 ? sections : [{ icon: Target, title: "Strategy", text, color: "text-primary" }];
+}
 
 const roleColors: Record<string, string> = {
   Premium: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
@@ -250,7 +289,7 @@ function SquadRoster({ squad, title }: { squad: SquadPlayer[]; title: string }) 
                 {(grouped[pos] || []).sort((a, b) => b.avgScore - a.avgScore).map(p => (
                   <div key={p.id} data-testid={`roster-player-${p.id}`}>
                     <div className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${p.isOnField ? "bg-muted/30" : "bg-muted/10 opacity-70"}`}>
-                      <span className="font-medium flex-1 truncate">{p.name}</span>
+                      <span className="font-medium flex-1">{p.name}</span>
                       <span className="text-muted-foreground text-[10px] shrink-0">{p.team}</span>
                       <span className="font-semibold shrink-0">{p.avgScore}</span>
                       <Badge variant="outline" className={`text-[8px] px-1 py-0 ${roleColors[p.role] || ""}`}>
@@ -550,7 +589,7 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
                               <ArrowRight className="w-3 h-3 shrink-0 text-muted-foreground" />
                               <span className="font-medium">{alt.name}</span>
                               <span className="text-muted-foreground">{alt.team} · avg {alt.avgScore} · ${(alt.price / 1000).toFixed(0)}k</span>
-                              <span className="text-muted-foreground/70 flex-1 truncate">{alt.reason}</span>
+                              <span className="text-muted-foreground/70 flex-1">{alt.reason}</span>
                             </div>
                           ))}
                         </div>
@@ -612,6 +651,30 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
   );
 }
 
+const GENERATION_PHASES = [
+  "Analysing your squad...",
+  "Building trade strategy...",
+  "Benchmarking against winners...",
+  "Finalising roadmap...",
+];
+
+function useProgressPhase(isActive: boolean) {
+  const [phaseIndex, setPhaseIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      setPhaseIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setPhaseIndex((prev) => (prev + 1) % GENERATION_PHASES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return GENERATION_PHASES[phaseIndex];
+}
+
 export default function SeasonRoadmap() {
   const { toast } = useToast();
 
@@ -633,6 +696,8 @@ export default function SeasonRoadmap() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const progressPhase = useProgressPhase(generateMutation.isPending);
 
   if (isLoading) {
     return (
@@ -660,7 +725,7 @@ export default function SeasonRoadmap() {
             {generateMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Analysing your team...
+                {progressPhase}
               </>
             ) : (
               <>
@@ -669,6 +734,11 @@ export default function SeasonRoadmap() {
               </>
             )}
           </Button>
+          {generateMutation.isPending && (
+            <p className="text-xs text-muted-foreground" data-testid="text-generation-estimate">
+              This typically takes 15-30 seconds
+            </p>
+          )}
         </div>
       </div>
     );
@@ -701,20 +771,28 @@ export default function SeasonRoadmap() {
           </h1>
           <p className="text-sm text-muted-foreground">Your data-driven path to #1</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
-          data-testid="button-regenerate-plan"
-        >
-          {generateMutation.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-          ) : (
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+        <div className="space-y-1 text-right">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            data-testid="button-regenerate-plan"
+          >
+            {generateMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            Regenerate
+          </Button>
+          {generateMutation.isPending && (
+            <div className="space-y-0.5">
+              <p className="text-xs text-primary font-medium" data-testid="text-regenerate-phase">{progressPhase}</p>
+              <p className="text-[10px] text-muted-foreground" data-testid="text-regenerate-estimate">This typically takes 15-30 seconds</p>
+            </div>
           )}
-          Regenerate
-        </Button>
+        </div>
       </div>
 
       <Card data-testid="card-strategy-overview">
@@ -723,9 +801,20 @@ export default function SeasonRoadmap() {
             <Target className="w-5 h-5 text-primary" />
             <h2 className="font-semibold text-sm">Overall Strategy</h2>
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-overall-strategy">
-            {plan.overallStrategy}
-          </p>
+          <div className="space-y-3" data-testid="text-overall-strategy">
+            {parseStrategyIntoSections(plan.overallStrategy).map((section, i) => {
+              const SectionIcon = section.icon;
+              return (
+                <div key={i} className="rounded-md border p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <SectionIcon className={`w-4 h-4 shrink-0 ${section.color}`} />
+                    <h3 className="text-xs font-semibold uppercase tracking-wide">{section.title}</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{section.text}</p>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-md border p-3 text-center" data-testid="stat-total-projected">

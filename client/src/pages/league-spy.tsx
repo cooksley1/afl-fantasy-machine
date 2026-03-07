@@ -147,7 +147,7 @@ function MatchupAnalysis({ matchup }: { matchup: MatchupData }) {
           <div className="space-y-1">
             {matchup.myUniquePicks.sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0)).slice(0, 10).map((p) => (
               <div key={p.id} className="flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-muted/30" data-testid={`my-unique-${p.id}`}>
-                <span className="font-medium flex-1 truncate">{p.name}</span>
+                <span className="font-medium flex-1">{p.name}</span>
                 <Badge variant="outline" className="text-[8px] px-1 py-0">{p.position}</Badge>
                 <span className="text-muted-foreground shrink-0">{Math.round(p.avgScore || 0)}</span>
               </div>
@@ -165,7 +165,7 @@ function MatchupAnalysis({ matchup }: { matchup: MatchupData }) {
           <div className="space-y-1">
             {matchup.theirUniquePicks.sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0)).slice(0, 10).map((p, i) => (
               <div key={p.id || i} className="flex items-center gap-2 text-xs px-2 py-1 rounded-md bg-muted/30" data-testid={`their-unique-${p.id || i}`}>
-                <span className="font-medium flex-1 truncate">{p.name}</span>
+                <span className="font-medium flex-1">{p.name}</span>
                 <Badge variant="outline" className="text-[8px] px-1 py-0">{p.position}</Badge>
                 <span className="text-muted-foreground shrink-0">{Math.round(p.avgScore || 0)}</span>
               </div>
