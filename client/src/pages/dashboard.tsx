@@ -1232,7 +1232,7 @@ export default function Dashboard() {
                 variant="ghost"
                 size="sm"
                 className="text-xs"
-                onClick={() => navigate("/form-guide")}
+                onClick={() => navigate("/form")}
                 data-testid="button-view-all-breakouts"
               >
                 View All <ChevronRight className="w-3 h-3 ml-1" />

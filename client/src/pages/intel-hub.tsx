@@ -211,18 +211,16 @@ function IntelCard({ report }: { report: IntelReport }) {
           <div className={`p-2 rounded-md shrink-0 mt-0.5 ${isLiveIntel ? 'bg-primary/20' : 'bg-primary/10'}`}>
             <Icon className="w-4 h-4 text-primary" />
           </div>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold leading-tight">{report.title}</h3>
-              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                <PriorityBadge priority={report.priority} />
-                {report.actionable && (
-                  <Badge variant="default" className="bg-accent text-accent-foreground text-[10px]">
-                    <ArrowRight className="w-3 h-3 mr-0.5" /> Action
-                  </Badge>
-                )}
-              </div>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <PriorityBadge priority={report.priority} />
+              {report.actionable && (
+                <Badge variant="default" className="bg-accent text-accent-foreground text-[10px]">
+                  <ArrowRight className="w-3 h-3 mr-0.5" /> Action
+                </Badge>
+              )}
             </div>
+            <h3 className="text-sm font-semibold leading-tight">{report.title}</h3>
 
             <p className="text-sm text-muted-foreground leading-relaxed">
               {report.content}
