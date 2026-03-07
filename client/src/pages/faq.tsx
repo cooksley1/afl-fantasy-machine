@@ -336,12 +336,32 @@ const faqItems: FAQItem[] = [
     ),
   },
   {
+    id: "import-team",
+    category: "Features",
+    question: "How do I import my team from AFL Fantasy?",
+    answer: (
+      <div className="space-y-2">
+        <p>The fastest way to get started is by uploading a screenshot of your AFL Fantasy team. Follow these steps:</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li><strong>Open the AFL Fantasy app</strong> on your phone.</li>
+          <li><strong>Go to "My Team"</strong> so your full squad is visible.</li>
+          <li><strong>Tap the share icon</strong> (top-right corner of the screen).</li>
+          <li><strong>Choose "Save Image"</strong> to save the team screenshot to your camera roll.</li>
+          <li><strong>Upload the screenshot</strong> using the Team Analyzer page or during onboarding (Step 3).</li>
+        </ol>
+        <p>After uploading, the AI will identify your players from the image. You'll see a list of matched players with their positions. Click the <strong>"Save as My Team"</strong> button to save them as your current squad.</p>
+        <p>If any players aren't matched correctly, you can manually adjust your team from the My Team page or the Players page afterwards.</p>
+      </div>
+    ),
+  },
+  {
     id: "save-team",
     category: "Features",
     question: "How do I save my team?",
     answer: (
       <div className="space-y-2">
-        <p>Your team is managed through the My Team page. You can:</p>
+        <p>The quickest way to set up your team is by <strong>uploading a screenshot</strong> from the AFL Fantasy app. Use the Team Analyzer page or the onboarding wizard to upload your screenshot, then click <strong>"Save as My Team"</strong> after the analysis identifies your players.</p>
+        <p>You can also build and manage your team manually through the My Team page:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>Add players:</strong> Search and add players from the Players page to fill your 30-player squad.</li>
           <li><strong>Set field positions:</strong> Assign players as on-field or bench in each position line.</li>

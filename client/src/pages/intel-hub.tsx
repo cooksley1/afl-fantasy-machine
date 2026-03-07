@@ -720,13 +720,13 @@ export default function IntelHub() {
         <Card>
           <CardContent className="py-16 text-center">
             <Brain className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-semibold text-lg mb-1">No intelligence reports yet</h3>
+            <h3 className="font-semibold text-lg mb-1" data-testid="text-empty-title">No Intel Reports Yet</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
               {dateFilter !== "all"
                 ? `No reports found in the selected time range. Try expanding to "All time" or gather new data.`
-                : "Gather live data from all 18 AFL club feeds, AFL.com.au, Squiggle, and fantasy news, then generate AI analysis for captain picks, cash cows, bye strategy, POD plays, and more."}
+                : "No intelligence reports available. Gather live data from all 18 AFL club feeds, AFL.com.au, Squiggle, and fantasy news sources, then run AI analysis for actionable insights."}
             </p>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
               {dateFilter !== "all" && (
                 <Button
                   onClick={() => setDateFilter("all")}

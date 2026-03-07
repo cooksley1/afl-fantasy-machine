@@ -16,15 +16,18 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
-import { Camera, Users, ArrowRight, Loader2 } from "lucide-react";
+import { Camera, Users, ArrowRight, Loader2, Smartphone, Share2, Download, Upload, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { LeagueSettings } from "@shared/schema";
+import { AFL_FANTASY_CLASSIC_2026 } from "@shared/game-rules";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
+import teamScreenshotImg from "@assets/my_team_null_2026-03-03_21-58-17_1772535572033.png";
+
+const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
 
 const settingsFormSchema = z.object({
   teamName: z.string().min(1, "Team name is required").max(50),
-  salaryCap: z.coerce.number().min(1000000).max(20000000),
   currentRound: z.coerce.number().min(0).max(24),
   tradesRemaining: z.coerce.number().min(0).max(100),
 });
@@ -48,14 +51,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
       teamName: "My Team",
-      salaryCap: 18300000,
       currentRound: 1,
       tradesRemaining: 2,
     },
     values: settings
       ? {
           teamName: settings.teamName,
-          salaryCap: settings.salaryCap,
           currentRound: settings.currentRound,
           tradesRemaining: settings.tradesRemaining,
         }
@@ -195,24 +196,15 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="salaryCap"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Salary Cap ($)</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type="number"
-                            data-testid="input-salary-cap"
-                          />
-                        </FormControl>
-                        <FormDescription>Default: $18,300,000</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="rounded-md border p-3 flex items-center gap-3" data-testid="display-salary-cap">
+                    <DollarSign className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Salary Cap</p>
+                      <p className="text-xs text-muted-foreground">
+                        Fixed at ${(SALARY_CAP / 1000000).toFixed(2)}M for AFL Fantasy Classic 2026
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -284,50 +276,111 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             <CardContent className="pt-6 pb-6 space-y-5">
               <div className="text-center space-y-1">
                 <h2 className="text-xl font-bold tracking-tight" data-testid="text-build-title">
-                  How do you want to set up your team?
+                  Import Your Team
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Choose how to get started with your squad
+                  The fastest way is to upload a screenshot from the AFL Fantasy app
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Card
-                  className="hover-elevate cursor-pointer"
-                  onClick={() => handleTeamSetupChoice("/analyze")}
-                  data-testid="card-upload-screenshot"
-                >
-                  <CardContent className="flex flex-col items-center text-center py-8 space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Camera className="w-6 h-6 text-primary" />
+              <Card
+                className="hover-elevate cursor-pointer border-primary/30"
+                onClick={() => handleTeamSetupChoice("/analyze")}
+                data-testid="card-upload-screenshot"
+              >
+                <CardContent className="pt-5 pb-5 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Camera className="w-5 h-5 text-primary" />
                     </div>
-                    <div className="space-y-1">
-                      <p className="font-semibold text-sm">Upload a Screenshot</p>
+                    <div>
+                      <p className="font-semibold text-sm" data-testid="text-upload-title">Upload a Screenshot</p>
                       <p className="text-xs text-muted-foreground">
                         Import your existing team instantly
                       </p>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
 
-                <Card
-                  className="hover-elevate cursor-pointer"
-                  onClick={() => handleTeamSetupChoice("/players")}
-                  data-testid="card-browse-players"
-                >
-                  <CardContent className="flex flex-col items-center text-center py-8 space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Users className="w-6 h-6 text-primary" />
+                  <div className="space-y-2.5 pl-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">How to get your team screenshot</p>
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2.5" data-testid="instruction-step-1">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Smartphone className="w-3 h-3 text-primary" />
+                        </div>
+                        <p className="text-xs">Open the <span className="font-medium">AFL Fantasy</span> app on your phone</p>
+                      </div>
+                      <div className="flex items-start gap-2.5" data-testid="instruction-step-2">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Users className="w-3 h-3 text-primary" />
+                        </div>
+                        <p className="text-xs">Go to <span className="font-medium">"My Team"</span> to view your squad</p>
+                      </div>
+                      <div className="flex items-start gap-2.5" data-testid="instruction-step-3">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Share2 className="w-3 h-3 text-primary" />
+                        </div>
+                        <p className="text-xs">Tap the <span className="font-medium">share icon</span> (top-right corner)</p>
+                      </div>
+                      <div className="flex items-start gap-2.5" data-testid="instruction-step-4">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Download className="w-3 h-3 text-primary" />
+                        </div>
+                        <p className="text-xs">Choose <span className="font-medium">"Save Image"</span> to save to your device</p>
+                      </div>
+                      <div className="flex items-start gap-2.5" data-testid="instruction-step-5">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Upload className="w-3 h-3 text-primary" />
+                        </div>
+                        <p className="text-xs"><span className="font-medium">Upload here</span> and we'll identify your players</p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="font-semibold text-sm">Browse & Pick Players</p>
-                      <p className="text-xs text-muted-foreground">
-                        Build your team from the player database
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  <div className="rounded-md border overflow-hidden bg-muted/30">
+                    <img
+                      src={teamScreenshotImg}
+                      alt="Example AFL Fantasy team screenshot"
+                      className="w-full max-h-40 object-contain object-center"
+                      data-testid="img-screenshot-example"
+                    />
+                    <p className="text-[10px] text-muted-foreground text-center py-1.5">
+                      Example: AFL Fantasy share image
+                    </p>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground" data-testid="text-upload-note">
+                    After uploading, you'll see your identified players. Click "Save as My Team" to save them.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-card px-3 text-xs text-muted-foreground">or</span>
+                </div>
               </div>
+
+              <Card
+                className="hover-elevate cursor-pointer"
+                onClick={() => handleTeamSetupChoice("/players")}
+                data-testid="card-browse-players"
+              >
+                <CardContent className="flex items-center gap-3 py-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Browse & Pick Players</p>
+                    <p className="text-xs text-muted-foreground">
+                      Build your team manually from the player database
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </CardContent>
           </Card>
         )}

@@ -15,14 +15,16 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
-import { Settings, Save } from "lucide-react";
+import { Settings, Save, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { LeagueSettings } from "@shared/schema";
+import type { LeagueSettings, Player } from "@shared/schema";
+import { AFL_FANTASY_CLASSIC_2026 } from "@shared/game-rules";
+
+const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
 
 const settingsFormSchema = z.object({
   teamName: z.string().min(1, "Team name is required").max(50),
-  salaryCap: z.coerce.number().min(1000000).max(20000000),
   currentRound: z.coerce.number().min(0).max(24),
   tradesRemaining: z.coerce.number().min(0).max(100),
 });
@@ -36,18 +38,23 @@ export default function SettingsPage() {
     queryKey: ["/api/settings"],
   });
 
+  const { data: myTeam } = useQuery<Player[]>({
+    queryKey: ["/api/my-team"],
+  });
+
+  const teamValue = myTeam?.reduce((sum, p) => sum + (p.price || 0), 0) ?? 0;
+  const remaining = SALARY_CAP - teamValue;
+
   const form = useForm<SettingsForm>({
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
       teamName: settings?.teamName || "My Team",
-      salaryCap: settings?.salaryCap || 18300000,
       currentRound: settings?.currentRound ?? 1,
       tradesRemaining: settings?.tradesRemaining || 2,
     },
     values: settings
       ? {
           teamName: settings.teamName,
-          salaryCap: settings.salaryCap,
           currentRound: settings.currentRound,
           tradesRemaining: settings.tradesRemaining,
         }
@@ -117,26 +124,32 @@ export default function SettingsPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="salaryCap"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Salary Cap ($)</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="number"
-                        data-testid="input-salary-cap"
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      AFL Fantasy Classic 2026 salary cap (default: $18,300,000)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="rounded-md border p-4 space-y-2" data-testid="display-salary-cap">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Salary Cap</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-lg font-semibold" data-testid="text-salary-cap-value">
+                      ${(SALARY_CAP / 1000000).toFixed(2)}M
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      AFL Fantasy Classic 2026 — fixed cap
+                    </p>
+                  </div>
+                  {myTeam && myTeam.length > 0 && (
+                    <div className="text-right">
+                      <p className="text-lg font-semibold" data-testid="text-remaining-budget">
+                        ${(remaining / 1000000).toFixed(2)}M
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Remaining budget
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField

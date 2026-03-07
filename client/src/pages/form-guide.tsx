@@ -129,6 +129,29 @@ export default function FormGuide() {
   }
 
   const allPlayers = players || [];
+
+  if (allPlayers.length === 0) {
+    return (
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-6xl mx-auto" data-testid="page-form-guide">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Form Guide</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Track player form, consistency, and debutant cash cows
+          </p>
+        </div>
+        <Card>
+          <CardContent className="py-16 text-center">
+            <BarChart3 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <h3 className="font-semibold text-lg mb-1" data-testid="text-empty-title">No Form Data Available Yet</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Player form data will appear here once the season begins and scores are recorded. Check back after Round 1.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const filtered =
     teamFilter === "All Teams"
       ? allPlayers

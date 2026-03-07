@@ -128,6 +128,28 @@ export async function setupAuth(app: Express) {
       );
     });
   });
+
+  if (process.env.NODE_ENV === "development") {
+    app.post("/api/auth/dev-login", async (req, res) => {
+      const testClaims = {
+        sub: "dev-test-user",
+        email: "test@aflmachine.dev",
+        first_name: "Test",
+        last_name: "User",
+        profile_image_url: null,
+      };
+      await upsertUser(testClaims);
+      const user: any = {
+        claims: testClaims,
+        access_token: "dev-token",
+        expires_at: Math.floor(Date.now() / 1000) + 86400,
+      };
+      req.login(user, (err) => {
+        if (err) return res.status(500).json({ message: "Login failed" });
+        res.json({ success: true, user: testClaims });
+      });
+    });
+  }
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {

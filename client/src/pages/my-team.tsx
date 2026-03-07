@@ -778,25 +778,36 @@ export default function MyTeam() {
     return (
       <div className="p-4 sm:p-6 max-w-5xl mx-auto" data-testid="page-my-team">
         <Card>
-          <CardContent className="p-8 text-center space-y-4">
+          <CardContent className="py-16 text-center space-y-4">
             <Users className="w-12 h-12 mx-auto text-muted-foreground" />
-            <h2 className="text-xl font-bold">No Team Loaded</h2>
+            <h2 className="text-xl font-bold" data-testid="text-empty-title">No Team Yet</h2>
             <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Load The Lizards Gulch — Glen's 30-player squad for AFL Fantasy Classic 2026.
+              Import your AFL Fantasy team by uploading a screenshot from the app, or browse the player list to build your squad manually.
             </p>
-            <Button
-              onClick={() => setupTeamMutation.mutate()}
-              disabled={setupTeamMutation.isPending}
-              className="gap-2"
-              data-testid="button-setup-team"
-            >
-              {setupTeamMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              {setupTeamMutation.isPending ? "Loading Team..." : "Load The Lizards Gulch"}
-            </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                onClick={() => navigate("/players")}
+                variant="outline"
+                className="gap-2"
+                data-testid="button-browse-players"
+              >
+                <Users className="w-4 h-4" />
+                Browse Players
+              </Button>
+              <Button
+                onClick={() => setupTeamMutation.mutate()}
+                disabled={setupTeamMutation.isPending}
+                className="gap-2"
+                data-testid="button-setup-team"
+              >
+                {setupTeamMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {setupTeamMutation.isPending ? "Loading Team..." : "Load The Lizards Gulch"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -27,9 +27,22 @@ Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, 
 #### Onboarding Wizard
 New users see a 3-step onboarding wizard (`client/src/components/onboarding-wizard.tsx`) before the main app:
 - Step 1 (Welcome): Logo, value proposition, "Let's Get Started" CTA
-- Step 2 (League Settings): Inline settings form (team name, salary cap, round, trades) with "Skip for now" and "Save & Continue"
-- Step 3 (Build Your Team): Two cards — "Upload a Screenshot" (→ /analyze) and "Browse & Pick Players" (→ /players)
+- Step 2 (League Settings): Inline settings form (team name, round, trades) with read-only salary cap display ($18.30M fixed). "Skip for now" and "Save & Continue"
+- Step 3 (Import Your Team): Two cards — "Upload a Screenshot" (→ /analyze, with step-by-step AFL Fantasy share instructions and example image) and "Browse & Pick Players" (→ /players)
 - Completion stored in `localStorage` key `afl_onboarding_complete`. Checked in `App.tsx` `AuthenticatedApp` component.
+
+#### Player Availability Logic
+The risk endpoint (`/api/my-team/risks`) and dashboard use nuanced injury classification:
+- **Definitely out**: injuries matching keywords like "season", "acl", "hamstring", "suspended", "surgery" → severity "critical"
+- **Monitoring only**: statuses like "test", "managed", "soreness" → severity "low" (not shown as unavailable)
+- **Not named in squad**: Only flagged from round 2 onwards (pre-season teams aren't officially named yet)
+This prevents false positives where players with minor monitoring statuses appear as "out".
+
+#### Dev Test Login
+In development mode (`NODE_ENV=development`), `POST /api/auth/dev-login` creates a session for a test user (`dev-test-user` / `test@aflmachine.dev`) without OIDC. Used for e2e testing.
+
+#### Salary Cap
+Fixed at $18,300,000 per `shared/game-rules.ts`. Displayed as read-only in both settings page and onboarding — not user-editable. Settings page also shows remaining budget (cap minus team value).
 
 #### Sidebar Navigation
 Sidebar (`client/src/components/app-sidebar.tsx`) groups nav items into 4 labelled sections:

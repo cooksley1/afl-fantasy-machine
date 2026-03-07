@@ -132,11 +132,12 @@ export default function Dashboard() {
   const totalSalary = teamPlayers?.reduce((sum, p) => sum + p.price, 0) || 0;
   const captain = teamPlayers?.find((p) => p.isCaptain);
   const viceCaptain = teamPlayers?.find((p) => p.isViceCaptain);
-  const lateChangeAlerts = (teamPlayers || []).filter(
-    (p) => p.lateChange || p.injuryStatus || !p.isNamedTeam
-  );
-
   const currentRound = settings?.currentRound || 1;
+  const definitelyOutKeywords = ["season", "acl", "knee", "hamstring", "shoulder", "concussion", "suspended", "dropped", "omitted", "delisted", "retired", "broken", "fracture", "surgery", "torn", "rupture"];
+  const isDefinitelyOut = (status: string | null) => status ? definitelyOutKeywords.some(s => status.toLowerCase().includes(s)) : false;
+  const lateChangeAlerts = (teamPlayers || []).filter(
+    (p) => p.lateChange || isDefinitelyOut(p.injuryStatus) || (!p.isNamedTeam && currentRound >= 2)
+  );
   const byeRounds = gameRules?.byeRounds || [12, 13, 14];
   const isByeRound = byeRounds.includes(currentRound);
   const tradesThisRound = settings?.tradesRemaining || 0;

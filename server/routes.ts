@@ -40,7 +40,7 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.use("/api", (req, res, next) => {
-    const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user"];
+    const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user", "/api/auth/dev-login"];
     if (publicPaths.includes(req.path)) return next();
     isAuthenticated(req, res, async () => {
       const userId = (req.user as any)?.claims?.sub;
@@ -1107,17 +1107,41 @@ export async function registerRoutes(
       const alerts: any[] = [];
       const swapSuggestions: any[] = [];
 
+      const definitelyOutStatuses = [
+        "season", "acl", "knee", "hamstring", "shoulder", "concussion",
+        "suspended", "dropped", "omitted", "delisted", "retired",
+        "broken", "fracture", "surgery", "torn", "rupture",
+      ];
+
+      function isDefinitelyOut(injuryStatus: string | null): boolean {
+        if (!injuryStatus) return false;
+        const lower = injuryStatus.toLowerCase();
+        return definitelyOutStatuses.some(s => lower.includes(s));
+      }
+
+      function isMonitoringOnly(injuryStatus: string | null): boolean {
+        if (!injuryStatus) return false;
+        const lower = injuryStatus.toLowerCase();
+        const monitorStatuses = ["test", "managed", "modified", "soreness", "awareness", "cork", "general"];
+        return monitorStatuses.some(s => lower.includes(s));
+      }
+
       for (const p of onField) {
-        const isUnavailable = !!p.injuryStatus || !!p.lateChange || !p.isNamedTeam;
+        const hasDefiniteInjury = isDefinitelyOut(p.injuryStatus);
+        const hasMonitoringInjury = !hasDefiniteInjury && !!p.injuryStatus && !isMonitoringOnly(p.injuryStatus);
+        const notNamed = !p.isNamedTeam && currentRound >= 2;
+        const isUnavailable = hasDefiniteInjury || !!p.lateChange || notNamed;
+        const isWarning = hasMonitoringInjury;
         const isBye = p.byeRound === currentRound;
 
-        if (isUnavailable || isBye) {
-          const reason = p.injuryStatus ? `Injury: ${p.injuryStatus}`
+        if (isUnavailable || isWarning || isBye) {
+          const reason = hasDefiniteInjury ? `Injury: ${p.injuryStatus}`
             : p.lateChange ? "Late change — may score 0"
-            : !p.isNamedTeam ? "Not named in squad"
+            : notNamed ? "Not named in squad"
+            : hasMonitoringInjury ? `Monitor: ${p.injuryStatus}`
             : `Bye round ${p.byeRound}`;
 
-          const severity = p.injuryStatus || p.lateChange ? "critical" : !p.isNamedTeam ? "high" : "medium";
+          const severity = hasDefiniteInjury || p.lateChange ? "critical" : notNamed ? "high" : hasMonitoringInjury ? "low" : "medium";
 
           alerts.push({
             playerId: p.id,
@@ -1133,7 +1157,7 @@ export async function registerRoutes(
           });
 
           const eligibleBench = bench.filter(bp => {
-            if (bp.injuryStatus || bp.lateChange || !bp.isNamedTeam) return false;
+            if (isDefinitelyOut(bp.injuryStatus) || bp.lateChange || (!bp.isNamedTeam && currentRound >= 2)) return false;
             if (bp.byeRound === currentRound) return false;
             const slot = p.fieldPosition || p.position;
             if (slot === "UTIL") return true;

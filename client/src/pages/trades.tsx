@@ -19,6 +19,7 @@ import {
   Flame,
   ArrowUpCircle,
   Settings2,
+  Users,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -104,6 +105,10 @@ export default function Trades() {
 
   const { data: settings } = useQuery<LeagueSettings>({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: teamPlayers } = useQuery<any[]>({
+    queryKey: ["/api/my-team"],
   });
 
   const generateMutation = useMutation({
@@ -243,11 +248,31 @@ export default function Trades() {
         </CardContent>
       </Card>
 
-      {allTrades.length === 0 && (
+      {allTrades.length === 0 && !teamPlayers?.length && (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <h3 className="font-semibold text-lg mb-1" data-testid="text-empty-no-team">Add Players to Your Team First</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+              You need a team before we can suggest trades. Head to My Team to import your AFL Fantasy squad.
+            </p>
+            <Button
+              variant="default"
+              onClick={() => { window.location.href = "/my-team"; }}
+              data-testid="button-go-to-my-team"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Go to My Team
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {allTrades.length === 0 && (teamPlayers?.length ?? 0) > 0 && (
         <Card>
           <CardContent className="py-16 text-center">
             <ArrowLeftRight className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-semibold text-lg mb-1">No recommendations yet</h3>
+            <h3 className="font-semibold text-lg mb-1" data-testid="text-empty-no-trades">No Trade Recommendations</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
               Generate trade suggestions based on form differentials, breakevens, cash generation, and win probability.
             </p>
