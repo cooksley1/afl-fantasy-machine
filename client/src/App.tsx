@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -22,7 +24,8 @@ import LandingPage from "@/pages/landing";
 import AdminPage from "@/pages/admin";
 import SchedulePage from "@/pages/schedule";
 import FAQPage from "@/pages/faq";
-import { Zap, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 
 function Router() {
   return (
@@ -51,6 +54,14 @@ const sidebarStyle = {
 };
 
 function AuthenticatedApp() {
+  const [onboardingComplete, setOnboardingComplete] = useState(
+    () => localStorage.getItem("afl_onboarding_complete") === "true"
+  );
+
+  if (!onboardingComplete) {
+    return <OnboardingWizard onComplete={() => setOnboardingComplete(true)} />;
+  }
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full">
@@ -60,7 +71,7 @@ function AuthenticatedApp() {
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
               <div className="flex items-center gap-1.5 sm:hidden">
-                <Zap className="w-4 h-4 text-accent" />
+                <img src={logoImg} alt="AFL Fantasy Machine" className="w-5 h-5 object-contain" data-testid="img-mobile-header-logo" />
                 <span className="text-sm font-semibold tracking-tight">AFL Fantasy Machine</span>
               </div>
             </div>

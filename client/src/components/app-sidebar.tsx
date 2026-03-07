@@ -32,18 +32,42 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Live Scores", url: "/live", icon: Radio },
-  { title: "Schedule", url: "/schedule", icon: Calendar },
-  { title: "My Team", url: "/team", icon: Users },
-  { title: "Players", url: "/players", icon: Trophy },
-  { title: "Trade Centre", url: "/trades", icon: ArrowLeftRight },
-  { title: "Form Guide", url: "/form", icon: TrendingUp },
-  { title: "Intel Hub", url: "/intel", icon: Brain },
-  { title: "Team Analyzer", url: "/analyze", icon: Camera },
-  { title: "Settings", url: "/settings", icon: Settings },
-  { title: "FAQ", url: "/faq", icon: HelpCircle },
+const navGroups = [
+  {
+    label: "MY TEAM",
+    testId: "group-my-team",
+    items: [
+      { title: "Dashboard", subtitle: "Your command centre", url: "/", icon: LayoutDashboard },
+      { title: "My Team", subtitle: "Manage your squad", url: "/team", icon: Users },
+      { title: "Trade Centre", subtitle: "Find and execute trades", url: "/trades", icon: ArrowLeftRight },
+    ],
+  },
+  {
+    label: "INTELLIGENCE",
+    testId: "group-intelligence",
+    items: [
+      { title: "Intel Hub", subtitle: "AI-powered insights", url: "/intel", icon: Brain, badge: "Live", badgeClass: "bg-accent text-accent-foreground" },
+      { title: "Form Guide", subtitle: "Player trends & stats", url: "/form", icon: TrendingUp },
+      { title: "Player Database", subtitle: "Browse all players", url: "/players", icon: Trophy },
+    ],
+  },
+  {
+    label: "TOOLS",
+    testId: "group-tools",
+    items: [
+      { title: "Team Analyser", subtitle: "Upload & analyse", url: "/analyze", icon: Camera },
+      { title: "Live Scores", subtitle: "Real-time scores", url: "/live", icon: Radio, badge: "Live", badgeClass: "bg-red-500 text-white" },
+      { title: "Schedule", subtitle: "Season fixtures", url: "/schedule", icon: Calendar },
+    ],
+  },
+  {
+    label: "ACCOUNT",
+    testId: "group-account",
+    items: [
+      { title: "Settings", subtitle: "League configuration", url: "/settings", icon: Settings },
+      { title: "FAQ", subtitle: "Help & guides", url: "/faq", icon: HelpCircle },
+    ],
+  },
 ];
 
 export function AppSidebar() {
@@ -67,57 +91,60 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] tracking-widest font-semibold">
-            Navigation
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location === item.url || 
-                  (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label} data-testid={group.testId}>
+            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] tracking-widest font-semibold">
+              {group.label}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const isActive = location === item.url ||
+                    (item.url !== "/" && location.startsWith(item.url));
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent min-h-[44px]"
+                      >
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}>
+                          <item.icon className="w-4 h-4" />
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-sm">{item.title}</span>
+                            <span className="text-[10px] text-sidebar-foreground/40 group-data-[collapsible=icon]:hidden">{item.subtitle}</span>
+                          </div>
+                          {item.badge && (
+                            <Badge variant="default" className={`ml-auto text-[10px] ${item.badgeClass}`}>
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+                {group.label === "ACCOUNT" && user?.isAdmin && (
+                  <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
-                      data-active={isActive}
+                      data-active={location === "/admin"}
                       className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent min-h-[44px]"
                     >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span className="text-sm">{item.title}</span>
-                        {item.title === "Live Scores" && (
-                          <Badge variant="default" className="ml-auto text-[10px] bg-red-500 text-white">
-                            Live
-                          </Badge>
-                        )}
-                        {item.title === "Intel Hub" && (
-                          <Badge variant="default" className="ml-auto text-[10px] bg-accent text-accent-foreground">
-                            Live
-                          </Badge>
-                        )}
+                      <Link href="/admin" data-testid="link-nav-admin">
+                        <ShieldCheck className="w-4 h-4" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-sm">Admin</span>
+                          <span className="text-[10px] text-sidebar-foreground/40 group-data-[collapsible=icon]:hidden">System management</span>
+                        </div>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                );
-              })}
-              {user?.isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={location === "/admin"}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent min-h-[44px]"
-                  >
-                    <Link href="/admin" data-testid="link-nav-admin">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span className="text-sm">Admin</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="p-4 space-y-3">

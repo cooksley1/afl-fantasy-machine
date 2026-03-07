@@ -5,6 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
   TrendingUp,
   TrendingDown,
   Minus,
@@ -16,6 +21,7 @@ import {
   AlertTriangle,
   Clock,
   ChevronRight,
+  ChevronDown,
   Shield,
   Zap,
   Calendar,
@@ -26,13 +32,19 @@ import {
   Eye,
   ArrowRight,
   ShieldAlert,
+  CheckCircle2,
+  Camera,
+  Users,
+  CircleDot,
+  Info,
 } from "lucide-react";
 import { ErrorState } from "@/components/error-state";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, ReferenceLine, Tooltip } from "recharts";
-import type { Player, PlayerWithTeamInfo, LeagueSettings, TradeRecommendationWithPlayers } from "@shared/schema";
+import type { Player, PlayerWithTeamInfo, LeagueSettings, TradeRecommendationWithPlayers, IntelReport } from "@shared/schema";
 
 interface SimulationResult {
   expectedTotal: number;
@@ -60,7 +72,9 @@ function formatPrice(price: number): string {
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+  const [loopholeOpen, setLoopholeOpen] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const simulationMutation = useMutation({
     mutationFn: async () => {
@@ -95,6 +109,10 @@ export default function Dashboard() {
 
   const { data: breakoutCandidates } = useQuery<Player[]>({
     queryKey: ["/api/breakout-candidates"],
+  });
+
+  const { data: intelReports } = useQuery<IntelReport[]>({
+    queryKey: ["/api/intel"],
   });
 
   const { data: riskData } = useQuery<{
@@ -139,9 +157,9 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
-        <Skeleton className="h-7 w-48 mb-1" />
-        <Skeleton className="h-4 w-72" />
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Skeleton className="h-14 rounded-md" />
+        <Skeleton className="h-32 rounded-md" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[...Array(4)].map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-md" />
           ))}
@@ -164,25 +182,111 @@ export default function Dashboard() {
 
   const salaryCap = settings?.salaryCap || 18300000;
   const remaining = salaryCap - totalSalary;
+  const hasTeam = teamPlayers && teamPlayers.length > 0;
+
+  const actionItems: { color: string; text: string; link: string; linkLabel: string }[] = [];
+  if (hasTeam) {
+    if (riskData && riskData.alerts.length > 0) {
+      const criticalAlerts = riskData.alerts.filter(a => a.severity === "critical" || a.severity === "high");
+      const otherAlerts = riskData.alerts.filter(a => a.severity !== "critical" && a.severity !== "high");
+      if (criticalAlerts.length > 0) {
+        actionItems.push({
+          color: "red",
+          text: `${criticalAlerts.length} unavailable player${criticalAlerts.length > 1 ? "s" : ""} — ${criticalAlerts.map(a => a.playerName).join(", ")}`,
+          link: "/team",
+          linkLabel: "Fix Team",
+        });
+      }
+      if (otherAlerts.length > 0 && actionItems.length < 3) {
+        actionItems.push({
+          color: "yellow",
+          text: `${otherAlerts.length} player${otherAlerts.length > 1 ? "s" : ""} with warnings`,
+          link: "/team",
+          linkLabel: "Review",
+        });
+      }
+    }
+    if (trades && trades.length > 0 && actionItems.length < 3) {
+      const urgent = trades.filter(t => t.confidence > 0.7);
+      if (urgent.length > 0) {
+        actionItems.push({
+          color: "yellow",
+          text: `${urgent.length} high-confidence trade${urgent.length > 1 ? "s" : ""} recommended`,
+          link: "/trades",
+          linkLabel: "View Trades",
+        });
+      }
+    }
+    if (!captain && actionItems.length < 3) {
+      actionItems.push({
+        color: "yellow",
+        text: "No captain set — assign a captain for double points",
+        link: "/team",
+        linkLabel: "Set Captain",
+      });
+    }
+  }
+
+  const topPlayersForSnapshot = [...onFieldPlayers]
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 8);
+
+  const recentIntel = (intelReports || []).slice(0, 3);
+
+  if (!hasTeam) {
+    return (
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4" data-testid="page-dashboard">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-page-title">Dashboard</h1>
+        <Card data-testid="card-empty-state">
+          <CardContent className="py-12 text-center space-y-4">
+            <Users className="w-10 h-10 text-muted-foreground mx-auto" />
+            <div>
+              <p className="text-lg font-semibold" data-testid="text-empty-title">Set up your team to get started</p>
+              <p className="text-sm text-muted-foreground mt-1">Import your squad or browse the player database to build your team.</p>
+            </div>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <Button onClick={() => navigate("/analyze")} data-testid="button-upload-screenshot">
+                <Camera className="w-4 h-4 mr-2" />
+                Upload Screenshot
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/players")} data-testid="button-browse-players">
+                <Users className="w-4 h-4 mr-2" />
+                Browse Players
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto" data-testid="page-dashboard">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-page-title">
-            {settings?.teamName || "My Team"}
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Round {currentRound} {isByeRound ? "(Bye Round)" : ""} — Goal: Win this week
-          </p>
-        </div>
-        {isByeRound && (
-          <Badge variant="destructive" className="text-xs">
-            <Calendar className="w-3 h-3 mr-1" />
-            Bye Round
-          </Badge>
-        )}
-      </div>
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-w-7xl mx-auto" data-testid="page-dashboard">
+
+      {/* A. Status Bar */}
+      <Card data-testid="card-status-bar">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
+            <Badge variant="outline" className="text-xs" data-testid="badge-round">
+              <CircleDot className="w-3 h-3 mr-1" />
+              R{currentRound}{isByeRound ? " (Bye)" : ""}
+            </Badge>
+            <span className="text-sm font-semibold" data-testid="text-team-name">{settings?.teamName || "My Team"}</span>
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+              <div className="flex items-center gap-1">
+                <Target className="w-3.5 h-3.5 text-primary" />
+                <span className="text-sm font-mono font-bold" data-testid="text-projected-score">{Math.round(totalScore)}</span>
+                <span className="text-[10px] text-muted-foreground">proj</span>
+              </div>
+              <span className="text-muted-foreground mx-1">|</span>
+              <div className="flex items-center gap-1">
+                <DollarSign className="w-3.5 h-3.5 text-accent" />
+                <span className="text-sm font-mono font-bold text-accent" data-testid="text-team-value">{formatPrice(totalSalary)}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {currentRound <= 1 && (
         <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-preseason-notice">
@@ -199,67 +303,231 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Projected</p>
-                <p className="text-xl sm:text-2xl font-bold tracking-tight">{Math.round(totalScore)}</p>
-                <p className="text-[11px] text-muted-foreground">{onFieldPlayers.length} on field</p>
-              </div>
-              <div className="p-2 rounded-md bg-primary/10">
-                <Target className="w-4 h-4 text-primary" />
-              </div>
+      {/* B. What You Need to Do Today */}
+      <Card data-testid="card-action-items">
+        <CardHeader className="pb-2 px-4 pt-4">
+          <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-accent" />
+            What You Need to Do Today
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2">
+          {actionItems.length === 0 ? (
+            <div className="flex items-center gap-2.5 p-3 rounded-md bg-emerald-500/5 border border-emerald-500/15" data-testid="status-all-good">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">All good — no urgent actions needed</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Team Value</p>
-                <p className="text-xl sm:text-2xl font-bold tracking-tight text-accent">{formatPrice(totalSalary)}</p>
-                <p className="text-[11px] text-muted-foreground">{formatPrice(remaining)} left</p>
+          ) : (
+            actionItems.map((item, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 p-2.5 rounded-md bg-muted/30" data-testid={`action-item-${i}`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.color === "red" ? "bg-red-500" : item.color === "yellow" ? "bg-yellow-500" : "bg-green-500"}`} />
+                  <p className="text-sm min-w-0">{item.text}</p>
+                </div>
+                <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => navigate(item.link)} data-testid={`button-action-${i}`}>
+                  {item.linkLabel}
+                  <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
               </div>
-              <div className="p-2 rounded-md bg-accent/10">
-                <DollarSign className="w-4 h-4 text-accent" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Trades This Round</p>
-                <p className="text-xl sm:text-2xl font-bold tracking-tight">{tradesThisRound}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {maxTradesThisRound === 0 ? "No trades R1" : isByeRound ? `${maxTradesThisRound} allowed (bye)` : `${maxTradesThisRound} per round`}
-                </p>
-              </div>
-              <div className="p-2 rounded-md bg-primary/10">
-                <ArrowLeftRight className="w-4 h-4 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Season Trades</p>
-                <p className="text-xl sm:text-2xl font-bold tracking-tight">{settings?.totalTradesUsed || 0}</p>
-                <p className="text-[11px] text-muted-foreground">used so far</p>
-              </div>
-              <div className="p-2 rounded-md bg-muted">
-                <BarChart3 className="w-4 h-4 text-muted-foreground" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
+      {/* C. Captain Loophole Panel */}
+      {(captain || viceCaptain) && (
+        <Card data-testid="card-captain-loophole">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <Crown className="w-4 h-4 text-accent" />
+              Captain Loophole Strategy
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {viceCaptain && (
+                <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 cursor-pointer hover-elevate" data-testid="card-vc-pick" onClick={() => navigate(`/player/${viceCaptain.id}`)}>
+                  <div className="w-9 h-9 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">VC</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{viceCaptain.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {viceCaptain.team} vs {viceCaptain.nextOpponent}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-medium">{viceCaptain.gameTime || 'TBA'}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                      {((viceCaptain.projectedScore || viceCaptain.avgScore || 0) * 2).toFixed(0)}
+                    </p>
+                    {viceCaptain.captainProbability != null && (() => {
+                      const pct = viceCaptain.captainProbability * 100;
+                      const pillColor = pct > 40 ? "bg-green-500/15 text-green-700 dark:text-green-400" : pct >= 25 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400" : "bg-red-500/15 text-red-700 dark:text-red-400";
+                      return (
+                        <span className={`inline-block text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-md mt-0.5 ${pillColor}`} data-testid="text-vc-probability">
+                          P(120+): {pct.toFixed(0)}%
+                        </span>
+                      );
+                    })()}
+                    {viceCaptain.captainProbability == null && (
+                      <p className="text-[9px] text-muted-foreground">2x score</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {captain && (
+                <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 cursor-pointer hover-elevate" data-testid="card-captain-pick" onClick={() => navigate(`/player/${captain.id}`)}>
+                  <div className="w-9 h-9 rounded-md bg-accent/15 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-accent">C</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{captain.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {captain.team} vs {captain.nextOpponent}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-medium">{captain.gameTime || 'TBA'}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-base sm:text-lg font-bold text-accent">
+                      {((captain.projectedScore || captain.avgScore || 0) * 2).toFixed(0)}
+                    </p>
+                    {captain.captainProbability != null && (() => {
+                      const pct = captain.captainProbability * 100;
+                      const pillColor = pct > 40 ? "bg-green-500/15 text-green-700 dark:text-green-400" : pct >= 25 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400" : "bg-red-500/15 text-red-700 dark:text-red-400";
+                      return (
+                        <span className={`inline-block text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-md mt-0.5 ${pillColor}`} data-testid="text-c-probability">
+                          P(120+): {pct.toFixed(0)}%
+                        </span>
+                      );
+                    })()}
+                    {captain.captainProbability == null && (
+                      <p className="text-[9px] text-muted-foreground">Safety net</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Collapsible open={loopholeOpen} onOpenChange={setLoopholeOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-xs w-full justify-start" data-testid="button-loophole-explainer">
+                  <Info className="w-3 h-3 mr-1.5" />
+                  How the loophole works
+                  <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${loopholeOpen ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="p-2.5 rounded-md bg-accent/5 border border-accent/10 mt-2">
+                  <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+                    <span className="font-semibold text-foreground">The Captain Loophole:</span> Set your Vice Captain (VC) to a player in an earlier game.
+                    If they score 110+ (doubling to 220+), keep them. Otherwise, switch to your Captain (C) before their later game starts — their doubled score replaces the VC's.
+                    {viceCaptain && captain && (
+                      <span className="block mt-1.5">
+                        <span className="font-medium text-foreground">This week:</span> If {viceCaptain.name} (VC) scores 110+ in their {viceCaptain.gameTime || "early"} game, keep doubled score. Otherwise switch to {captain.name} before their {captain.gameTime || "later"} game.
+                      </span>
+                    )}
+                    {gameRules?.captainRules?.tog50Rule && (
+                      <span className="block mt-1 text-yellow-600 dark:text-yellow-400">50% TOG Rule: If captain plays &lt;50% TOG, VC score doubles if higher.</span>
+                    )}
+                  </p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* D. My Team Snapshot */}
+      {topPlayersForSnapshot.length > 0 && (
+        <Card data-testid="card-team-snapshot">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                My Team Snapshot
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/team")} data-testid="button-full-team">
+                Full Team <ArrowRight className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="px-3 pb-3">
+            <div className={`grid gap-2 ${isMobile ? "grid-cols-2" : "grid-cols-4"}`}>
+              {topPlayersForSnapshot.map((player) => {
+                const beColor = (player.breakEven ?? 0) < 0 ? "text-green-600 dark:text-green-400" : (player.breakEven ?? 0) > 100 ? "text-red-500" : "text-muted-foreground";
+                return (
+                  <div
+                    key={player.id}
+                    className="p-2.5 rounded-md bg-muted/30 hover-elevate cursor-pointer"
+                    data-testid={`card-snapshot-player-${player.id}`}
+                    onClick={() => navigate(`/player/${player.id}`)}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <p className="text-sm font-medium truncate">{player.name}</p>
+                      <FormTrendIcon trend={player.formTrend} />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="secondary" className="text-[9px]">{player.position}{player.dualPosition ? `/${player.dualPosition}` : ""}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mt-1.5">
+                      <span className="text-xs font-mono">{player.avgScore?.toFixed(1)}</span>
+                      <span className={`text-[10px] font-mono ${beColor}`} data-testid={`text-be-${player.id}`}>
+                        BE: {player.breakEven ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* E. Intel Flash */}
+      {recentIntel.length > 0 && (
+        <Card data-testid="card-intel-flash">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <Zap className="w-4 h-4 text-violet-500" />
+                Intel Flash
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/intel")} data-testid="button-view-all-intel">
+                View All Intel <ArrowRight className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="px-3 pb-3">
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {recentIntel.map((report) => (
+                <div
+                  key={report.id}
+                  className="min-w-[220px] max-w-[280px] p-3 rounded-md bg-muted/30 hover-elevate cursor-pointer shrink-0"
+                  data-testid={`card-intel-${report.id}`}
+                  onClick={() => navigate("/intel")}
+                >
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Badge variant="secondary" className="text-[9px]">{report.category}</Badge>
+                  </div>
+                  <p className="text-sm font-medium line-clamp-1" data-testid={`text-intel-title-${report.id}`}>{report.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{report.content}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* F. Existing sections below */}
+
+      {/* Player Risks & Warnings */}
       {(lateChangeAlerts.length > 0 || coldPlayers.length > 0 || byeAffectedPlayers.length > 0 ||
         (riskData && riskData.tagWarnings.length > 0)) && (
         <Card className="border-destructive/30" data-testid="card-risk-assessment">
@@ -363,7 +631,7 @@ export default function Dashboard() {
                         {tw.avgScoreWhenTagged !== null && (
                           <p className="text-xs font-mono">
                             <span className="text-muted-foreground">{tw.avgScore?.toFixed(0)}</span>
-                            <span className="text-red-500 ml-1">→ {tw.avgScoreWhenTagged.toFixed(0)}</span>
+                            <span className="text-red-500 ml-1">&rarr; {tw.avgScoreWhenTagged.toFixed(0)}</span>
                           </p>
                         )}
                         <Badge variant={tw.riskLevel === "high" ? "destructive" : "outline"} className="text-[8px]">
@@ -438,191 +706,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {(captain || viceCaptain) && (
-        <Card>
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-              <Crown className="w-4 h-4 text-accent" />
-              Captain Loophole Strategy
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {viceCaptain && (
-                <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 cursor-pointer hover-elevate" data-testid="card-vc-pick" onClick={() => navigate(`/player/${viceCaptain.id}`)}>
-                  <div className="w-9 h-9 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">VC</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{viceCaptain.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {viceCaptain.team} vs {viceCaptain.nextOpponent}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">{viceCaptain.gameTime || 'TBA'}</span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                      {((viceCaptain.projectedScore || viceCaptain.avgScore || 0) * 2).toFixed(0)}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground">
-                      {viceCaptain.captainProbability ? `P(120+): ${(viceCaptain.captainProbability * 100).toFixed(0)}%` : '2x score'}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {captain && (
-                <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 cursor-pointer hover-elevate" data-testid="card-captain-pick" onClick={() => navigate(`/player/${captain.id}`)}>
-                  <div className="w-9 h-9 rounded-md bg-accent/15 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-accent">C</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{captain.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {captain.team} vs {captain.nextOpponent}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">{captain.gameTime || 'TBA'}</span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-base sm:text-lg font-bold text-accent">
-                      {((captain.projectedScore || captain.avgScore || 0) * 2).toFixed(0)}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground">
-                      {captain.captainProbability ? `P(120+): ${(captain.captainProbability * 100).toFixed(0)}%` : 'Safety net'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            {viceCaptain && captain && (
-              <div className="p-2.5 rounded-md bg-accent/5 border border-accent/10">
-                <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-                  <span className="font-semibold text-foreground">Loophole:</span> If {viceCaptain.name} (VC)
-                  scores 110+ in their {viceCaptain.gameTime || 'early'} game, keep doubled score.
-                  Otherwise switch to {captain.name} before their {captain.gameTime || 'later'} game.
-                  {gameRules?.captainRules?.tog50Rule && (
-                    <span className="block mt-1 text-yellow-600 dark:text-yellow-400">50% TOG Rule: If captain plays &lt;50% TOG, VC score doubles if higher.</span>
-                  )}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-              <ArrowLeftRight className="w-4 h-4 text-accent" />
-              Recommended Trades
-            </CardTitle>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {tradesThisRound} of {maxTradesThisRound} trade{maxTradesThisRound !== 1 ? 's' : ''} available
-            </p>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 space-y-0.5">
-            {(trades || []).slice(0, 4).map((trade) => (
-              <div
-                key={trade.id}
-                className="py-2.5 px-2 rounded-md hover-elevate cursor-pointer"
-                data-testid={`card-trade-suggestion-${trade.id}`}
-                onClick={() => navigate("/trades")}
-              >
-                <div className="flex items-center justify-between mb-1 gap-2">
-                  <div className="flex items-center gap-1.5 text-sm min-w-0 flex-wrap">
-                    <span className="text-destructive font-medium">
-                      {trade.playerOut.name}
-                    </span>
-                    <ArrowLeftRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                    <span className="text-green-600 dark:text-green-400 font-medium">
-                      {trade.playerIn.name}
-                    </span>
-                  </div>
-                  <Badge
-                    variant={trade.confidence > 0.7 ? "default" : "secondary"}
-                    className="text-[10px] shrink-0"
-                  >
-                    {Math.round(trade.confidence * 100)}%
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-                  {trade.reason}
-                </p>
-              </div>
-            ))}
-            {(!trades || trades.length === 0) && (
-              <div className="text-center py-6 text-muted-foreground text-sm">
-                <p>No trade recommendations yet</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => navigate("/trades")}
-                  data-testid="button-goto-trades"
-                >
-                  Generate Trades
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              Top Guns
-            </CardTitle>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Your highest scorers on field
-            </p>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 space-y-0.5">
-            {onFieldPlayers
-              .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
-              .slice(0, 5)
-              .map((player, i) => (
-                <div
-                  key={player.id}
-                  className="flex items-center justify-between py-2 px-2 rounded-md hover-elevate cursor-pointer"
-                  data-testid={`card-top-performer-${player.id}`}
-                  onClick={() => navigate(`/player/${player.id}`)}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{player.name}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {player.team} - {player.position}
-                        {player.dualPosition ? `/${player.dualPosition}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <FormTrendIcon trend={player.formTrend} />
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {player.avgScore?.toFixed(1)}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            {onFieldPlayers.length === 0 && (
-              <div className="text-center py-6 text-muted-foreground text-sm">
-                Add players to see top performers
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* Round Score Simulator */}
       <Card data-testid="card-simulation">
         <CardHeader className="pb-2 px-4 pt-4">
           <div className="flex items-center justify-between gap-2">
@@ -773,7 +857,7 @@ export default function Dashboard() {
                           <p className="text-[10px] text-muted-foreground">{p.team}</p>
                         </div>
                         <Badge variant="outline" className="text-[10px] font-mono shrink-0">
-                          ±{p.stdDev.toFixed(1)} pts
+                          &plusmn;{p.stdDev.toFixed(1)} pts
                         </Badge>
                       </div>
                     ))}
@@ -862,13 +946,123 @@ export default function Dashboard() {
               })()}
 
               <p className="text-[10px] text-muted-foreground text-center">
-                Based on {simResult.iterations.toLocaleString()} iterations • P25: {Math.round(simResult.percentiles.p25)} | P75: {Math.round(simResult.percentiles.p75)} | P95: {Math.round(simResult.percentiles.p95)}
+                Based on {simResult.iterations.toLocaleString()} iterations &bull; P25: {Math.round(simResult.percentiles.p25)} | P75: {Math.round(simResult.percentiles.p75)} | P95: {Math.round(simResult.percentiles.p95)}
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Recommended Trades & Top Guns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4 text-accent" />
+              Recommended Trades
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {tradesThisRound} of {maxTradesThisRound} trade{maxTradesThisRound !== 1 ? 's' : ''} available
+            </p>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-0.5">
+            {(trades || []).slice(0, 4).map((trade) => (
+              <div
+                key={trade.id}
+                className="py-2.5 px-2 rounded-md hover-elevate cursor-pointer"
+                data-testid={`card-trade-suggestion-${trade.id}`}
+                onClick={() => navigate("/trades")}
+              >
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <div className="flex items-center gap-1.5 text-sm min-w-0 flex-wrap">
+                    <span className="text-destructive font-medium">
+                      {trade.playerOut.name}
+                    </span>
+                    <ArrowLeftRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="text-green-600 dark:text-green-400 font-medium">
+                      {trade.playerIn.name}
+                    </span>
+                  </div>
+                  <Badge
+                    variant={trade.confidence > 0.7 ? "default" : "secondary"}
+                    className="text-[10px] shrink-0"
+                  >
+                    {Math.round(trade.confidence * 100)}%
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                  {trade.reason}
+                </p>
+              </div>
+            ))}
+            {(!trades || trades.length === 0) && (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                <p>No trade recommendations yet</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => navigate("/trades")}
+                  data-testid="button-goto-trades"
+                >
+                  Generate Trades
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              Top Guns
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Your highest scorers on field
+            </p>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-0.5">
+            {onFieldPlayers
+              .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+              .slice(0, 5)
+              .map((player, i) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between py-2 px-2 rounded-md hover-elevate cursor-pointer"
+                  data-testid={`card-top-performer-${player.id}`}
+                  onClick={() => navigate(`/player/${player.id}`)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{player.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {player.team} - {player.position}
+                        {player.dualPosition ? `/${player.dualPosition}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <FormTrendIcon trend={player.formTrend} />
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {player.avgScore?.toFixed(1)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            {onFieldPlayers.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                Add players to see top performers
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bench Watch */}
       {hotBenchPlayers.length > 0 && (
         <Card>
           <CardHeader className="pb-2 px-4 pt-4">
@@ -906,6 +1100,7 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Breakout Candidates */}
       {breakoutCandidates && breakoutCandidates.length > 0 && (
         <Card data-testid="card-breakout-candidates">
           <CardHeader className="pb-2 px-4 pt-4">
