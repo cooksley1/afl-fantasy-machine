@@ -190,10 +190,12 @@ function FieldViewCard({
   player,
   onViewReport,
   visibleStats,
+  isBench = false,
 }: {
   player: PlayerWithTeamInfo;
   onViewReport: (id: number) => void;
   visibleStats: StatKey[];
+  isBench?: boolean;
 }) {
   const teamColors = getTeamColors(player.team);
   const teamAbbr = getTeamAbbr(player.team);
@@ -203,13 +205,13 @@ function FieldViewCard({
 
   return (
     <div
-      className="flex flex-col items-center cursor-pointer group"
+      className={`flex flex-col items-center cursor-pointer group ${isBench ? "opacity-60" : ""}`}
       onClick={() => onViewReport(player.id)}
       data-testid={`field-card-${player.id}`}
     >
       <div className="relative">
         <div
-          className="w-[72px] sm:w-[88px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
+          className={`w-[72px] sm:w-[88px] rounded-lg border overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col ${isBench ? "border-border/30 grayscale-[40%]" : "border-border/60"}`}
           style={{ background: `linear-gradient(135deg, ${teamColors.primary} 0%, ${teamColors.primary}dd 100%)` }}
         >
           <div className="relative h-[52px] sm:h-[58px] flex items-center justify-center overflow-hidden">
@@ -344,12 +346,16 @@ function FieldView({
             )}
             {bench.length > 0 && (
               <div className="mt-2 pt-2 border-t border-dashed border-border/40">
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mb-1.5" data-testid={`label-bench-${pos.toLowerCase()}`}>
-                  Bench
-                </p>
-                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 opacity-75">
+                <div className="flex items-center justify-center gap-2 mb-1.5" data-testid={`label-bench-${pos.toLowerCase()}`}>
+                  <div className="h-px flex-1 bg-border/30" />
+                  <span className="text-[9px] font-bold text-muted-foreground/70 uppercase tracking-widest px-2 bg-muted/50 rounded-full py-0.5">
+                    Bench
+                  </span>
+                  <div className="h-px flex-1 bg-border/30" />
+                </div>
+                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
                   {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} isBench />
                   ))}
                 </div>
               </div>

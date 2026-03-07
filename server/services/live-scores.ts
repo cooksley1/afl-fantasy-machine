@@ -198,6 +198,9 @@ export async function getLiveRoundData(round?: number): Promise<LiveRoundData> {
         timeOnGround: stats?.timeOnGroundPercent || null,
         matchStatus,
         aflFantasyId: p.aflFantasyId || null,
+        isOnField: tp.isOnField ?? true,
+        selectionStatus: p.selectionStatus || "selected",
+        fieldPosition: tp.fieldPosition || p.position?.split("/")[0] || "MID",
       };
     });
 

@@ -4,7 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Star, Info, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Star, Info, ChevronLeft, ChevronRight, Download, LayoutGrid, List } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -46,7 +46,12 @@ interface LivePlayerScore {
   timeOnGround: number | null;
   matchStatus: string;
   aflFantasyId: number | null;
+  isOnField: boolean;
+  selectionStatus: string;
+  fieldPosition: string;
 }
+
+type ScoreViewMode = "combined" | "position";
 
 interface LiveRoundData {
   round: number;
@@ -320,11 +325,12 @@ function PlayerScoreRow({ player, round, expanded, onToggle }: {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="text-sm font-medium">{player.playerName}</span>
+            <span className={`text-sm font-medium ${!player.isOnField ? "text-muted-foreground" : ""}`}>{player.playerName}</span>
             {player.isCaptain && <Badge className="text-[8px] px-1 py-0 bg-accent text-accent-foreground">C</Badge>}
             {player.isViceCaptain && <Badge variant="outline" className="text-[8px] px-1 py-0">VC</Badge>}
+            {!player.isOnField && <Badge variant="outline" className="text-[8px] px-1 py-0 opacity-60">BENCH</Badge>}
           </div>
-          <span className="text-[10px] text-muted-foreground">{player.position} • {getTeamAbbr(player.team)}</span>
+          <span className="text-[10px] text-muted-foreground">{player.fieldPosition || player.position} • {getTeamAbbr(player.team)}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -401,6 +407,7 @@ export default function LiveScoresPage() {
   const [expandedPlayer, setExpandedPlayer] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
+  const [scoreViewMode, setScoreViewMode] = useState<ScoreViewMode>("combined");
 
   const roundParam = selectedRound !== null ? `?round=${selectedRound}` : "";
 
@@ -477,7 +484,10 @@ export default function LiveScoresPage() {
   const upcomingMatches = data?.matches.filter((m) => m.complete === 0) || [];
   const completedMatches = data?.matches.filter((m) => m.complete === 100) || [];
 
-  const sortedPlayers = [...(data?.myTeamScores || [])].sort((a, b) => b.effectiveScore - a.effectiveScore);
+  const selectedPlayers = (data?.myTeamScores || []).filter(
+    p => p.selectionStatus !== "omitted"
+  );
+  const sortedPlayers = [...selectedPlayers].sort((a, b) => b.effectiveScore - a.effectiveScore);
 
   const liveCount = liveMatches.length;
   const hasLiveGames = liveCount > 0;
@@ -648,21 +658,71 @@ export default function LiveScoresPage() {
                 <Trophy className="w-4 h-4 text-accent" />
                 My Team Scores
               </span>
-              <span className="text-xs text-muted-foreground font-normal">
-                {sortedPlayers.length} players
-              </span>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+                  <Button
+                    size="sm"
+                    variant={scoreViewMode === "combined" ? "default" : "ghost"}
+                    className="gap-1 text-[10px] h-6 px-2 font-normal"
+                    onClick={() => setScoreViewMode("combined")}
+                    data-testid="button-score-combined"
+                  >
+                    <List className="w-3 h-3" />
+                    By Score
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={scoreViewMode === "position" ? "default" : "ghost"}
+                    className="gap-1 text-[10px] h-6 px-2 font-normal"
+                    onClick={() => setScoreViewMode("position")}
+                    data-testid="button-score-position"
+                  >
+                    <LayoutGrid className="w-3 h-3" />
+                    By Position
+                  </Button>
+                </div>
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  {sortedPlayers.filter(p => p.isOnField).length} on-field
+                </span>
+              </div>
             </CardTitle>
           </CardHeader>
           <div>
-            {sortedPlayers.map((p) => (
-              <PlayerScoreRow
-                key={p.playerId}
-                player={p}
-                round={currentRound}
-                expanded={expandedPlayer === p.playerId}
-                onToggle={() => setExpandedPlayer(expandedPlayer === p.playerId ? null : p.playerId)}
-              />
-            ))}
+            {scoreViewMode === "combined" ? (
+              sortedPlayers.map((p) => (
+                <PlayerScoreRow
+                  key={p.playerId}
+                  player={p}
+                  round={currentRound}
+                  expanded={expandedPlayer === p.playerId}
+                  onToggle={() => setExpandedPlayer(expandedPlayer === p.playerId ? null : p.playerId)}
+                />
+              ))
+            ) : (
+              ["DEF", "MID", "RUC", "FWD", "UTIL"].map((pos) => {
+                const posPlayers = sortedPlayers.filter(p => p.fieldPosition === pos);
+                if (posPlayers.length === 0) return null;
+                const posLabels: Record<string, string> = { DEF: "Defenders", MID: "Midfielders", RUC: "Rucks", FWD: "Forwards", UTIL: "Utility" };
+                return (
+                  <div key={pos}>
+                    <div className="px-3 py-1.5 bg-muted/40 border-b border-t" data-testid={`group-${pos.toLowerCase()}`}>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        {posLabels[pos] || pos} ({posPlayers.length})
+                      </span>
+                    </div>
+                    {posPlayers.map((p) => (
+                      <PlayerScoreRow
+                        key={p.playerId}
+                        player={p}
+                        round={currentRound}
+                        expanded={expandedPlayer === p.playerId}
+                        onToggle={() => setExpandedPlayer(expandedPlayer === p.playerId ? null : p.playerId)}
+                      />
+                    ))}
+                  </div>
+                );
+              })
+            )}
           </div>
         </Card>
       )}
