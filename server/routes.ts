@@ -15,6 +15,7 @@ import {
   buildWeightConfig,
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
+import { evaluateTrade } from "./services/trade-optimizer";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
@@ -385,6 +386,20 @@ export async function registerRoutes(
       await storage.deleteTradeRecommendation(tradeId);
 
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/trade-evaluate", async (req, res) => {
+    try {
+      const { candidateId } = req.body as { candidateId: number };
+      if (!candidateId) return res.status(400).json({ message: "candidateId required" });
+      const settings = await storage.getSettings();
+      const myTeam = await storage.getMyTeam();
+      const teamPlayerIds = myTeam.map(p => p.id);
+      const evaluation = await evaluateTrade(candidateId, teamPlayerIds, settings.currentRound);
+      res.json(evaluation);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

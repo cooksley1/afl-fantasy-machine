@@ -47,6 +47,9 @@ export const players = pgTable("players", {
   breakoutScore: real("breakout_score").default(null),
   tagRisk: real("tag_risk").default(null),
   isExpectedTagger: boolean("is_expected_tagger").notNull().default(false),
+  avgTog: real("avg_tog").default(null),
+  seasonCba: real("season_cba").default(null),
+  ppm: real("ppm").default(null),
 });
 
 export const weeklyStats = pgTable("weekly_stats", {

@@ -247,6 +247,8 @@ export async function expandPlayerDatabase(): Promise<number> {
           position: real.position,
           dualPosition: real.dualPosition || null,
           team: real.team,
+          seasonCba: real.cbaPercent || null,
+          ppm: real.ppm || null,
         })
         .where(eq(players.id, existing.id));
       reconciled++;
@@ -296,6 +298,8 @@ export async function expandPlayerDatabase(): Promise<number> {
       priceChange: 0,
       breakEven,
       ceilingScore: Math.round(rp.maxScore),
+      seasonCba: rp.cbaPercent || null,
+      ppm: rp.ppm || null,
     });
     added++;
   }
@@ -578,13 +582,25 @@ export async function recalculatePlayerAverages(): Promise<number> {
     playerId: weeklyStats.playerId,
     round: weeklyStats.round,
     fantasyScore: weeklyStats.fantasyScore,
+    timeOnGroundPercent: weeklyStats.timeOnGroundPercent,
+    centreBounceAttendancePercent: weeklyStats.centreBounceAttendancePercent,
   }).from(weeklyStats).orderBy(weeklyStats.round);
 
   const byPlayer: Record<number, number[]> = {};
+  const togByPlayer: Record<number, number[]> = {};
+  const cbaByPlayer: Record<number, number[]> = {};
   for (const s of allStats) {
     if (s.fantasyScore === null || s.fantasyScore === undefined) continue;
     if (!byPlayer[s.playerId]) byPlayer[s.playerId] = [];
     byPlayer[s.playerId].push(s.fantasyScore);
+    if (s.timeOnGroundPercent !== null && s.timeOnGroundPercent !== undefined) {
+      if (!togByPlayer[s.playerId]) togByPlayer[s.playerId] = [];
+      togByPlayer[s.playerId].push(s.timeOnGroundPercent);
+    }
+    if (s.centreBounceAttendancePercent !== null && s.centreBounceAttendancePercent !== undefined) {
+      if (!cbaByPlayer[s.playerId]) cbaByPlayer[s.playerId] = [];
+      cbaByPlayer[s.playerId].push(s.centreBounceAttendancePercent);
+    }
   }
 
   const allPlayers = await db.select().from(players);
@@ -608,6 +624,18 @@ export async function recalculatePlayerAverages(): Promise<number> {
 
     const formTrend = deriveFormTrend(last5Avg, avgScore);
 
+    const togScores = togByPlayer[p.id];
+    const avgTog = togScores && togScores.length > 0
+      ? Math.round((togScores.reduce((a, b) => a + b, 0) / togScores.length) * 10) / 10
+      : p.avgTog;
+    const cbaScores = cbaByPlayer[p.id];
+    const seasonCba = cbaScores && cbaScores.length > 0
+      ? Math.round((cbaScores.reduce((a, b) => a + b, 0) / cbaScores.length) * 10) / 10
+      : p.seasonCba;
+    const computedPpm = avgTog && avgTog > 0
+      ? Math.round((avgScore / (avgTog * 0.01 * 120)) * 100) / 100
+      : p.ppm;
+
     const needsUpdate =
       Math.abs((p.avgScore || 0) - avgScore) > 0.1 ||
       Math.abs((p.last3Avg || 0) - last3Avg) > 0.1 ||
@@ -624,6 +652,9 @@ export async function recalculatePlayerAverages(): Promise<number> {
         seasonTotal,
         breakEven,
         formTrend,
+        ...(avgTog !== null && avgTog !== undefined ? { avgTog } : {}),
+        ...(seasonCba !== null && seasonCba !== undefined ? { seasonCba } : {}),
+        ...(computedPpm !== null && computedPpm !== undefined ? { ppm: computedPpm } : {}),
       }).where(eq(players.id, p.id));
       updated++;
     }
