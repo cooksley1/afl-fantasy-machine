@@ -14,7 +14,8 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 
 ## Architecture
 - `shared/schema.ts` - Drizzle schemas for Players, WeeklyStats, TeamContext, PositionConcessions, Projections, ModelWeights, MyTeamPlayers, TradeRecommendations, LeagueSettings, IntelReports, IntelSources, LateChanges, Conversations, Messages, Users
-- `server/services/projection-engine.ts` - All projection/scoring calculation functions with configurable weights: normalCDF, bayesianAdjustedAvg, calcProjectedFloor, calcProjectedCeiling, calcVolatilityScore, calcCaptainProbability, calcConsistencyRating, calcTradeEV, calcTradeRankingScore, calcTradeConfidence, calcBlendedProjection, calcMultiplierProjection (Base × Matchup × Form × TOG), calcValueGap (projected avg - price-implied avg), calcSeasonTradeGain (projDiff × remainingRounds), classifyCashGeneration, isDebutantCandidate, generateRecentScores, generateAge, generateYearsExperience, generateDurabilityScore, generateInjuryRiskScore
+- `server/services/projection-engine.ts` - All projection/scoring calculation functions with configurable weights: normalCDF, bayesianAdjustedAvg, calcProjectedFloor, calcProjectedCeiling, calcVolatilityScore, calcCaptainProbability, calcConsistencyRating, calcTradeEV, calcTradeRankingScore, calcTradeConfidence, calcBlendedProjection, calcMultiplierProjection (Base × Matchup × Form × TOG), calcValueGap (projected avg - price-implied avg), calcSeasonTradeGain (projDiff × remainingRounds), classifyCashGeneration, isDebutantCandidate, generateRecentScores, generateAge, generateYearsExperience, generateDurabilityScore, generateInjuryRiskScore, calcBreakoutScore (CBA×0.40 + TOG×0.25 + Disposal×0.20 + Age×0.15)
+- `server/services/simulation-engine.ts` - Monte Carlo simulation: simulateRound() runs 10,000 iterations with normal distributions per player, returns expected/median/floor/ceiling/stdDev/histogram/percentiles/risk contributors
 - `server/services/__tests__/projection-engine.test.ts` - 85 unit tests covering all calculation functions
 - `vitest.config.ts` - Vitest config for server-side unit tests
 - `server/db.ts` - Database connection pool
@@ -35,7 +36,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 ## Data Model
 ### Players Table (795 players from 18 AFL teams)
 Core fields: name, team, position, dualPosition, price, startingPrice, avgScore, last3Avg, last5Avg, seasonTotal, gamesPlayed, ownedByPercent, formTrend, injuryStatus, nextOpponent, byeRound, venue, gameTime, priceChange, breakEven, isNamedTeam, lateChange, isDebutant, debutRound, cashGenPotential, recentScores, aflFantasyId
-Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingScore (volatility-derived), consistencyRating, scoreStdDev, volatilityScore, captainProbability (P(score>=120) via normal CDF), age, yearsExperience, durabilityScore, injuryRiskScore
+Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingScore (volatility-derived), consistencyRating, scoreStdDev, volatilityScore, captainProbability (P(score>=120) via normal CDF), age, yearsExperience, durabilityScore, injuryRiskScore, breakoutScore (0-1 scale: CBA×0.40 + TOG×0.25 + Disposal×0.20 + Age×0.15)
 
 ### ModelWeights Table (40 configurable weights)
 - key (unique text), value (real), description, category (projection/captain/consistency/trade/debutant)
@@ -105,6 +106,8 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `GET /api/late-changes` - Late changes for current round
 - `POST /api/late-changes` - Create late change
 - `GET /api/scheduler/status` - Scheduler status
+- `POST /api/simulate-round` - Monte Carlo simulation (10,000 iterations) of current team's round score
+- `GET /api/breakout-candidates` - Players with breakoutScore >= 0.50, sorted descending
 - `GET /api/weekly-stats/:playerId` - Player weekly stats
 - `GET /api/team-context` - All team contexts
 - `GET /api/position-concessions` - All position concessions

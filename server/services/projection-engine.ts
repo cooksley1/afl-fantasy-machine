@@ -322,6 +322,32 @@ export function generateRecentScores(avg: number, stdDev: number, count: number 
   return scores;
 }
 
+export interface BreakoutInput {
+  formTrend: string;
+  last3Avg: number;
+  avgScore: number;
+  age: number | null;
+}
+
+export function calcBreakoutScore(player: BreakoutInput): number {
+  const { formTrend, last3Avg, avgScore, age } = player;
+
+  let cbaProxy: number;
+  if (formTrend === "up") cbaProxy = 0.7;
+  else if (formTrend === "stable") cbaProxy = 0.4;
+  else cbaProxy = 0.1;
+
+  const togProxy = avgScore > 0 ? Math.max(0, Math.min(1, last3Avg / avgScore)) : 0.5;
+
+  const disposalProxy = avgScore > 0 ? Math.max(0, Math.min(1, (last3Avg - avgScore) / avgScore)) : 0;
+
+  let ageFactor = 0.6;
+  if (age !== null && age >= 22 && age <= 25) ageFactor = 1.0;
+
+  const score = (cbaProxy * 0.40) + (togProxy * 0.25) + (disposalProxy * 0.20) + (ageFactor * 0.15);
+  return Math.round(Math.max(0, Math.min(1, score)) * 100) / 100;
+}
+
 export function generateAge(price: number, avgScore: number): number {
   if (price <= 150000) return 18 + Math.floor(Math.random() * 2);
   if (price <= 250000) return 19 + Math.floor(Math.random() * 3);

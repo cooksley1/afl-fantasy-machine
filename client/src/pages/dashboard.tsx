@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,10 +19,28 @@ import {
   Shield,
   Zap,
   Calendar,
+  Flame,
+  Loader2,
+  Activity,
 } from "lucide-react";
 import { ErrorState } from "@/components/error-state";
 import { useLocation } from "wouter";
-import type { PlayerWithTeamInfo, LeagueSettings, TradeRecommendationWithPlayers } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, ReferenceLine, Tooltip } from "recharts";
+import type { Player, PlayerWithTeamInfo, LeagueSettings, TradeRecommendationWithPlayers } from "@shared/schema";
+
+interface SimulationResult {
+  expectedTotal: number;
+  medianTotal: number;
+  floor: number;
+  ceiling: number;
+  stdDev: number;
+  histogram: { bucket: string; count: number }[];
+  playerRiskContributions: { name: string; team: string; variance: number; stdDev: number }[];
+  percentiles: { p25: number; p75: number; p90: number; p95: number };
+  iterations: number;
+}
 
 function FormTrendIcon({ trend }: { trend: string }) {
   if (trend === "up") return <TrendingUp className="w-3.5 h-3.5 text-green-500" />;
@@ -36,6 +55,23 @@ function formatPrice(price: number): string {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
+  const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+  const { toast } = useToast();
+
+  const simulationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/simulate-round");
+      return res.json() as Promise<SimulationResult>;
+    },
+    onSuccess: (data) => setSimResult(data),
+    onError: (error: Error) => {
+      toast({
+        title: "Simulation failed",
+        description: error.message || "Could not run simulation. Try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: teamPlayers, isLoading: loadingTeam, isError: errorTeam, refetch: refetchTeam } = useQuery<PlayerWithTeamInfo[]>({
     queryKey: ["/api/my-team"],
@@ -51,6 +87,10 @@ export default function Dashboard() {
 
   const { data: gameRules } = useQuery<any>({
     queryKey: ["/api/game-rules"],
+  });
+
+  const { data: breakoutCandidates } = useQuery<Player[]>({
+    queryKey: ["/api/breakout-candidates"],
   });
 
   const isLoading = loadingTeam || loadingSettings || loadingTrades;
@@ -464,6 +504,129 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <Card data-testid="card-simulation">
+        <CardHeader className="pb-2 px-4 pt-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-violet-500" />
+              Round Simulation
+            </CardTitle>
+            <Button
+              size="sm"
+              variant={simResult ? "outline" : "default"}
+              onClick={() => simulationMutation.mutate()}
+              disabled={simulationMutation.isPending}
+              data-testid="button-run-simulation"
+              className="text-xs h-7"
+            >
+              {simulationMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Simulating...
+                </>
+              ) : simResult ? "Re-run" : "Run Simulation"}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            10,000 iteration Monte Carlo simulation of your team's round score
+          </p>
+        </CardHeader>
+        <CardContent className="px-3 pb-3">
+          {!simResult && !simulationMutation.isPending && (
+            <div className="text-center py-8 text-muted-foreground text-sm" data-testid="text-simulation-prompt">
+              Click "Run Simulation" to model your team's scoring range
+            </div>
+          )}
+          {simulationMutation.isPending && (
+            <div className="flex flex-col items-center justify-center py-8 gap-2" data-testid="simulation-loading">
+              <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+              <p className="text-sm text-muted-foreground">Running 10,000 simulations...</p>
+            </div>
+          )}
+          {simResult && !simulationMutation.isPending && (
+            <div className="space-y-4" data-testid="simulation-results">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="bg-muted/30 rounded-md p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expected</p>
+                  <p className="text-lg font-bold font-mono" data-testid="text-sim-expected">{Math.round(simResult.expectedTotal)}</p>
+                </div>
+                <div className="bg-muted/30 rounded-md p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Median</p>
+                  <p className="text-lg font-bold font-mono" data-testid="text-sim-median">{Math.round(simResult.medianTotal)}</p>
+                </div>
+                <div className="bg-muted/30 rounded-md p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Floor (10th)</p>
+                  <p className="text-lg font-bold font-mono text-red-500" data-testid="text-sim-floor">{Math.round(simResult.floor)}</p>
+                </div>
+                <div className="bg-muted/30 rounded-md p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ceiling (90th)</p>
+                  <p className="text-lg font-bold font-mono text-green-500" data-testid="text-sim-ceiling">{Math.round(simResult.ceiling)}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium mb-1 text-muted-foreground">Score Distribution</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={simResult.histogram} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                    <XAxis dataKey="bucket" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                    <YAxis hide />
+                    <Tooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                      formatter={(value: number) => [`${value} sims`, "Count"]}
+                    />
+                    <ReferenceLine
+                      x={simResult.histogram.reduce((best, h) => h.count > best.count ? h : best, simResult.histogram[0])?.bucket}
+                      stroke="hsl(var(--primary))"
+                      strokeDasharray="3 3"
+                      strokeWidth={1}
+                    />
+                    <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+                      {simResult.histogram.map((entry, index) => {
+                        const bucketVal = parseInt(entry.bucket);
+                        const isFloor = bucketVal <= simResult.floor;
+                        const isCeiling = bucketVal >= simResult.ceiling;
+                        return (
+                          <Cell
+                            key={index}
+                            fill={isFloor ? "hsl(0 70% 50% / 0.5)" : isCeiling ? "hsl(142 70% 45% / 0.5)" : "hsl(var(--primary) / 0.7)"}
+                          />
+                        );
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {simResult.playerRiskContributions.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium mb-1.5 text-muted-foreground flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Top Variance Contributors
+                  </p>
+                  <div className="space-y-1">
+                    {simResult.playerRiskContributions.slice(0, 3).map((p, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/20" data-testid={`card-risk-contributor-${i}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{p.team}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                          ±{p.stdDev.toFixed(1)}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[10px] text-muted-foreground text-center">
+                Based on {simResult.iterations.toLocaleString()} iterations • P25: {Math.round(simResult.percentiles.p25)} | P75: {Math.round(simResult.percentiles.p75)} | P95: {Math.round(simResult.percentiles.p95)}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {hotBenchPlayers.length > 0 && (
         <Card>
           <CardHeader className="pb-2 px-4 pt-4">
@@ -497,6 +660,82 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {breakoutCandidates && breakoutCandidates.length > 0 && (
+        <Card data-testid="card-breakout-candidates">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-500" />
+                Breakout Candidates
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => navigate("/form-guide")}
+                data-testid="button-view-all-breakouts"
+              >
+                View All <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Players showing breakout potential based on form, output, and age
+            </p>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-0.5">
+            {breakoutCandidates.slice(0, 8).map((player) => {
+              const isHot = (player.breakoutScore ?? 0) >= 0.65;
+              return (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between py-2.5 px-2 rounded-md hover-elevate cursor-pointer"
+                  data-testid={`card-breakout-${player.id}`}
+                  onClick={() => navigate(`/player/${player.id}`)}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${isHot ? 'bg-red-500/10' : 'bg-amber-500/10'}`}>
+                      <Flame className={`w-3.5 h-3.5 ${isHot ? 'text-red-500' : 'text-amber-500'}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{player.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {player.team} | {player.position}{player.dualPosition ? `/${player.dualPosition}` : ''} | {formatPrice(player.price)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-mono">{player.avgScore?.toFixed(1)}</p>
+                      <p className="text-[9px] text-muted-foreground">Avg</p>
+                    </div>
+                    <div className="w-16 sm:w-20">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${isHot ? 'bg-red-500' : 'bg-amber-500'}`}
+                            style={{ width: `${Math.min(100, (player.breakoutScore ?? 0) * 100)}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-mono font-bold ${isHot ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'}`}
+                              data-testid={`text-breakout-score-${player.id}`}>
+                          {((player.breakoutScore ?? 0) * 100).toFixed(0)}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={isHot ? "destructive" : "secondary"}
+                      className="text-[9px] shrink-0"
+                    >
+                      {isHot ? 'Hot' : 'Warm'}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

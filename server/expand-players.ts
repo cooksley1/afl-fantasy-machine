@@ -23,6 +23,7 @@ import {
   generateDurabilityScore,
   generateInjuryRiskScore,
   calcTradeEV,
+  calcBreakoutScore,
 } from "./services/projection-engine";
 
 interface RealPlayer {
@@ -347,6 +348,24 @@ export async function populateConsistencyData(): Promise<number> {
       .where(eq(players.id, p.id));
   }
 
+  const allPlayersForBreakout = await db.select().from(players);
+  let breakoutUpdated = 0;
+  for (const p of allPlayersForBreakout) {
+    const bScore = calcBreakoutScore({
+      formTrend: p.formTrend,
+      last3Avg: p.last3Avg || 0,
+      avgScore: p.avgScore || 0,
+      age: p.age,
+    });
+    if (bScore !== p.breakoutScore) {
+      await db.update(players).set({ breakoutScore: bScore }).where(eq(players.id, p.id));
+      breakoutUpdated++;
+    }
+  }
+  if (breakoutUpdated > 0) {
+    console.log(`[ExpandPlayers] Updated breakout scores for ${breakoutUpdated} players`);
+  }
+
   if (needsUpdate.length === 0) {
     if (needsAdvancedUpdate.length > 0) {
       console.log(`[ExpandPlayers] Updated advanced metrics for ${needsAdvancedUpdate.length} players`);
@@ -423,6 +442,7 @@ export async function populateConsistencyData(): Promise<number> {
   }
 
   console.log(`[ExpandPlayers] Populated consistency + advanced data for ${updated} players`);
+
   return updated;
 }
 

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,22 @@ import {
   ArrowRightLeft,
   Star,
   Brain,
+  Activity,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Legend,
+  ComposedChart,
+} from "recharts";
 import type { Player } from "@shared/schema";
 
 interface PlayerReportData {
@@ -58,6 +74,189 @@ function TrendIcon({ trend }: { trend: string }) {
   if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-500" />;
   if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-500" />;
   return <Minus className="w-4 h-4 text-muted-foreground" />;
+}
+
+function parseRecentScores(recentScores: string | null): number[] {
+  if (!recentScores) return [];
+  return recentScores
+    .split(",")
+    .map((s) => parseFloat(s.trim()))
+    .filter((n) => !isNaN(n));
+}
+
+function computeRollingAvg(scores: number[], window: number): (number | null)[] {
+  return scores.map((_, i) => {
+    if (i < window - 1) return null;
+    const slice = scores.slice(i - window + 1, i + 1);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
+}
+
+function PerformanceCharts({ player }: { player: Player }) {
+  const scores = useMemo(() => parseRecentScores(player.recentScores), [player.recentScores]);
+
+  const scoreHistoryData = useMemo(() => {
+    return scores.map((score, i) => ({
+      round: `R${i + 1}`,
+      score,
+    }));
+  }, [scores]);
+
+  const rollingAvgData = useMemo(() => {
+    const l3 = computeRollingAvg(scores, 3);
+    const l5 = computeRollingAvg(scores, 5);
+    return scores.map((_, i) => ({
+      round: `R${i + 1}`,
+      l3Avg: l3[i] !== null ? Math.round(l3[i]! * 10) / 10 : undefined,
+      l5Avg: l5[i] !== null ? Math.round(l5[i]! * 10) / 10 : undefined,
+    }));
+  }, [scores]);
+
+  const priceData = useMemo(() => {
+    const l3 = computeRollingAvg(scores, 3);
+    const startPrice = player.startingPrice || player.price;
+    return scores.map((_, i) => {
+      const estimatedPrice = l3[i] !== null ? Math.round(l3[i]! * 5500) : null;
+      return {
+        round: `R${i + 1}`,
+        price: estimatedPrice !== null ? estimatedPrice : i === 0 ? startPrice : undefined,
+      };
+    });
+  }, [scores, player.startingPrice, player.price]);
+
+  if (scores.length < 2) return null;
+
+  const avgScore = player.avgScore || 0;
+
+  return (
+    <div className="space-y-4" data-testid="section-performance-charts">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
+        <Activity className="w-5 h-5 text-primary" />
+        Performance Charts
+      </h2>
+
+      <div className="grid grid-cols-1 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              Score History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={scoreHistoryData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="round" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  labelStyle={{ fontWeight: 600 }}
+                />
+                <ReferenceLine
+                  y={avgScore}
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeDasharray="4 4"
+                  label={{ value: `Avg ${avgScore.toFixed(0)}`, position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                />
+                <Bar dataKey="score" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} opacity={0.8} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-green-500" />
+              Rolling Averages
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={rollingAvgData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="round" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  labelStyle={{ fontWeight: 600 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <ReferenceLine
+                  y={avgScore}
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeDasharray="4 4"
+                  label={{ value: `Season Avg`, position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="l3Avg"
+                  name="L3 Avg"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="l5Avg"
+                  name="L5 Avg"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-yellow-500" />
+              Estimated Price Movement
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={priceData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="round" tick={{ fontSize: 11 }} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}K`}
+                  domain={["auto", "auto"]}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  labelStyle={{ fontWeight: 600 }}
+                  formatter={(value: number) => [`$${(value / 1000).toFixed(1)}K`, "Est. Price"]}
+                />
+                {player.startingPrice && (
+                  <ReferenceLine
+                    y={player.startingPrice}
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeDasharray="4 4"
+                    label={{ value: "Start", position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ label, value, subtext }: { label: string; value: string; subtext?: string }) {
@@ -164,6 +363,8 @@ export default function PlayerReport() {
         <StatCard label="Durability" value={player.durabilityScore ? `${(player.durabilityScore * 100).toFixed(0)}%` : "N/A"} />
         <StatCard label="Injury Risk" value={player.injuryRiskScore ? `${(player.injuryRiskScore * 100).toFixed(0)}%` : "N/A"} subtext={player.injuryRiskScore !== null ? (player.injuryRiskScore < 0.2 ? "Low" : player.injuryRiskScore < 0.4 ? "Medium" : "High") : undefined} />
       </div>
+
+      <PerformanceCharts player={player} />
 
       <Card>
         <CardHeader className="pb-2">

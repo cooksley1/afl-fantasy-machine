@@ -21,6 +21,7 @@ import {
   Gauge,
   Star,
   DollarSign,
+  Zap,
 } from "lucide-react";
 import type { Player } from "@shared/schema";
 
@@ -166,6 +167,10 @@ export default function FormGuide() {
       return (b.avgScore || 0) - (a.avgScore || 0);
     });
 
+  const breakoutPlayers = [...filtered]
+    .filter((p) => (p.breakoutScore ?? 0) >= 0.50)
+    .sort((a, b) => (b.breakoutScore ?? 0) - (a.breakoutScore ?? 0));
+
   const teams = [
     "All Teams",
     ...Array.from(new Set(allPlayers.map((p) => p.team))).sort(),
@@ -196,7 +201,7 @@ export default function FormGuide() {
 
       <Tabs defaultValue="hot">
         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsList className="inline-flex w-auto min-w-full sm:grid sm:grid-cols-6 sm:w-full">
+          <TabsList className="inline-flex w-auto min-w-full sm:grid sm:grid-cols-7 sm:w-full">
             <TabsTrigger value="hot" className="text-xs sm:text-sm" data-testid="tab-hot">
               <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Hot
             </TabsTrigger>
@@ -211,6 +216,12 @@ export default function FormGuide() {
             </TabsTrigger>
             <TabsTrigger value="consistent" className="text-xs sm:text-sm" data-testid="tab-consistent">
               <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Consistent
+            </TabsTrigger>
+            <TabsTrigger value="breakouts" className="text-xs sm:text-sm" data-testid="tab-breakouts">
+              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Breakouts
+              {breakoutPlayers.length > 0 && (
+                <span className="ml-1 text-[10px] opacity-70">({breakoutPlayers.length})</span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="debutants" className="text-xs sm:text-sm" data-testid="tab-debutants">
               <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> Debutants
@@ -255,6 +266,10 @@ export default function FormGuide() {
 
         <TabsContent value="consistent">
           <ConsistentList players={mostConsistent} />
+        </TabsContent>
+
+        <TabsContent value="breakouts">
+          <BreakoutList players={breakoutPlayers} />
         </TabsContent>
 
         <TabsContent value="debutants">
@@ -496,6 +511,101 @@ function DebutantList({ players }: { players: Player[] }) {
                       <DollarSign className="w-2.5 h-2.5 inline" />
                       {player.cashGenPotential || 'none'}
                     </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function BreakoutList({ players }: { players: Player[] }) {
+  if (players.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <Zap className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <h3 className="font-semibold text-lg mb-1">No breakout candidates</h3>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
+            Breakout candidates are players showing signs of a significant scoring increase based on form trends,
+            output increases, and age profile.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card className="bg-orange-500/5 border-orange-500/20">
+        <CardContent className="p-3">
+          <p className="text-xs text-muted-foreground">
+            <Zap className="w-3 h-3 inline mr-1 text-orange-500" />
+            Breakout score combines form trend (40%), output increase (25%), disposal proxy (20%), and age factor (15%).
+            Scores above 65 are flagged as hot breakout candidates. Scores 50-64 are warm prospects to watch.
+          </p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-3 space-y-0.5">
+          {players.map((player, i) => {
+            const score = player.breakoutScore ?? 0;
+            const isHot = score >= 0.65;
+            return (
+              <div
+                key={player.id}
+                className="flex items-center justify-between py-3 px-3 rounded-md hover-elevate"
+                data-testid={`card-breakout-player-${player.id}`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-xs font-bold text-muted-foreground w-5 text-right">
+                    {i + 1}
+                  </span>
+                  <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${isHot ? 'bg-red-500/10' : 'bg-amber-500/10'}`}>
+                    <Zap className={`w-4 h-4 ${isHot ? 'text-red-500' : 'text-amber-500'}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold truncate">{player.name}</p>
+                      <Badge
+                        variant={isHot ? "destructive" : "secondary"}
+                        className="text-[10px]"
+                      >
+                        {isHot ? 'Hot' : 'Warm'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {player.team} | {player.position}{player.dualPosition ? `/${player.dualPosition}` : ''} | ${(player.price / 1000).toFixed(0)}K
+                      {player.age ? ` | Age ${player.age}` : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-mono">{player.avgScore?.toFixed(1)}</p>
+                    <p className="text-[10px] text-muted-foreground">Avg</p>
+                  </div>
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-mono">{player.last3Avg?.toFixed(1)}</p>
+                    <p className="text-[10px] text-muted-foreground">L3</p>
+                  </div>
+                  <div className="w-20 sm:w-24">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${isHot ? 'bg-red-500' : 'bg-amber-500'}`}
+                          style={{ width: `${Math.min(100, score * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-mono font-bold ${isHot ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'}`}
+                            data-testid={`text-breakout-score-${player.id}`}>
+                        {(score * 100).toFixed(0)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

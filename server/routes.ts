@@ -906,6 +906,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/breakout-candidates", async (_req, res) => {
+    try {
+      const allPlayers = await storage.getAllPlayers();
+      const candidates = allPlayers
+        .filter(p => (p.breakoutScore ?? 0) >= 0.50)
+        .sort((a, b) => (b.breakoutScore ?? 0) - (a.breakoutScore ?? 0));
+      res.json(candidates);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/players/update-fixtures", async (req, res) => {
     try {
       const round = req.body.round || 1;
@@ -923,6 +935,34 @@ export async function registerRoutes(
         }
       }
       res.json({ updated, round });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/simulate-round", async (_req, res) => {
+    try {
+      const { simulateRound } = await import("./services/simulation-engine");
+      const team = await storage.getMyTeam();
+      if (team.length === 0) {
+        return res.status(400).json({ message: "No team set up" });
+      }
+
+      const simPlayers = team.map(p => ({
+        id: p.id,
+        name: p.name,
+        team: p.team,
+        position: p.position,
+        projectedScore: p.projectedScore || p.avgScore || 50,
+        avgScore: p.avgScore || 50,
+        scoreStdDev: p.scoreStdDev || 15,
+        isCaptain: p.isCaptain || false,
+        isViceCaptain: p.isViceCaptain || false,
+        isOnField: p.isOnField !== false,
+      }));
+
+      const result = simulateRound(simPlayers);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
