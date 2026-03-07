@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ChevronDown, ChevronRight, ArrowRightLeft, Crown, Shield, TrendingUp, AlertTriangle, Target, Sparkles, BarChart3, DollarSign, Users, Calendar, Map, Check, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, ArrowRightLeft, Crown, Shield, TrendingUp, AlertTriangle, Target, Sparkles, BarChart3, DollarSign, Users, Calendar, Map, Check, ChevronUp, BookOpen, ShieldCheck, ShieldAlert, Trophy, ArrowRight, Info, Zap } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,6 +20,38 @@ interface SquadPlayer {
   byeRound: number | null;
   ppm: number | null;
   role: string;
+  narrative?: string;
+  peakRound?: number | null;
+  peakPrice?: number | null;
+  ceilingScore?: number | null;
+  owned?: number;
+}
+
+interface TradeAlternative {
+  id: number;
+  name: string;
+  team: string;
+  avgScore: number;
+  price: number;
+  reason: string;
+}
+
+interface WinnerComparison {
+  winnerAvgScore: number;
+  yourScore: number;
+  scoreDiff: number;
+  winnerTeamValue: number;
+  yourTeamValue: number;
+  valueDiff: number;
+  winnerPremiums: number;
+  yourPremiums: number;
+  onTrack: boolean;
+}
+
+interface ValidationItem {
+  check: string;
+  passed: boolean;
+  detail: string;
 }
 
 interface WeeklyPlan {
@@ -35,9 +67,12 @@ interface WeeklyPlan {
     reasoning: string;
     pointsGain: number;
     cashImpact: number;
+    alternatives?: TradeAlternative[];
+    contingency?: string;
   }>;
   structureNotes: string[];
   squad: SquadPlayer[];
+  winnerComparison?: WinnerComparison;
   keyMetrics: {
     teamValue: number;
     cashInBank: number;
@@ -53,7 +88,12 @@ interface SeasonPlanData {
   id: number;
   overallStrategy: string;
   weeklyPlans: WeeklyPlan[];
-  teamSnapshot: { startingSquad?: SquadPlayer[] };
+  teamSnapshot: {
+    startingSquad?: SquadPlayer[];
+    playerNarratives?: Array<{ id: number; name: string; narrative: string }>;
+    validation?: ValidationItem[];
+    winnerBenchmark?: { avgTotal: number; avgPerRound: number };
+  };
   totalProjectedScore: number;
   currentRound: number;
 }
@@ -80,8 +120,105 @@ const roleColors: Record<string, string> = {
   Value: "bg-muted text-muted-foreground",
 };
 
+function ValidationBadge({ validation }: { validation: ValidationItem[] }) {
+  const passed = validation.filter(v => v.passed).length;
+  const total = validation.length;
+  const allPassed = passed === total;
+  const [showDetail, setShowDetail] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowDetail(!showDetail)}
+        className={`gap-2 text-xs font-semibold ${allPassed ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}
+        data-testid="button-toggle-validation"
+      >
+        {allPassed ? <ShieldCheck className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
+        Plan Validated: {passed}/{total} checks passed
+        {showDetail ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </Button>
+      {showDetail && (
+        <div className="space-y-1 pl-1">
+          {validation.map((item, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-md ${item.passed ? "bg-emerald-500/5 text-emerald-700 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"}`}
+              data-testid={`validation-item-${i}`}
+            >
+              {item.passed ? <Check className="w-3 h-3 shrink-0" /> : <AlertTriangle className="w-3 h-3 shrink-0" />}
+              <span className="font-medium shrink-0">{item.check}:</span>
+              <span className="flex-1">{item.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WinnerTracker({ comparison }: { comparison: WinnerComparison }) {
+  const scorePct = comparison.winnerAvgScore > 0
+    ? Math.round((comparison.yourScore / comparison.winnerAvgScore) * 100)
+    : 0;
+
+  return (
+    <div className="rounded-md border p-3 space-y-2" data-testid="winner-comparison">
+      <div className="flex items-center gap-2">
+        <Trophy className="w-4 h-4 text-amber-500" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You vs Historical Winners</span>
+        {comparison.onTrack ? (
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">On Track</Badge>
+        ) : (
+          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">Behind Pace</Badge>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-1">
+            <span className={`text-sm font-bold ${comparison.scoreDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {comparison.yourScore.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-muted-foreground">/ {comparison.winnerAvgScore.toLocaleString()}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Score ({scorePct}%)</p>
+        </div>
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-1">
+            <span className={`text-sm font-bold ${comparison.valueDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              ${(comparison.yourTeamValue / 1000000).toFixed(1)}M
+            </span>
+            <span className="text-[10px] text-muted-foreground">/ ${(comparison.winnerTeamValue / 1000000).toFixed(1)}M</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Team Value</p>
+        </div>
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-1">
+            <span className={`text-sm font-bold ${comparison.yourPremiums >= comparison.winnerPremiums ? "text-emerald-600" : "text-red-600"}`}>
+              {comparison.yourPremiums}
+            </span>
+            <span className="text-[10px] text-muted-foreground">/ {comparison.winnerPremiums}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Premiums</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SquadRoster({ squad, title }: { squad: SquadPlayer[]; title: string }) {
   const [showRoster, setShowRoster] = useState(false);
+  const [expandedNarratives, setExpandedNarratives] = useState<Set<number>>(new Set());
+
+  const toggleNarrative = (id: number) => {
+    setExpandedNarratives(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const posOrder = ["DEF", "MID", "RUC", "FWD", "UTIL"];
   const grouped: Record<string, SquadPlayer[]> = {};
@@ -109,20 +246,45 @@ function SquadRoster({ squad, title }: { squad: SquadPlayer[]; title: string }) 
           {posOrder.filter(pos => grouped[pos]?.length > 0).map(pos => (
             <div key={pos} className="space-y-1" data-testid={`roster-position-${pos}`}>
               <p className="text-[10px] font-bold text-muted-foreground/60 uppercase">{pos}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              <div className="grid grid-cols-1 gap-1">
                 {(grouped[pos] || []).sort((a, b) => b.avgScore - a.avgScore).map(p => (
-                  <div
-                    key={p.id}
-                    className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${p.isOnField ? "bg-muted/30" : "bg-muted/10 opacity-70"}`}
-                    data-testid={`roster-player-${p.id}`}
-                  >
-                    <span className="font-medium flex-1 truncate">{p.name}</span>
-                    <span className="text-muted-foreground text-[10px] shrink-0">{p.team}</span>
-                    <span className="font-semibold shrink-0">{p.avgScore}</span>
-                    <Badge variant="outline" className={`text-[8px] px-1 py-0 ${roleColors[p.role] || ""}`}>
-                      {p.role}
-                    </Badge>
-                    <span className="text-muted-foreground text-[10px] shrink-0">${(p.price / 1000).toFixed(0)}k</span>
+                  <div key={p.id} data-testid={`roster-player-${p.id}`}>
+                    <div className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${p.isOnField ? "bg-muted/30" : "bg-muted/10 opacity-70"}`}>
+                      <span className="font-medium flex-1 truncate">{p.name}</span>
+                      <span className="text-muted-foreground text-[10px] shrink-0">{p.team}</span>
+                      <span className="font-semibold shrink-0">{p.avgScore}</span>
+                      <Badge variant="outline" className={`text-[8px] px-1 py-0 ${roleColors[p.role] || ""}`}>
+                        {p.role}
+                      </Badge>
+                      <span className="text-muted-foreground text-[10px] shrink-0">${(p.price / 1000).toFixed(0)}k</span>
+                      {p.peakRound && (
+                        <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20">
+                          Peak R{p.peakRound}
+                        </Badge>
+                      )}
+                      {p.ceilingScore && (
+                        <span className="text-[10px] text-muted-foreground/60 shrink-0">ceil {p.ceilingScore}</span>
+                      )}
+                      {p.narrative && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 shrink-0"
+                          onClick={() => toggleNarrative(p.id)}
+                          data-testid={`button-narrative-${p.id}`}
+                        >
+                          {expandedNarratives.has(p.id)
+                            ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
+                            : <BookOpen className="w-3 h-3 text-muted-foreground" />}
+                        </Button>
+                      )}
+                    </div>
+                    {p.narrative && expandedNarratives.has(p.id) && (
+                      <div className="px-3 py-2 text-[11px] text-muted-foreground leading-relaxed bg-muted/10 rounded-b border-l-2 border-primary/20" data-testid={`narrative-player-${p.id}`}>
+                        <BookOpen className="w-3 h-3 inline mr-1.5 text-primary/50" />
+                        {p.narrative}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -136,7 +298,17 @@ function SquadRoster({ squad, title }: { squad: SquadPlayer[]; title: string }) 
 
 function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: WeeklyPlan; isCurrentRound: boolean; defaultOpen: boolean; myTeam: any[] | undefined }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [showAlts, setShowAlts] = useState<Set<number>>(new Set());
   const { toast } = useToast();
+
+  const toggleAlt = (idx: number) => {
+    setShowAlts(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
 
   const findMyTeamPlayerId = (playerId: number): number | null => {
     if (!myTeam) return null;
@@ -206,6 +378,14 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
               Loophole
             </Badge>
           )}
+          {plan.winnerComparison && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${plan.winnerComparison.onTrack ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}
+            >
+              {plan.winnerComparison.scoreDiff >= 0 ? "+" : ""}{Math.round(plan.winnerComparison.scoreDiff)} vs winners
+            </Badge>
+          )}
         </div>
         <div className="text-right shrink-0">
           <p className="text-sm font-semibold" data-testid={`text-projected-score-${plan.round}`}>
@@ -237,6 +417,10 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
                 </div>
               ))}
             </div>
+          )}
+
+          {plan.winnerComparison && (
+            <WinnerTracker comparison={plan.winnerComparison} />
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -335,7 +519,44 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
                       {trade.cashImpact >= 0 ? "+" : ""}${(trade.cashImpact / 1000).toFixed(0)}k cash
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{trade.reasoning}</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed" data-testid={`trade-reasoning-${plan.round}-${i}`}>
+                    {trade.reasoning}
+                  </p>
+
+                  {trade.contingency && (
+                    <div className="flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/5 rounded px-2 py-1.5" data-testid={`trade-contingency-${plan.round}-${i}`}>
+                      <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>{trade.contingency}</span>
+                    </div>
+                  )}
+
+                  {trade.alternatives && trade.alternatives.length > 0 && (
+                    <div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); toggleAlt(i); }}
+                        className="gap-1.5 text-[10px] text-muted-foreground h-6 px-2"
+                        data-testid={`button-toggle-alts-${plan.round}-${i}`}
+                      >
+                        <Zap className="w-3 h-3" />
+                        {showAlts.has(i) ? "Hide" : "Show"} {trade.alternatives.length} alternatives
+                        {showAlts.has(i) ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                      </Button>
+                      {showAlts.has(i) && (
+                        <div className="space-y-1 mt-1">
+                          {trade.alternatives.map((alt, ai) => (
+                            <div key={ai} className="flex items-center gap-2 text-[10px] px-2 py-1 rounded bg-muted/30" data-testid={`trade-alt-${plan.round}-${i}-${ai}`}>
+                              <ArrowRight className="w-3 h-3 shrink-0 text-muted-foreground" />
+                              <span className="font-medium">{alt.name}</span>
+                              <span className="text-muted-foreground">{alt.team} · avg {alt.avgScore} · ${(alt.price / 1000).toFixed(0)}k</span>
+                              <span className="text-muted-foreground/70 flex-1 truncate">{alt.reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -428,7 +649,7 @@ export default function SeasonRoadmap() {
           <Map className="w-12 h-12 mx-auto text-muted-foreground/40" />
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-roadmap-title">Season Roadmap</h1>
           <p className="text-muted-foreground text-sm max-w-md mx-auto">
-            Generate a data-backed strategy for every round of the season — specific players, specific trades, specific captain picks. One click and it's done.
+            Generate a coaching-level strategy for every round — specific players, trade logic, price trajectories, contingency plans, and historical winner benchmarking. One click and it's done.
           </p>
           <Button
             size="lg"
@@ -458,6 +679,8 @@ export default function SeasonRoadmap() {
     : plan.weeklyPlans;
 
   const startingSquad: SquadPlayer[] = plan.teamSnapshot?.startingSquad || [];
+  const validation: ValidationItem[] = plan.teamSnapshot?.validation || [];
+  const winnerBenchmark = plan.teamSnapshot?.winnerBenchmark;
 
   const phases = [
     { key: "launch", name: "Team Launch", rounds: "R0-R5", color: "bg-blue-500" },
@@ -523,6 +746,31 @@ export default function SeasonRoadmap() {
             </div>
           </div>
 
+          {winnerBenchmark && (
+            <div className="rounded-md border p-3 space-y-2" data-testid="winner-benchmark-summary">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Historical Winner Benchmark</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <p className="text-sm font-bold">{winnerBenchmark.avgPerRound.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">Winner Avg/Round</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold">{winnerBenchmark.avgTotal.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">Winner Season Total</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Your projected avg:</span>
+                <span className={`font-semibold ${avgScore >= winnerBenchmark.avgPerRound * 0.95 ? "text-emerald-600" : avgScore >= winnerBenchmark.avgPerRound * 0.85 ? "text-amber-600" : "text-red-600"}`}>
+                  {avgScore.toLocaleString()} ({Math.round((avgScore / winnerBenchmark.avgPerRound) * 100)}% of winners)
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 flex-wrap">
             {phases.map(phase => (
               <div key={phase.key} className="flex items-center gap-1.5" data-testid={`phase-indicator-${phase.key}`}>
@@ -531,6 +779,10 @@ export default function SeasonRoadmap() {
               </div>
             ))}
           </div>
+
+          {validation.length > 0 && (
+            <ValidationBadge validation={validation} />
+          )}
 
           {startingSquad.length > 0 && (
             <SquadRoster squad={startingSquad} title="Starting Squad" />

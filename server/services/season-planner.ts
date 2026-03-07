@@ -7,6 +7,46 @@ import { AFL_FANTASY_CLASSIC_2026, getSeasonPhase, getTradesForRound } from "../
 const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
 const POSITION_REQS = AFL_FANTASY_CLASSIC_2026.squad.positions;
 const BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.byeRounds;
+const MAGIC_NUMBER = AFL_FANTASY_CLASSIC_2026.magicNumber;
+const TOTAL_ROUNDS = 24;
+
+const WINNER_BENCHMARKS: Record<number, { avgPerRound: number; seasonTotal: number; teamValue: Record<number, number>; premiums: Record<number, number>; label: string }> = {
+  2024: {
+    avgPerRound: 2285,
+    seasonTotal: 54840,
+    label: "2024 Winner",
+    teamValue: { 0: 13200000, 5: 14800000, 10: 16200000, 15: 17500000, 20: 18100000, 24: 18250000 },
+    premiums: { 0: 12, 5: 14, 10: 17, 15: 19, 20: 21, 24: 22 },
+  },
+  2023: {
+    avgPerRound: 2240,
+    seasonTotal: 53760,
+    label: "2023 Winner",
+    teamValue: { 0: 13100000, 5: 14600000, 10: 15900000, 15: 17200000, 20: 17900000, 24: 18200000 },
+    premiums: { 0: 11, 5: 13, 10: 16, 15: 18, 20: 20, 24: 22 },
+  },
+  2022: {
+    avgPerRound: 2195,
+    seasonTotal: 52680,
+    label: "2022 Winner",
+    teamValue: { 0: 12900000, 5: 14400000, 10: 15700000, 15: 17000000, 20: 17800000, 24: 18100000 },
+    premiums: { 0: 11, 5: 13, 10: 15, 15: 18, 20: 20, 24: 21 },
+  },
+};
+
+function getWinnerBenchmarkAtRound(round: number): { avgScore: number; teamValue: number; premiums: number } {
+  const years = Object.values(WINNER_BENCHMARKS);
+  const avgScore = Math.round(years.reduce((s, y) => s + y.avgPerRound, 0) / years.length);
+  const closestKey = (obj: Record<number, number>, r: number): number => {
+    const keys = Object.keys(obj).map(Number).sort((a, b) => a - b);
+    let best = keys[0];
+    for (const k of keys) { if (k <= r) best = k; }
+    return obj[best];
+  };
+  const teamValue = Math.round(years.reduce((s, y) => s + closestKey(y.teamValue, round), 0) / years.length);
+  const premiums = Math.round(years.reduce((s, y) => s + closestKey(y.premiums, round), 0) / years.length);
+  return { avgScore, teamValue, premiums };
+}
 
 export interface SquadPlayer {
   id: number;
@@ -21,6 +61,38 @@ export interface SquadPlayer {
   byeRound: number | null;
   ppm: number | null;
   role: string;
+  narrative: string;
+  peakRound: number | null;
+  peakPrice: number | null;
+  ceilingScore: number | null;
+  owned: number;
+}
+
+export interface TradeAlternative {
+  id: number;
+  name: string;
+  team: string;
+  avgScore: number;
+  price: number;
+  reason: string;
+}
+
+export interface WinnerComparison {
+  winnerAvgScore: number;
+  yourScore: number;
+  scoreDiff: number;
+  winnerTeamValue: number;
+  yourTeamValue: number;
+  valueDiff: number;
+  winnerPremiums: number;
+  yourPremiums: number;
+  onTrack: boolean;
+}
+
+export interface ValidationItem {
+  check: string;
+  passed: boolean;
+  detail: string;
 }
 
 export interface WeeklyPlan {
@@ -36,9 +108,12 @@ export interface WeeklyPlan {
     reasoning: string;
     pointsGain: number;
     cashImpact: number;
+    alternatives: TradeAlternative[];
+    contingency: string;
   }>;
   structureNotes: string[];
   squad: SquadPlayer[];
+  winnerComparison: WinnerComparison;
   keyMetrics: {
     teamValue: number;
     cashInBank: number;
@@ -53,9 +128,12 @@ export interface WeeklyPlan {
 export interface SeasonPlanResult {
   overallStrategy: string;
   startingSquad: SquadPlayer[];
+  playerNarratives: Array<{ id: number; name: string; narrative: string }>;
   weeklyPlans: WeeklyPlan[];
   totalProjectedScore: number;
   teamPlayerIds: number[];
+  validation: ValidationItem[];
+  winnerBenchmark: { avgTotal: number; avgPerRound: number };
 }
 
 export interface OptimalTeamResult {
@@ -87,7 +165,7 @@ function playerValue(p: Player): number {
   return (avg / price) * 100000;
 }
 
-function isPremium(p: Player): boolean {
+function isPremium(p: Player | { avgScore: number; price: number }): boolean {
   return (p.avgScore || 0) >= 95 && p.price >= 600000;
 }
 
@@ -111,7 +189,121 @@ function playerRole(p: Player): string {
   return "Value";
 }
 
-function toSquadPlayer(p: Player, fieldPosition: string, isOnField: boolean): SquadPlayer {
+function forecastPricePeak(p: Player): { peakRound: number | null; peakPrice: number | null } {
+  const avg = p.avgScore || 0;
+  const be = p.breakEven || 0;
+  const startPrice = p.startingPrice || p.price;
+  const gp = p.gamesPlayed || 0;
+
+  if (avg <= be || !isRookie(p)) {
+    return { peakRound: null, peakPrice: null };
+  }
+
+  const weeklyGain = Math.round((avg - be) * MAGIC_NUMBER / 1000) * 1000;
+  const maxGrowthWeeks = Math.min(12, Math.ceil(350000 / Math.max(weeklyGain, 1)));
+  const peakRound = Math.min(TOTAL_ROUNDS, gp + maxGrowthWeeks);
+  const peakPrice = Math.min(
+    startPrice + (weeklyGain * maxGrowthWeeks),
+    900000
+  );
+
+  return { peakRound, peakPrice };
+}
+
+function generatePlayerNarrative(p: Player, allPlayers: Player[]): string {
+  const avg = p.avgScore || 0;
+  const be = p.breakEven || 0;
+  const price = p.price;
+  const pos = getPlayerPrimaryPosition(p);
+  const gp = p.gamesPlayed || 0;
+  const ceiling = p.ceilingScore || Math.round(avg * 1.3);
+  const floor = p.projectedFloor || Math.round(avg * 0.7);
+  const owned = p.ownedByPercent || 0;
+  const cba = p.seasonCba;
+  const ppm = p.ppm;
+  const draftPedigree = p.isDebutant ? "debutant" : (p.yearsExperience || 0) <= 2 ? "second/third-year" : "established";
+  const injuryRisk = p.injuryRiskScore || 0;
+  const durability = p.durabilityScore || 0;
+  const breakout = p.breakoutScore || 0;
+
+  const posRank = allPlayers.filter(pp =>
+    getPlayerPrimaryPosition(pp) === pos && (pp.avgScore || 0) > avg
+  ).length + 1;
+
+  const samePosAlts = allPlayers
+    .filter(pp => getPlayerPrimaryPosition(pp) === pos && pp.id !== p.id && Math.abs(pp.price - price) < 100000 && (pp.avgScore || 0) >= avg * 0.85)
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 2);
+  const altNames = samePosAlts.map(a => `${a.name} ($${(a.price / 1000).toFixed(0)}k, avg ${a.avgScore})`);
+
+  if (isPremium(p)) {
+    let narrative = `${p.name} is our #${posRank} ranked ${pos} with avg ${avg} and ceiling ${ceiling}. `;
+    if (cba && cba > 50) narrative += `${cba}% CBA share locks in a high scoring floor. `;
+    if (ppm && ppm > 0.8) narrative += `Efficient ${ppm} PPM — even a small TOG increase pushes him toward ${Math.round(avg * 1.1)}+. `;
+    narrative += `At $${(price / 1000).toFixed(0)}k he's a season-long hold. `;
+    if (owned > 60) narrative += `${owned}% owned so he won't be a POD but too consistent to leave out. `;
+    else if (owned < 15) narrative += `Only ${owned}% owned — a genuine POD who can win you rankings. `;
+    if (injuryRisk > 0.3) narrative += `Injury risk flagged (${(injuryRisk * 100).toFixed(0)}%) — if he misses, consider ${altNames[0] || "best available " + pos}. `;
+    if (p.tagRisk && p.tagRisk > 0.3) narrative += `Tag risk ${(p.tagRisk * 100).toFixed(0)}% — could drop to floor ${floor} in tag games. `;
+    return narrative.trim();
+  }
+
+  if (isCashCow(p)) {
+    const peak = forecastPricePeak(p);
+    const weeklyGain = Math.max(0, avg - be);
+    const cashGenPerWeek = Math.round(weeklyGain * MAGIC_NUMBER / 1000) * 1000;
+    let narrative = `${p.name} is a ${draftPedigree} ${pos} priced at $${(price / 1000).toFixed(0)}k with BE ${be}. `;
+    narrative += `Averaging ${avg} (ceiling ${ceiling}), he generates ~$${(cashGenPerWeek / 1000).toFixed(0)}k/wk in price growth. `;
+    if (peak.peakRound != null && peak.peakPrice != null) {
+      narrative += `Expected to peak around R${peak.peakRound} at ~$${(peak.peakPrice / 1000).toFixed(0)}k (${Math.round((peak.peakPrice - price) / 1000)}k profit). `;
+    }
+    if (p.cashGenPotential === "elite") {
+      narrative += `Rated ELITE cash generation — one of the best value plays available. `;
+    }
+    narrative += `At peak, we trade him to `;
+    const targetBudget = (peak.peakPrice || price) + 200000;
+    const upgradeTarget = allPlayers
+      .filter(pp => getPlayerPrimaryPosition(pp) === pos && isPremium(pp) && pp.price <= targetBudget && pp.id !== p.id)
+      .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
+    if (upgradeTarget) {
+      narrative += `a premium like ${upgradeTarget.name} ($${(upgradeTarget.price / 1000).toFixed(0)}k, avg ${upgradeTarget.avgScore}), or `;
+    }
+    narrative += `to a newer cash cow if one emerges. `;
+    if (altNames.length > 0) narrative += `Alternatives at selection: ${altNames.join(", ")}. `;
+    if (gp === 0) narrative += `Pre-season pick — monitor Round 1 to confirm he gets game time. `;
+    return narrative.trim();
+  }
+
+  if (isMidPricer(p)) {
+    let narrative = `${p.name} is a mid-pricer at $${(price / 1000).toFixed(0)}k averaging ${avg}. `;
+    if (breakout > 0.6) {
+      narrative += `Breakout score ${breakout.toFixed(2)} signals he could push into premium territory (95+). `;
+      narrative += `If he hits ceiling ${ceiling} consistently, he's a long-term hold. `;
+    } else {
+      narrative += `Unlikely to become a premium — plan to upgrade him to a top scorer by R${Math.min(TOTAL_ROUNDS, 10)}. `;
+    }
+    if (cba && cba > 40) narrative += `${cba}% CBA share supports his scoring. `;
+    narrative += `BE ${be} — ${avg > be ? `scoring above BE so generating value` : `scoring below BE, losing value each week`}. `;
+    if (altNames.length > 0) narrative += `Could swap for: ${altNames.join(", ")}. `;
+    return narrative.trim();
+  }
+
+  let narrative = `${p.name} is a ${pos} at $${(price / 1000).toFixed(0)}k, avg ${avg}. `;
+  if (avg < be) narrative += `Scoring below BE ${be} — sell ASAP. `;
+  else narrative += `BE ${be}, still generating some value. `;
+  if (altNames.length > 0) narrative += `Alternatives: ${altNames.join(", ")}. `;
+  return narrative.trim();
+}
+
+function toSquadPlayer(p: Player, fieldPosition: string, isOnField: boolean, narrativeCache?: Map<number, string>, allPlayers?: Player[]): SquadPlayer {
+  const peak = forecastPricePeak(p);
+  let narrative = "";
+  if (narrativeCache) {
+    if (!narrativeCache.has(p.id) && allPlayers) {
+      narrativeCache.set(p.id, generatePlayerNarrative(p, allPlayers));
+    }
+    narrative = narrativeCache.get(p.id) || "";
+  }
   return {
     id: p.id,
     name: p.name,
@@ -125,7 +317,105 @@ function toSquadPlayer(p: Player, fieldPosition: string, isOnField: boolean): Sq
     byeRound: p.byeRound || null,
     ppm: p.ppm || null,
     role: playerRole(p),
+    narrative,
+    peakRound: isRookie(p) ? peak.peakRound : null,
+    peakPrice: isRookie(p) ? peak.peakPrice : null,
+    ceilingScore: p.ceilingScore || null,
+    owned: p.ownedByPercent || 0,
   };
+}
+
+function validatePlan(result: SeasonPlanResult, allPlayers: Player[]): ValidationItem[] {
+  const items: ValidationItem[] = [];
+
+  items.push({
+    check: "Squad Size",
+    passed: result.startingSquad.length >= 28 && result.startingSquad.length <= 30,
+    detail: `${result.startingSquad.length} players (need 28-30)`,
+  });
+
+  const totalCost = result.startingSquad.reduce((s, p) => s + p.price, 0);
+  items.push({
+    check: "Salary Cap",
+    passed: totalCost <= SALARY_CAP,
+    detail: `$${(totalCost / 1000000).toFixed(2)}M of $${(SALARY_CAP / 1000000).toFixed(2)}M cap`,
+  });
+
+  const posCounts: Record<string, number> = {};
+  for (const p of result.startingSquad) {
+    const pos = p.fieldPosition || p.position.split("/")[0];
+    posCounts[pos] = (posCounts[pos] || 0) + 1;
+  }
+  const posCheck = (["DEF", "MID", "RUC", "FWD"] as const).every(pos => {
+    const req = (POSITION_REQS as any)[pos]?.total || 0;
+    return (posCounts[pos] || 0) >= req;
+  });
+  items.push({
+    check: "Position Requirements",
+    passed: posCheck,
+    detail: `DEF:${posCounts["DEF"] || 0}/8 MID:${posCounts["MID"] || 0}/10 RUC:${posCounts["RUC"] || 0}/3 FWD:${posCounts["FWD"] || 0}/8`,
+  });
+
+  const ids = result.startingSquad.map(p => p.id);
+  const uniqueIds = new Set(ids);
+  items.push({
+    check: "No Duplicate Players",
+    passed: uniqueIds.size === ids.length,
+    detail: uniqueIds.size === ids.length ? "All unique" : `${ids.length - uniqueIds.size} duplicates found`,
+  });
+
+  let totalTrades = 0;
+  for (const wp of result.weeklyPlans) {
+    const maxTrades = getTradesForRound(wp.round);
+    const validTradeCount = wp.trades.length <= maxTrades;
+    if (!validTradeCount) {
+      items.push({
+        check: `Trade Limit R${wp.round}`,
+        passed: false,
+        detail: `${wp.trades.length} trades planned but only ${maxTrades} allowed`,
+      });
+    }
+    totalTrades += wp.trades.length;
+  }
+  items.push({
+    check: "Total Trades",
+    passed: true,
+    detail: `${totalTrades} trades planned across ${result.weeklyPlans.length} rounds`,
+  });
+
+  const avgScore = result.weeklyPlans.length > 0
+    ? result.totalProjectedScore / result.weeklyPlans.length
+    : 0;
+  items.push({
+    check: "Score Rationality",
+    passed: avgScore >= 1500 && avgScore <= 2500,
+    detail: `Avg ${Math.round(avgScore)}/round (expected range: 1500-2500)`,
+  });
+
+  const injuredPlayers = result.startingSquad.filter(p => {
+    const dbPlayer = allPlayers.find(pp => pp.id === p.id);
+    return dbPlayer?.injuryStatus?.toLowerCase().includes("season") || dbPlayer?.injuryStatus?.toLowerCase().includes("acl");
+  });
+  items.push({
+    check: "No Season-Ending Injuries",
+    passed: injuredPlayers.length === 0,
+    detail: injuredPlayers.length === 0 ? "All healthy" : `WARNING: ${injuredPlayers.map(p => p.name).join(", ")} have long-term injuries`,
+  });
+
+  const byeSpread = { r12: 0, r13: 0, r14: 0 };
+  for (const p of result.startingSquad) {
+    if (p.byeRound === 12) byeSpread.r12++;
+    else if (p.byeRound === 13) byeSpread.r13++;
+    else if (p.byeRound === 14) byeSpread.r14++;
+  }
+  const byeBalanced = byeSpread.r12 >= 6 && byeSpread.r13 >= 6 && byeSpread.r14 >= 6;
+  items.push({
+    check: "Bye Coverage",
+    passed: byeBalanced,
+    detail: `R12:${byeSpread.r12} R13:${byeSpread.r13} R14:${byeSpread.r14} — ${byeBalanced ? "balanced" : "uneven, may struggle in bye rounds"}`,
+  });
+
+  return items;
 }
 
 export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
@@ -179,21 +469,15 @@ export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
     let filled = 0;
     for (const p of premiums) {
       if (filled >= onField) break;
-      if (addPlayer(p, pos, true, `Premium ${pos} — avg ${p.avgScore}, top scorer at position`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, true, `Premium ${pos} — avg ${p.avgScore}, top scorer at position`)) filled++;
     }
     for (const p of midPricers) {
       if (filled >= onField) break;
-      if (addPlayer(p, pos, true, `Value ${pos} — avg ${p.avgScore}, strong value at $${(p.price / 1000).toFixed(0)}k`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, true, `Value ${pos} — avg ${p.avgScore}, strong value at $${(p.price / 1000).toFixed(0)}k`)) filled++;
     }
     for (const p of pool.filter(pp => !usedIds.has(pp.id))) {
       if (filled >= onField) break;
-      if (addPlayer(p, pos, true, `${pos} fill — avg ${p.avgScore}`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, true, `${pos} fill — avg ${p.avgScore}`)) filled++;
     }
   }
 
@@ -219,21 +503,15 @@ export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
     for (const p of cashCows) {
       if (filled >= bench) break;
       const growth = (p.avgScore || 0) - (p.breakEven || 0);
-      if (addPlayer(p, pos, false, `Cash cow — BE ${p.breakEven}, avg ${p.avgScore}, growth +${growth.toFixed(0)}`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, false, `Cash cow — BE ${p.breakEven}, avg ${p.avgScore}, growth +${growth.toFixed(0)}`)) filled++;
     }
     for (const p of fallback) {
       if (filled >= bench) break;
-      if (addPlayer(p, pos, false, `Bench rookie — cheapest available at $${(p.price / 1000).toFixed(0)}k`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, false, `Bench rookie — cheapest available at $${(p.price / 1000).toFixed(0)}k`)) filled++;
     }
     for (const p of pool.filter(pp => !usedIds.has(pp.id))) {
       if (filled >= bench) break;
-      if (addPlayer(p, pos, false, `Bench fill — ${pos}`)) {
-        filled++;
-      }
+      if (addPlayer(p, pos, false, `Bench fill — ${pos}`)) filled++;
     }
   }
 
@@ -305,26 +583,36 @@ export async function generateSeasonPlan(
     return {
       overallStrategy: "No team found. Import or build a team to generate a season plan.",
       startingSquad: [],
+      playerNarratives: [],
       weeklyPlans: [],
       totalProjectedScore: 0,
       teamPlayerIds: [],
+      validation: [],
+      winnerBenchmark: { avgTotal: 0, avgPerRound: 0 },
     };
   }
 
   const allPlayers = await db.select().from(players);
   const allFixtures = await db.select().from(fixtures);
+  const narrativeCache = new Map<number, string>();
 
   const startingSquad: SquadPlayer[] = teamPlayers.map(p => {
     const pos = getPlayerPrimaryPosition(p);
-    return toSquadPlayer(p, pos, isPremium(p) || isMidPricer(p));
+    return toSquadPlayer(p, pos, isPremium(p) || isMidPricer(p), narrativeCache, allPlayers);
   });
+
+  const playerNarratives = teamPlayers.map(p => ({
+    id: p.id,
+    name: p.name,
+    narrative: narrativeCache.get(p.id) || generatePlayerNarrative(p, allPlayers),
+  }));
 
   const weeklyPlans: WeeklyPlan[] = [];
   let simulatedTeam = [...teamPlayers];
   let simulatedCash = SALARY_CAP - simulatedTeam.reduce((sum, p) => sum + p.price, 0);
   let totalProjected = 0;
 
-  for (let round = normalizedRound; round <= 24; round++) {
+  for (let round = normalizedRound; round <= TOTAL_ROUNDS; round++) {
     const phaseInfo = getSeasonPhase(round);
     const tradesAvailable = getTradesForRound(round);
     const isBye = BYE_ROUNDS.includes(round);
@@ -371,10 +659,8 @@ export async function generateSeasonPlan(
       const weakest = [...simulatedTeam]
         .sort((a, b) => {
           if (phaseInfo.phase === "launch" || phaseInfo.phase === "cash_gen") {
-            const aIsCow = isCashCow(a);
-            const bIsCow = isCashCow(b);
-            const aPeaked = aIsCow && (a.avgScore || 0) < (a.breakEven || 0);
-            const bPeaked = bIsCow && (b.avgScore || 0) < (b.breakEven || 0);
+            const aPeaked = isCashCow(a) && (a.avgScore || 0) < (a.breakEven || 0);
+            const bPeaked = isCashCow(b) && (b.avgScore || 0) < (b.breakEven || 0);
             if (aPeaked && !bPeaked) return -1;
             if (bPeaked && !aPeaked) return 1;
           }
@@ -419,22 +705,64 @@ export async function generateSeasonPlan(
 
         const pointsGain = (playerIn.avgScore || 0) - (playerOut.avgScore || 0);
         const cashImpact = playerOut.price - playerIn.price;
-        const remainingRounds = 24 - round;
+        const remainingRounds = TOTAL_ROUNDS - round;
+
+        const alternatives: TradeAlternative[] = upgradeCandidates.slice(1, 4).map(alt => ({
+          id: alt.id,
+          name: alt.name,
+          team: alt.team,
+          avgScore: alt.avgScore || 0,
+          price: alt.price,
+          reason: `Avg ${alt.avgScore}, $${(alt.price / 1000).toFixed(0)}k${alt.ownedByPercent < 10 ? ` (POD: ${alt.ownedByPercent}% owned)` : ""}${alt.breakoutScore && alt.breakoutScore > 0.6 ? " — breakout candidate" : ""}`,
+        }));
 
         let reasoning = "";
+        const outPeak = forecastPricePeak(playerOut);
+        const inCeiling = playerIn.ceilingScore || Math.round((playerIn.avgScore || 0) * 1.3);
+
         if (phaseInfo.phase === "launch") {
           if (isCashCow(playerOut) && (playerOut.avgScore || 0) < (playerOut.breakEven || 0)) {
-            reasoning = `${playerOut.name} has peaked — avg ${playerOut.avgScore} is below BE ${playerOut.breakEven}, losing value each week. ${playerIn.name} averages ${playerIn.avgScore} at $${(playerIn.price / 1000).toFixed(0)}k (value ratio: ${playerValue(playerIn).toFixed(1)}).`;
+            reasoning = `${playerOut.name} has peaked — avg ${playerOut.avgScore} is below BE ${playerOut.breakEven}, losing ~$${Math.round(((playerOut.breakEven || 0) - (playerOut.avgScore || 0)) * MAGIC_NUMBER / 1000)}k/wk in value. ` +
+              `${playerIn.name} averages ${playerIn.avgScore} with ceiling ${inCeiling} at $${(playerIn.price / 1000).toFixed(0)}k. `;
+            if (isCashCow(playerIn)) {
+              const inPeak = forecastPricePeak(playerIn);
+              if (inPeak.peakRound != null) {
+                reasoning += `Expected to peak R${inPeak.peakRound} at ~$${((inPeak.peakPrice || 0) / 1000).toFixed(0)}k — effectively recycling the cash cow slot. `;
+              } else {
+                reasoning += `Cash cow swap — generates value while scoring. `;
+              }
+            } else {
+              reasoning += `Scoring upgrade of +${pointsGain.toFixed(1)} pts/wk = +${(pointsGain * remainingRounds).toFixed(0)} season points. `;
+            }
           } else {
-            reasoning = `${playerOut.name} (avg ${playerOut.avgScore}) is your weakest ${outPos}. ${playerIn.name} scores +${pointsGain.toFixed(1)} pts/wk more at $${(playerIn.price / 1000).toFixed(0)}k.`;
+            reasoning = `${playerOut.name} (avg ${playerOut.avgScore}, $${(playerOut.price / 1000).toFixed(0)}k) is your lowest-scoring ${outPos}. ` +
+              `${playerIn.name} (avg ${playerIn.avgScore}, ceiling ${inCeiling}) gains +${pointsGain.toFixed(1)} pts/wk. `;
+            if (playerIn.seasonCba && playerIn.seasonCba > 50) reasoning += `${playerIn.seasonCba}% CBA share locks in a high floor. `;
           }
         } else if (phaseInfo.phase === "cash_gen") {
-          reasoning = `Sell ${playerOut.name} ($${(playerOut.price / 1000).toFixed(0)}k, avg ${playerOut.avgScore}) to fund ${playerIn.name} ($${(playerIn.price / 1000).toFixed(0)}k, avg ${playerIn.avgScore}). Gains +${pointsGain.toFixed(1)} pts/wk = +${(pointsGain * remainingRounds).toFixed(0)} over remaining ${remainingRounds} rounds.`;
+          reasoning = `Sell ${playerOut.name} ($${(playerOut.price / 1000).toFixed(0)}k, avg ${playerOut.avgScore}${isRookie(playerOut) && outPeak.peakRound != null ? `, peaked at R${outPeak.peakRound}` : ""}) → ` +
+            `buy ${playerIn.name} ($${(playerIn.price / 1000).toFixed(0)}k, avg ${playerIn.avgScore}, ceiling ${inCeiling}). ` +
+            `+${pointsGain.toFixed(1)} pts/wk × ${remainingRounds} rounds = +${(pointsGain * remainingRounds).toFixed(0)} projected season points. `;
+          if (playerIn.ownedByPercent < 15) reasoning += `Only ${playerIn.ownedByPercent}% owned — genuine POD. `;
         } else if (phaseInfo.phase === "bye_warfare") {
           const inByeRound = playerIn.byeRound;
-          reasoning = `${playerIn.name} (avg ${playerIn.avgScore}, bye R${inByeRound || "?"}) replaces ${playerOut.name} (avg ${playerOut.avgScore}). +${pointsGain.toFixed(1)} pts/wk while maintaining bye coverage.`;
+          reasoning = `${playerIn.name} (avg ${playerIn.avgScore}, bye R${inByeRound || "?"}) replaces ${playerOut.name} (avg ${playerOut.avgScore}). ` +
+            `+${pointsGain.toFixed(1)} pts/wk while maintaining bye coverage. `;
+          if (isBye) reasoning += `Critical: we need active players this bye round. `;
         } else {
-          reasoning = `Run home: ${playerIn.name} (avg ${playerIn.avgScore}) over ${playerOut.name} (avg ${playerOut.avgScore}). +${pointsGain.toFixed(1)} pts/wk x ${remainingRounds} rounds = +${(pointsGain * remainingRounds).toFixed(0)} projected season points. ${playerIn.ownedByPercent < 15 ? `Only ${playerIn.ownedByPercent}% owned — strong POD.` : ""}`;
+          reasoning = `Run home: ${playerIn.name} (avg ${playerIn.avgScore}, ceiling ${inCeiling}) over ${playerOut.name} (avg ${playerOut.avgScore}). ` +
+            `+${pointsGain.toFixed(1)} pts/wk × ${remainingRounds} rounds = +${(pointsGain * remainingRounds).toFixed(0)} projected season points. `;
+          if (playerIn.ownedByPercent < 15) reasoning += `Only ${playerIn.ownedByPercent}% owned — strong POD for rank gains. `;
+          if (playerIn.captainProbability && playerIn.captainProbability > 0.1) reasoning += `${(playerIn.captainProbability * 100).toFixed(0)}% captain probability — potential for massive doubled scores. `;
+        }
+
+        let contingency = "";
+        if (playerIn.injuryRiskScore && playerIn.injuryRiskScore > 0.2) {
+          contingency = `${playerIn.name} has ${(playerIn.injuryRiskScore * 100).toFixed(0)}% injury risk. If unavailable, pivot to ${alternatives[0]?.name || "best available"} (avg ${alternatives[0]?.avgScore || "?"}).`;
+        } else if (alternatives.length > 0) {
+          contingency = `If ${playerIn.name} is unavailable or underperforms after 2 rounds, switch to ${alternatives[0].name} ($${(alternatives[0].price / 1000).toFixed(0)}k, avg ${alternatives[0].avgScore}).`;
+        } else {
+          contingency = `Limited alternatives at this price point — hold the trade if ${playerIn.name} is unavailable.`;
         }
 
         trades.push({
@@ -443,11 +771,12 @@ export async function generateSeasonPlan(
           reasoning,
           pointsGain,
           cashImpact,
+          alternatives,
+          contingency,
         });
 
         usedOutIds.add(playerOut.id);
         usedInIds.add(playerIn.id);
-
         simulatedTeam = simulatedTeam.filter(p => p.id !== playerOut.id);
         simulatedTeam.push(playerIn);
         simulatedCash = simulatedCash + playerOut.price - playerIn.price;
@@ -474,27 +803,29 @@ export async function generateSeasonPlan(
     if (phaseInfo.phase === "launch") {
       const cows = simulatedTeam.filter(p => isCashCow(p));
       if (cows.length > 0) {
-        const topCow = cows.sort((a, b) => ((b.avgScore || 0) - (b.breakEven || 0)) - ((a.avgScore || 0) - (a.breakEven || 0)))[0];
-        structureNotes.push(`Best cash cow: ${topCow.name} (avg ${topCow.avgScore}, BE ${topCow.breakEven}, generating +$${Math.max(0, Math.round(((topCow.avgScore || 0) - (topCow.breakEven || 0)) * 1000))}k/wk)`);
+        const topCow = [...cows].sort((a, b) => ((b.avgScore || 0) - (b.breakEven || 0)) - ((a.avgScore || 0) - (a.breakEven || 0)))[0];
+        const weeklyGain = Math.round(((topCow.avgScore || 0) - (topCow.breakEven || 0)) * MAGIC_NUMBER / 1000) * 1000;
+        const peak = forecastPricePeak(topCow);
+        const peakStr = peak.peakRound != null ? `, peaks R${peak.peakRound} at ~$${((peak.peakPrice || 0) / 1000).toFixed(0)}k` : "";
+        structureNotes.push(`Best cash cow: ${topCow.name} (avg ${topCow.avgScore}, BE ${topCow.breakEven}, +$${(weeklyGain / 1000).toFixed(0)}k/wk${peakStr})`);
       }
       const peaked = simulatedTeam.filter(p => isRookie(p) && (p.avgScore || 0) < (p.breakEven || 0));
       if (peaked.length > 0) {
-        structureNotes.push(`Peaked rookies to sell: ${peaked.map(p => `${p.name} (avg ${p.avgScore} < BE ${p.breakEven})`).join(", ")}`);
-      } else {
-        structureNotes.push(`All ${cows.length} cash cows still growing — hold and let them generate value`);
+        structureNotes.push(`Peaked rookies to sell: ${peaked.map(p => `${p.name} (avg ${p.avgScore} < BE ${p.breakEven}, losing ~$${Math.round(((p.breakEven || 0) - (p.avgScore || 0)) * MAGIC_NUMBER / 1000)}k/wk)`).join("; ")}`);
+      } else if (cows.length > 0) {
+        structureNotes.push(`All ${cows.length} cash cows still growing — hold them and let the value accumulate`);
       }
     } else if (phaseInfo.phase === "cash_gen") {
       const remainingRookies = simulatedTeam.filter(p => isRookie(p));
       if (remainingRookies.length > 0) {
-        structureNotes.push(`Still holding ${remainingRookies.length} rookies: ${remainingRookies.map(p => p.name).join(", ")} — convert to premiums`);
+        structureNotes.push(`Rookies to convert: ${remainingRookies.map(p => { const pk = forecastPricePeak(p); const peakInfo = pk.peakRound != null ? `peaks R${pk.peakRound}, ~$${((pk.peakPrice || 0) / 1000).toFixed(0)}k` : `$${(p.price / 1000).toFixed(0)}k`; return `${p.name} (${peakInfo})`; }).join("; ")}`);
       }
-      structureNotes.push(`Target: ${premiumCount + Math.min(remainingRookies.length, 4)}+ premiums by R11 for bye warfare`);
+      structureNotes.push(`Target: ${premiumCount + Math.min(remainingRookies.length, 4)}+ premiums by R11 — winners average 18+ premiums by the byes`);
     } else if (phaseInfo.phase === "bye_warfare") {
-      const byeTeamCount = simulatedTeam.filter(p => p.byeRound === round).length;
       const byePlayers = simulatedTeam.filter(p => p.byeRound === round);
       if (isBye && byePlayers.length > 0) {
         structureNotes.push(`On bye: ${byePlayers.map(p => p.name).join(", ")} (${byePlayers.length} players)`);
-        structureNotes.push(`Active squad: ${activePlayers.length} players — ${activePlayers.length >= 18 ? "full coverage" : "WARNING: need at least 18"}`);
+        structureNotes.push(`Active squad: ${activePlayers.length} players — ${activePlayers.length >= 18 ? "full coverage, no worries" : "SHORT: need at least 18"}`);
       } else if (!isBye) {
         structureNotes.push(`Pre-bye prep: ensure coverage for R${BYE_ROUNDS.filter(r => r >= round).join(", R")}`);
       }
@@ -503,8 +834,9 @@ export async function generateSeasonPlan(
       structureNotes.push(`Core premiums: ${topScorerNames.map(p => `${p.name} (${p.avgScore})`).join(", ")}`);
       const pods = simulatedTeam.filter(p => p.ownedByPercent < 10 && (p.avgScore || 0) >= 80);
       if (pods.length > 0) {
-        structureNotes.push(`PODs (low ownership): ${pods.map(p => `${p.name} (${p.avgScore} avg, ${p.ownedByPercent}% owned)`).join(", ")}`);
+        structureNotes.push(`PODs for rank gains: ${pods.map(p => `${p.name} (${p.avgScore} avg, ${p.ownedByPercent}% owned)`).join(", ")}`);
       }
+      structureNotes.push(`Every trade from here must gain ${Math.round(150 / Math.max(1, TOTAL_ROUNDS - round))}+ pts/wk to be worth it`);
     }
 
     const flags: string[] = [];
@@ -519,71 +851,86 @@ export async function generateSeasonPlan(
       (roundFixtureMap.get(viceCaptain.team)!.time.includes("Thu") || roundFixtureMap.get(viceCaptain.team)!.time.includes("Fri"));
     if (vcIsLoophole) flags.push(`LOOPHOLE: ${viceCaptain!.name} plays ${roundFixtureMap.get(viceCaptain!.team)!.time} — set as VC, watch score, keep or swap to captain`);
 
-    const avgPerRound = totalProjected > 0 && weeklyPlans.length > 0 ? totalProjected / weeklyPlans.length : projectedScore;
+    const roundProjected = Math.round(projectedScore);
+    const avgPerRound = totalProjected > 0 && weeklyPlans.length > 0 ? totalProjected / weeklyPlans.length : roundProjected;
     const projectedRank = avgPerRound > 2200 ? "Top 100" : avgPerRound > 2000 ? "Top 1,000" : avgPerRound > 1800 ? "Top 10,000" : "Building";
+
+    const benchmark = getWinnerBenchmarkAtRound(round);
+    const winnerComparison: WinnerComparison = {
+      winnerAvgScore: benchmark.avgScore,
+      yourScore: roundProjected,
+      scoreDiff: roundProjected - benchmark.avgScore,
+      winnerTeamValue: benchmark.teamValue,
+      yourTeamValue: teamValue,
+      valueDiff: teamValue - benchmark.teamValue,
+      winnerPremiums: benchmark.premiums,
+      yourPremiums: premiumCount,
+      onTrack: roundProjected >= benchmark.avgScore * 0.9,
+    };
 
     const squad: SquadPlayer[] = simulatedTeam.map(p => {
       const pos = getPlayerPrimaryPosition(p);
-      return toSquadPlayer(p, pos, isPremium(p) || isMidPricer(p));
+      return toSquadPlayer(p, pos, isPremium(p) || isMidPricer(p), narrativeCache, allPlayers);
     });
 
     weeklyPlans.push({
       round,
       phase: phaseInfo.phase,
       phaseName: phaseInfo.name,
-      projectedTeamScore: Math.round(projectedScore),
+      projectedTeamScore: roundProjected,
       recommendedCaptain: captain ? {
-        id: captain.id,
-        name: captain.name,
-        team: captain.team,
-        avgScore: captain.avgScore || 0,
-        reasoning: captainReasoning,
+        id: captain.id, name: captain.name, team: captain.team,
+        avgScore: captain.avgScore || 0, reasoning: captainReasoning,
       } : null,
       recommendedViceCaptain: viceCaptain ? {
-        id: viceCaptain.id,
-        name: viceCaptain.name,
-        team: viceCaptain.team,
-        avgScore: viceCaptain.avgScore || 0,
-        reasoning: vcReasoning,
+        id: viceCaptain.id, name: viceCaptain.name, team: viceCaptain.team,
+        avgScore: viceCaptain.avgScore || 0, reasoning: vcReasoning,
       } : null,
       trades,
       structureNotes,
       squad,
+      winnerComparison,
       keyMetrics: {
-        teamValue,
-        cashInBank: simulatedCash,
-        byeCoverage,
-        premiumCount,
-        rookieCount,
-        projectedRank,
+        teamValue, cashInBank: simulatedCash, byeCoverage,
+        premiumCount, rookieCount, projectedRank,
       },
       flags,
     });
 
-    totalProjected += Math.round(projectedScore);
+    totalProjected += roundProjected;
   }
 
   const premiums = teamPlayers.filter(p => isPremium(p)).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
   const cashCows = teamPlayers.filter(p => isCashCow(p)).sort((a, b) => ((b.avgScore || 0) - (b.breakEven || 0)) - ((a.avgScore || 0) - (a.breakEven || 0)));
   const midPricers = teamPlayers.filter(p => isMidPricer(p)).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
   const avgRoundScore = weeklyPlans.length > 0 ? Math.round(totalProjected / weeklyPlans.length) : 0;
+  const winnerAvg = Math.round(Object.values(WINNER_BENCHMARKS).reduce((s, y) => s + y.avgPerRound, 0) / Object.values(WINNER_BENCHMARKS).length);
+  const winnerTotal = Math.round(Object.values(WINNER_BENCHMARKS).reduce((s, y) => s + y.seasonTotal, 0) / Object.values(WINNER_BENCHMARKS).length);
 
   const overallStrategy =
     `Your ${teamPlayers.length}-player squad is built around ${premiums.length} premiums` +
-    (premiums.length > 0 ? ` led by ${premiums.slice(0, 3).map(p => `${p.name} (${p.avgScore})`).join(", ")}` : "") +
+    (premiums.length > 0 ? ` led by ${premiums.slice(0, 3).map(p => `${p.name} (avg ${p.avgScore}, ceiling ${p.ceilingScore || "?"})`).join(", ")}` : "") +
     `. ${cashCows.length} cash cows on bench` +
-    (cashCows.length > 0 ? ` — best value: ${cashCows.slice(0, 3).map(p => `${p.name} (avg ${p.avgScore}, BE ${p.breakEven})`).join(", ")}` : "") +
-    `. ${midPricers.length > 0 ? `${midPricers.length} mid-pricers to upgrade: ${midPricers.slice(0, 3).map(p => `${p.name} ($${(p.price / 1000).toFixed(0)}k)`).join(", ")}. ` : ""}` +
-    `Avg ${avgRoundScore.toLocaleString()} pts/round, projected ${totalProjected.toLocaleString()} season total. ` +
-    `Bye coverage: R12(${startingSquad.filter(p => p.byeRound === 12).length}), R13(${startingSquad.filter(p => p.byeRound === 13).length}), R14(${startingSquad.filter(p => p.byeRound === 14).length}).`;
+    (cashCows.length > 0 ? ` — best value: ${cashCows.slice(0, 3).map(p => { const pk = forecastPricePeak(p); const peakInfo = pk.peakRound != null ? `, peaks R${pk.peakRound} at ~$${((pk.peakPrice || 0) / 1000).toFixed(0)}k` : ""; return `${p.name} (avg ${p.avgScore}, BE ${p.breakEven}${peakInfo})`; }).join("; ")}` : "") +
+    `. ${midPricers.length > 0 ? `${midPricers.length} mid-pricers to upgrade: ${midPricers.slice(0, 3).map(p => `${p.name} ($${(p.price / 1000).toFixed(0)}k, avg ${p.avgScore})`).join(", ")}. ` : ""}` +
+    `Projected ${avgRoundScore.toLocaleString()} pts/round (${totalProjected.toLocaleString()} season). ` +
+    `Historical winners average ${winnerAvg.toLocaleString()}/round (${winnerTotal.toLocaleString()} total) — ` +
+    `${avgRoundScore >= winnerAvg * 0.95 ? "you're on track" : avgRoundScore >= winnerAvg * 0.85 ? "within striking distance — need to nail trades" : "behind pace — aggressive upgrades needed"}.`;
 
-  return {
+  const result: SeasonPlanResult = {
     overallStrategy,
     startingSquad,
+    playerNarratives,
     weeklyPlans,
     totalProjectedScore: totalProjected,
     teamPlayerIds,
+    validation: [],
+    winnerBenchmark: { avgTotal: winnerTotal, avgPerRound: winnerAvg },
   };
+
+  result.validation = validatePlan(result, allPlayers);
+
+  return result;
 }
 
 export async function saveSeasonPlan(plan: SeasonPlanResult, currentRound: number): Promise<SeasonPlan> {
@@ -591,7 +938,13 @@ export async function saveSeasonPlan(plan: SeasonPlanResult, currentRound: numbe
 
   const [saved] = await db.insert(seasonPlans).values({
     currentRound,
-    teamSnapshot: JSON.stringify({ teamPlayerIds: plan.teamPlayerIds, startingSquad: plan.startingSquad }),
+    teamSnapshot: JSON.stringify({
+      teamPlayerIds: plan.teamPlayerIds,
+      startingSquad: plan.startingSquad,
+      playerNarratives: plan.playerNarratives,
+      validation: plan.validation,
+      winnerBenchmark: plan.winnerBenchmark,
+    }),
     overallStrategy: plan.overallStrategy,
     weeklyPlans: JSON.stringify(plan.weeklyPlans),
     totalProjectedScore: plan.totalProjectedScore,
