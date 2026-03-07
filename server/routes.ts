@@ -366,6 +366,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Player not on team" });
       }
 
+      const inheritedOnField = teamEntry.isOnField;
+      const inheritedFieldPosition = teamEntry.fieldPosition;
+
       await storage.removeFromMyTeam(teamEntry.myTeamPlayerId!);
 
       const playerIn = await storage.getPlayer(trade.playerInId);
@@ -373,10 +376,10 @@ export async function registerRoutes(
 
       await storage.addToMyTeam({
         playerId: trade.playerInId,
-        isOnField: true,
+        isOnField: inheritedOnField,
         isCaptain: false,
         isViceCaptain: false,
-        fieldPosition: playerIn.position,
+        fieldPosition: inheritedFieldPosition || playerIn.position,
       });
 
       await storage.updateSettings({
@@ -801,8 +804,19 @@ export async function registerRoutes(
         FWD: "FWD", FORWARD: "FWD",
       };
 
-      let savedCount = 0;
       const notFound: string[] = [];
+
+      const posQuotas: Record<string, { onField: number; bench: number }> = {
+        DEF: { onField: 6, bench: 2 },
+        MID: { onField: 8, bench: 2 },
+        RUC: { onField: 2, bench: 1 },
+        FWD: { onField: 6, bench: 2 },
+      };
+      const posFieldCount: Record<string, number> = { DEF: 0, MID: 0, RUC: 0, FWD: 0 };
+      let totalOnField = 0;
+      const maxOnField = 22;
+
+      const resolvedPlayers: { match: typeof allPlayers[0]; fieldPos: string; ip: typeof identifiedPlayers[0] }[] = [];
 
       for (const ip of identifiedPlayers) {
         const normalName = ip.name.trim().toLowerCase();
@@ -819,7 +833,30 @@ export async function registerRoutes(
 
         const posRaw = (ip.position || match.position || "MID").toUpperCase();
         const fieldPos = posMap[posRaw] || "MID";
-        const isOnField = savedCount < 22 && !ip.isEmergency;
+        resolvedPlayers.push({ match, fieldPos, ip });
+      }
+
+      resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
+
+      for (const { match, fieldPos, ip } of resolvedPlayers) {
+        let isOnField = false;
+        let assignedFieldPos = fieldPos;
+        if (ip.isEmergency) {
+          isOnField = false;
+        } else if (totalOnField >= maxOnField) {
+          isOnField = false;
+        } else {
+          const quota = posQuotas[fieldPos];
+          if (quota && posFieldCount[fieldPos] < quota.onField) {
+            isOnField = true;
+            posFieldCount[fieldPos]++;
+            totalOnField++;
+          } else if (totalOnField < maxOnField) {
+            isOnField = true;
+            assignedFieldPos = "UTIL";
+            totalOnField++;
+          }
+        }
 
         const playerIsCaptain = ip.isCaptain ||
           (captainName && match.name.toLowerCase() === captainName.toLowerCase()) ||
@@ -834,9 +871,8 @@ export async function registerRoutes(
           isOnField,
           isCaptain: !!playerIsCaptain,
           isViceCaptain: !!playerIsVC,
-          fieldPosition: fieldPos,
+          fieldPosition: assignedFieldPos,
         });
-        savedCount++;
       }
 
       const team = await storage.getMyTeam();
@@ -1894,6 +1930,180 @@ export async function registerRoutes(
           ? `You're projected +${advantage}pts ahead. Maintain your edge by captaining a high-ceiling unique pick.`
           : `You're projected ${advantage}pts behind. Consider a high-ceiling captain differential to close the gap, even if it's riskier for your season.`,
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ WEEKLY PLAN (DIRECTIVE COACHING NARRATIVE) ============
+
+  app.get("/api/weekly-plan", async (_req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      const currentRound = settings?.currentRound || 1;
+      const team = await storage.getMyTeam();
+      if (team.length === 0) {
+        return res.json({ steps: [], round: currentRound, summary: "Set up your team to get your weekly plan." });
+      }
+
+      const onField = team.filter(p => p.isOnField);
+      const bench = team.filter(p => !p.isOnField);
+      const tradeRecs = await storage.getTradeRecommendations();
+      const pendingTrades = tradeRecs.filter(t => t.status === "pending");
+
+      const captain = team.find(p => p.isCaptain);
+      const viceCaptain = team.find(p => p.isViceCaptain);
+
+      const gameRules = (await import("@shared/game-rules")).AFL_FANTASY_CLASSIC_2026;
+      const byeRounds = gameRules.byeRounds || [12, 13, 14];
+      const isByeRound = byeRounds.includes(currentRound);
+      const maxTrades = currentRound < (gameRules.trades?.startFromRound || 2) ? 0 : isByeRound ? (gameRules.trades?.perByeRound || 3) : (gameRules.trades?.perRound || 2);
+
+      const definitelyOutStatuses = [
+        "season", "acl", "knee", "hamstring", "shoulder", "concussion",
+        "suspended", "dropped", "omitted", "delisted", "retired",
+        "broken", "fracture", "surgery", "torn", "rupture",
+      ];
+      function isDefinitelyOut(injuryStatus: string | null): boolean {
+        if (!injuryStatus) return false;
+        return definitelyOutStatuses.some(s => injuryStatus.toLowerCase().includes(s));
+      }
+
+      const steps: { priority: "critical" | "important" | "suggested"; action: string; reason: string; link?: string }[] = [];
+
+      const injuredOnField = onField.filter(p => isDefinitelyOut(p.injuryStatus) || p.lateChange);
+      const omittedOnField = onField.filter(p => p.selectionStatus === "omitted" && !isDefinitelyOut(p.injuryStatus));
+      const unavailable = [...injuredOnField, ...omittedOnField];
+
+      for (const p of unavailable) {
+        const topTrade = pendingTrades.find(t => t.playerOutId === p.id);
+        if (topTrade) {
+          steps.push({
+            priority: "critical",
+            action: `Trade out ${p.name} → bring in ${topTrade.playerIn.name}`,
+            reason: `${p.name} is ${p.injuryStatus || "unavailable"}. ${topTrade.playerIn.name} (avg ${topTrade.playerIn.avgScore?.toFixed(1)}) is the best replacement at ${topTrade.playerIn.position}.`,
+            link: "/trades",
+          });
+        } else {
+          const replacement = bench.find(b => {
+            const bpPositions = [b.position, b.dualPosition].filter(Boolean);
+            return (p.fieldPosition === "UTIL" || bpPositions.includes(p.fieldPosition || "")) && !isDefinitelyOut(b.injuryStatus);
+          });
+          if (replacement) {
+            steps.push({
+              priority: "critical",
+              action: `Move ${replacement.name} on-field to replace ${p.name}`,
+              reason: `${p.name} is ${p.injuryStatus || "unavailable"}. ${replacement.name} (avg ${replacement.avgScore?.toFixed(1)}) is your best bench option at ${p.fieldPosition}.`,
+              link: "/team",
+            });
+          } else {
+            steps.push({
+              priority: "critical",
+              action: `Find a replacement for ${p.name}`,
+              reason: `${p.name} is ${p.injuryStatus || "unavailable"} and there's no suitable bench cover. You'll need to use a trade.`,
+              link: "/trades",
+            });
+          }
+        }
+      }
+
+      const remainingTrades = pendingTrades
+        .filter(t => !unavailable.some(u => u.id === t.playerOutId))
+        .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
+        .slice(0, Math.max(0, maxTrades - unavailable.length));
+
+      for (const t of remainingTrades) {
+        if (t.confidence > 0.7) {
+          steps.push({
+            priority: "important",
+            action: `Trade ${t.playerOut.name} → ${t.playerIn.name}`,
+            reason: t.reason || `${t.playerIn.name} (avg ${t.playerIn.avgScore?.toFixed(1)}) is a significant upgrade over ${t.playerOut.name} (avg ${t.playerOut.avgScore?.toFixed(1)}).`,
+            link: "/trades",
+          });
+        }
+      }
+
+      const byeAffected = onField.filter(p => p.byeRound === currentRound);
+      if (byeAffected.length > 0) {
+        const swappable = byeAffected.filter(p => {
+          return bench.some(b => {
+            const bpPositions = [b.position, b.dualPosition].filter(Boolean);
+            return (p.fieldPosition === "UTIL" || bpPositions.includes(p.fieldPosition || "")) && b.byeRound !== currentRound;
+          });
+        });
+        if (swappable.length > 0) {
+          steps.push({
+            priority: "important",
+            action: `Swap ${swappable.length} bye-affected player${swappable.length > 1 ? "s" : ""} to bench`,
+            reason: `${swappable.map(p => p.name).join(", ")} ${swappable.length > 1 ? "are" : "is"} on bye this round. Move eligible bench players on-field to cover.`,
+            link: "/team",
+          });
+        }
+      }
+
+      if (!captain) {
+        const topScorer = [...onField].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
+        if (topScorer) {
+          steps.push({
+            priority: "important",
+            action: `Set ${topScorer.name} as Captain`,
+            reason: `No captain assigned. ${topScorer.name} leads your team with a ${topScorer.avgScore?.toFixed(1)} average — their score will be doubled.`,
+            link: "/team",
+          });
+        }
+      } else if (!viceCaptain) {
+        steps.push({
+          priority: "suggested",
+          action: "Set a Vice-Captain for loophole strategy",
+          reason: `You have ${captain.name} as Captain but no Vice-Captain. Setting a VC who plays early gives you the option to loophole if they score big.`,
+          link: "/team",
+        });
+      }
+
+      let seasonPlan = null;
+      try {
+        const plan = await getActiveSeasonPlan();
+        if (plan) {
+          const weeklyPlans = JSON.parse(plan.weeklyPlans) as any[];
+          const thisWeek = weeklyPlans.find((wp: any) => wp.round === currentRound);
+          if (thisWeek && thisWeek.suggestedTrades?.length > 0) {
+            const alreadyCovered = steps.map(s => s.action).join(" ");
+            for (const st of thisWeek.suggestedTrades) {
+              if (!alreadyCovered.includes(st.playerOut) && !alreadyCovered.includes(st.playerIn)) {
+                steps.push({
+                  priority: "suggested",
+                  action: `Roadmap trade: ${st.playerOut} → ${st.playerIn}`,
+                  reason: st.reason || `Part of your season roadmap strategy for Round ${currentRound}.`,
+                  link: "/roadmap",
+                });
+              }
+            }
+          }
+          seasonPlan = { overallStrategy: plan.overallStrategy };
+        }
+      } catch {}
+
+      const coldOnField = onField
+        .filter(p => p.formTrend === "down" && (p.last3Avg || 0) < (p.avgScore || 0) * 0.8)
+        .sort((a, b) => ((a.last3Avg || 0) / (a.avgScore || 1)) - ((b.last3Avg || 0) / (b.avgScore || 1)));
+
+      if (coldOnField.length > 0 && steps.length < 6) {
+        const worst = coldOnField[0];
+        steps.push({
+          priority: "suggested",
+          action: `Monitor ${worst.name} — form is dropping`,
+          reason: `${worst.name}'s last 3 avg (${worst.last3Avg?.toFixed(1)}) is well below their season avg (${worst.avgScore?.toFixed(1)}). Consider trading next round if form doesn't improve.`,
+          link: `/player/${worst.id}`,
+        });
+      }
+
+      const summary = steps.length === 0
+        ? "Your team is looking solid this week. No urgent actions needed — hold steady and monitor form."
+        : steps.length === 1
+          ? "One thing to address this week."
+          : `${steps.filter(s => s.priority === "critical").length > 0 ? "Urgent action needed. " : ""}${steps.length} steps in your plan for Round ${currentRound}.`;
+
+      res.json({ steps, round: currentRound, summary, isByeRound, tradesAvailable: settings.tradesRemaining, maxTrades, seasonContext: seasonPlan?.overallStrategy?.slice(0, 200) || null });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

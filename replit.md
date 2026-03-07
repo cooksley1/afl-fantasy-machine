@@ -61,6 +61,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
 - `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
 - `GET /api/game-day-guide` — generate game day transfer checklist
+- `GET /api/weekly-plan` — synthesized weekly coaching directive with prioritized steps
 
 ### New Frontend Pages
 - `/sandbox` — Team Lab (saved teams management, comparison, activation)

@@ -37,6 +37,7 @@ import {
   Users,
   CircleDot,
   Info,
+  ClipboardList,
 } from "lucide-react";
 import { ErrorState } from "@/components/error-state";
 import { useLocation } from "wouter";
@@ -113,6 +114,27 @@ export default function Dashboard() {
 
   const { data: intelReports } = useQuery<IntelReport[]>({
     queryKey: ["/api/intel"],
+  });
+
+  interface WeeklyPlanStep {
+    priority: "critical" | "important" | "suggested";
+    action: string;
+    reason: string;
+    link?: string;
+  }
+  interface WeeklyPlan {
+    steps: WeeklyPlanStep[];
+    round: number;
+    summary: string;
+    isByeRound: boolean;
+    tradesAvailable: number;
+    maxTrades: number;
+    seasonContext: string | null;
+  }
+
+  const { data: weeklyPlan } = useQuery<WeeklyPlan>({
+    queryKey: ["/api/weekly-plan"],
+    enabled: !!teamPlayers && teamPlayers.length > 0,
   });
 
   const { data: riskData } = useQuery<{
@@ -362,6 +384,74 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* B2. This Week's Plan */}
+      {weeklyPlan && weeklyPlan.steps.length > 0 && (
+        <Card data-testid="card-weekly-plan" className="border-primary/20">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-primary" />
+                This Week's Plan
+              </CardTitle>
+              <Badge variant="outline" className="text-[10px]" data-testid="badge-weekly-plan-round">
+                R{weeklyPlan.round}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{weeklyPlan.summary}</p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {weeklyPlan.steps.map((step, i) => {
+              const priorityStyles = {
+                critical: "border-l-red-500 bg-red-500/5",
+                important: "border-l-amber-500 bg-amber-500/5",
+                suggested: "border-l-blue-500 bg-blue-500/5",
+              };
+              const priorityLabels = {
+                critical: "Urgent",
+                important: "Important",
+                suggested: "Consider",
+              };
+              const priorityLabelColors = {
+                critical: "text-red-600 dark:text-red-400",
+                important: "text-amber-600 dark:text-amber-400",
+                suggested: "text-blue-600 dark:text-blue-400",
+              };
+              return (
+                <div
+                  key={i}
+                  className={`rounded-md border-l-4 p-3 cursor-pointer hover:brightness-95 transition-all ${priorityStyles[step.priority]}`}
+                  onClick={() => step.link && navigate(step.link)}
+                  data-testid={`weekly-plan-step-${i}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm font-bold text-primary/60 mt-0.5 shrink-0">{i + 1}.</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-[10px] font-bold uppercase tracking-wide ${priorityLabelColors[step.priority]}`}>
+                          {priorityLabels[step.priority]}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold" data-testid={`text-plan-action-${i}`}>{step.action}</p>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed" data-testid={`text-plan-reason-${i}`}>{step.reason}</p>
+                    </div>
+                    {step.link && (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {weeklyPlan.seasonContext && (
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <p className="text-[11px] text-muted-foreground italic" data-testid="text-season-context">
+                  Season strategy: {weeklyPlan.seasonContext}...
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* C. Captain Loophole Panel */}
       {(captain || viceCaptain) && (

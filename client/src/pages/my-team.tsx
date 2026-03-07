@@ -343,10 +343,15 @@ function FieldView({
               </div>
             )}
             {bench.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2 pt-2 border-t border-dashed border-border/40">
-                {bench.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
-                ))}
+              <div className="mt-2 pt-2 border-t border-dashed border-border/40">
+                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest text-center mb-1.5" data-testid={`label-bench-${pos.toLowerCase()}`}>
+                  Bench
+                </p>
+                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 opacity-75">
+                  {bench.map((p) => (
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                  ))}
+                </div>
               </div>
             )}
           </div>
