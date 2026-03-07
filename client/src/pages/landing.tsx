@@ -1,4 +1,5 @@
-import { Zap, TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users } from "lucide-react";
+import { Zap, TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -34,6 +35,62 @@ const features = [
     description: "Automated trade analysis with expected value, cash generation, and fixture-aware scoring.",
   },
 ];
+
+const faqs = [
+  {
+    q: "What is AFL Fantasy Machine?",
+    a: "AFL Fantasy Machine is an AI-powered advisor for AFL Fantasy Classic 2026. It provides smart trade recommendations, player projections, tag intelligence, live score tracking, and strategic insights to help you dominate your league.",
+  },
+  {
+    q: "How does the scoring system work?",
+    a: "AFL Fantasy Classic uses official AFL scoring: Kick ×3, Handball ×2, Mark ×3, Tackle ×4, Hitout ×1, Goal ×6, Behind ×1, Free Against ×-3. Your squad of 30 players generates points each round, with 22 on-field and 8 on the bench.",
+  },
+  {
+    q: "What data sources does the app use?",
+    a: "We pull live data from Footywire (match stats), Squiggle API (fixtures, tips, ladder), AFL.com.au RSS (official news), and Google News feeds for all 18 AFL clubs. Player photos come from the official AFL Fantasy API.",
+  },
+  {
+    q: "How are player projections calculated?",
+    a: "Projections use a multi-factor Bayesian model blending recent form, season average, opponent difficulty, venue history, weather, and role changes. The engine also calculates floors, ceilings, captain probability, and consistency ratings.",
+  },
+  {
+    q: "What is the tag intelligence system?",
+    a: "Tag intelligence analyses historical tagging patterns across all 18 AFL teams. It identifies which teams use dedicated taggers, who those taggers target, and how much that typically reduces a player's score — giving you a risk warning before each round.",
+  },
+  {
+    q: "How does the trade engine work?",
+    a: "The trade engine evaluates 20+ factors including score difference, breakeven trends, cash generation potential, fixture difficulty, DPP flexibility, and season phase. Each trade gets a Trade EV score combining score uplift and long-term value.",
+  },
+  {
+    q: "Is AFL Fantasy Machine free?",
+    a: "Yes, the core features are completely free. Sign in with Google, Apple, GitHub, or email to get started.",
+  },
+  {
+    q: "How often is data updated?",
+    a: "Data is gathered automatically every 4 hours during the season, covering news, injury updates, team selections, and form trends. Match scores are pulled from Footywire immediately after games finish.",
+  },
+];
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b last:border-b-0" data-testid={`faq-item-${q.slice(0, 20).replace(/\s/g, '-').toLowerCase()}`}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between py-4 text-left text-foreground font-medium hover:text-accent transition-colors"
+        data-testid={`faq-trigger-${q.slice(0, 20).replace(/\s/g, '-').toLowerCase()}`}
+      >
+        <span className="pr-4 text-sm sm:text-base">{q}</span>
+        <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <p className="pb-4 text-sm text-muted-foreground leading-relaxed" data-testid={`faq-answer-${q.slice(0, 20).replace(/\s/g, '-').toLowerCase()}`}>
+          {a}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function LandingPage() {
   return (
@@ -108,6 +165,24 @@ export default function LandingPage() {
               </Card>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="pb-16 sm:pb-24 px-4 sm:px-6" data-testid="landing-faq-section">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center text-foreground mb-3">
+            Frequently Asked Questions
+          </h2>
+          <p className="text-center text-muted-foreground mb-8 max-w-lg mx-auto">
+            Everything you need to know about AFL Fantasy Machine.
+          </p>
+          <Card className="border bg-card">
+            <CardContent className="p-4 sm:p-6">
+              {faqs.map((faq) => (
+                <FaqItem key={faq.q} q={faq.q} a={faq.a} />
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </section>
 

@@ -101,7 +101,7 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
-  const { expandPlayerDatabase, populateConsistencyData, populateBaselineData, seedModelWeights, syncAflFantasyIds, repairPlayerData } = await import("./expand-players");
+  const { expandPlayerDatabase, populateConsistencyData, populateBaselineData, seedModelWeights, syncAflFantasyIds, repairPlayerData, recalculatePlayerAverages } = await import("./expand-players");
   await seedModelWeights();
   const added = await expandPlayerDatabase();
   if (added > 0) {
@@ -113,6 +113,7 @@ app.use((req, res, next) => {
   }
   await populateBaselineData();
   await repairPlayerData();
+  await recalculatePlayerAverages();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
   const { fetchAndStoreFixtures } = await import("./services/fixture-service");

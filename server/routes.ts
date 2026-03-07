@@ -1083,6 +1083,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
       }
       const result = await fetchAndStorePlayerScores(parsed.data.round);
+      const { recalculatePlayerAverages } = await import("./expand-players");
+      await recalculatePlayerAverages();
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

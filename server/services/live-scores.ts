@@ -432,6 +432,9 @@ export async function getMatchPlayers(
   if (existingStats.length === 0) {
     await fetchMatchFromFootywire(homeTeam, awayTeam, round);
 
+    const { recalculatePlayerAverages } = await import("../expand-players");
+    await recalculatePlayerAverages();
+
     const refreshedPlayers = await db.select().from(players)
       .where(inArray(players.team, [homeTeam, awayTeam]));
     const refreshedIds = refreshedPlayers.map(p => p.id);

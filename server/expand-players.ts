@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { players, modelWeights } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { players, modelWeights, weeklyStats } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
@@ -563,6 +563,69 @@ export async function populateBaselineData(): Promise<void> {
     }
     console.log(`[ExpandPlayers] Populated team context for ${AFL_TEAMS.length} teams`);
   }
+}
+
+export async function recalculatePlayerAverages(): Promise<number> {
+  const allStats = await db.select({
+    playerId: weeklyStats.playerId,
+    round: weeklyStats.round,
+    fantasyScore: weeklyStats.fantasyScore,
+  }).from(weeklyStats).orderBy(weeklyStats.round);
+
+  const byPlayer: Record<number, number[]> = {};
+  for (const s of allStats) {
+    if (s.fantasyScore === null || s.fantasyScore === undefined) continue;
+    if (!byPlayer[s.playerId]) byPlayer[s.playerId] = [];
+    byPlayer[s.playerId].push(s.fantasyScore);
+  }
+
+  const allPlayers = await db.select().from(players);
+  let updated = 0;
+
+  for (const p of allPlayers) {
+    const scores = byPlayer[p.id];
+    if (!scores || scores.length === 0) continue;
+
+    const gamesPlayed = scores.length;
+    const seasonTotal = scores.reduce((a, b) => a + b, 0);
+    const avgScore = Math.round((seasonTotal / gamesPlayed) * 10) / 10;
+
+    const last3Scores = scores.slice(-3);
+    const last3Avg = Math.round((last3Scores.reduce((a, b) => a + b, 0) / last3Scores.length) * 10) / 10;
+
+    const last5Scores = scores.slice(-5);
+    const last5Avg = Math.round((last5Scores.reduce((a, b) => a + b, 0) / last5Scores.length) * 10) / 10;
+
+    const leagueAvgSPP = 5500;
+    const breakEven = avgScore > 0 ? Math.round(p.price / leagueAvgSPP) : 0;
+
+    const formTrend = deriveFormTrend(last5Avg, avgScore);
+
+    const needsUpdate =
+      Math.abs((p.avgScore || 0) - avgScore) > 0.1 ||
+      Math.abs((p.last3Avg || 0) - last3Avg) > 0.1 ||
+      Math.abs((p.last5Avg || 0) - last5Avg) > 0.1 ||
+      p.gamesPlayed !== gamesPlayed ||
+      p.seasonTotal !== seasonTotal;
+
+    if (needsUpdate) {
+      await db.update(players).set({
+        avgScore,
+        last3Avg,
+        last5Avg,
+        gamesPlayed,
+        seasonTotal,
+        breakEven,
+        formTrend,
+      }).where(eq(players.id, p.id));
+      updated++;
+    }
+  }
+
+  if (updated > 0) {
+    console.log(`[ExpandPlayers] Recalculated averages for ${updated} players from weekly_stats`);
+  }
+  return updated;
 }
 
 export { calcTradeEV, calcCaptainProbability, bayesianAdjustedAvg, calcVolatilityScore };
