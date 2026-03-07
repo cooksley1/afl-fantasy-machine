@@ -2,9 +2,25 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 import { execSync } from "child_process";
+import pg from "pg";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
+async function migrateUsersTable() {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const result = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'username'
+    `);
+    if (result.rows.length > 0) {
+      console.log("Detected old users table schema, dropping and recreating...");
+      await client.query("DROP TABLE IF EXISTS users CASCADE");
+    }
+  } finally {
+    await client.end();
+  }
+}
+
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -34,7 +50,8 @@ const allowlist = [
 ];
 
 async function buildAll() {
-  console.log("pushing database schema...");
+  console.log("migrating database...");
+  await migrateUsersTable();
   execSync("npx drizzle-kit push --force", { stdio: "inherit" });
 
   await rm("dist", { recursive: true, force: true });
