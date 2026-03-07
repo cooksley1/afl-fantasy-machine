@@ -1,11 +1,12 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertMyTeamPlayerSchema } from "@shared/schema";
+import { insertMyTeamPlayerSchema, users, feedback } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
+import { eq, desc } from "drizzle-orm";
 import {
   calcTradeEV,
   calcTradeRankingScore,
@@ -15,13 +16,42 @@ import {
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses } from "./services/live-scores";
+import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
+
+function isAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = req.user as any;
+  if (!user?.claims?.sub) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  db.select().from(users).where(eq(users.id, user.claims.sub)).then(([u]) => {
+    if (!u?.isAdmin) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    next();
+  }).catch(() => res.status(500).json({ message: "Server error" }));
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.use("/api", (req, res, next) => {
+    const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user"];
+    if (publicPaths.includes(req.path)) return next();
+    isAuthenticated(req, res, async () => {
+      const userId = (req.user as any)?.claims?.sub;
+      if (userId) {
+        const [u] = await db.select().from(users).where(eq(users.id, userId));
+        if (u?.isBlocked) {
+          return res.status(403).json({ message: "Your account has been suspended" });
+        }
+      }
+      next();
+    });
+  });
 
   app.get("/api/players", async (_req, res) => {
     try {
@@ -1051,6 +1081,156 @@ export async function registerRoutes(
 
       const result = simulateRound(simPlayers);
       res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ ADMIN ROUTES ============
+
+  app.get("/api/admin/users", isAdmin, async (_req, res) => {
+    try {
+      const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+      res.json(allUsers);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/block", isAdmin, async (req, res) => {
+    try {
+      const { blocked } = req.body;
+      const [updated] = await db.update(users)
+        .set({ isBlocked: blocked, updatedAt: new Date() })
+        .where(eq(users.id, req.params.id))
+        .returning();
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/admin", isAdmin, async (req, res) => {
+    try {
+      const { admin } = req.body;
+      const [updated] = await db.update(users)
+        .set({ isAdmin: admin, updatedAt: new Date() })
+        .where(eq(users.id, req.params.id))
+        .returning();
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/impersonate/:id", isAdmin, async (req, res) => {
+    try {
+      const targetUser = await db.select().from(users).where(eq(users.id, req.params.id));
+      if (!targetUser.length) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const sessionUser = req.user as any;
+      sessionUser.impersonating = {
+        originalUserId: sessionUser.claims.sub,
+        targetUserId: req.params.id,
+        targetUser: targetUser[0],
+      };
+      sessionUser.claims = { ...sessionUser.claims, sub: req.params.id };
+      res.json({ message: "Now impersonating user", user: targetUser[0] });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/stop-impersonation", isAuthenticated, async (req, res) => {
+    try {
+      const sessionUser = req.user as any;
+      if (!sessionUser.impersonating) {
+        return res.status(400).json({ message: "Not currently impersonating" });
+      }
+      sessionUser.claims = { ...sessionUser.claims, sub: sessionUser.impersonating.originalUserId };
+      delete sessionUser.impersonating;
+      res.json({ message: "Stopped impersonation" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ ADMIN FEEDBACK ROUTES ============
+
+  app.get("/api/admin/feedback", isAdmin, async (_req, res) => {
+    try {
+      const allFeedback = await db.select().from(feedback).orderBy(desc(feedback.createdAt));
+      res.json(allFeedback);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/admin/feedback/:id/respond", isAdmin, async (req, res) => {
+    try {
+      const { response } = req.body;
+      const [updated] = await db.update(feedback)
+        .set({ adminResponse: response, status: "responded", respondedAt: new Date() })
+        .where(eq(feedback.id, parseInt(req.params.id)))
+        .returning();
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/admin/feedback/:id/archive", isAdmin, async (req, res) => {
+    try {
+      const [updated] = await db.update(feedback)
+        .set({ isArchived: true, status: "archived" })
+        .where(eq(feedback.id, parseInt(req.params.id)))
+        .returning();
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/admin/feedback/:id", isAdmin, async (req, res) => {
+    try {
+      await db.delete(feedback).where(eq(feedback.id, parseInt(req.params.id)));
+      res.json({ message: "Deleted" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ USER FEEDBACK ROUTES ============
+
+  app.post("/api/feedback", async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const userRecord = await db.select().from(users).where(eq(users.id, userId));
+      const { subject, message } = req.body;
+      if (!subject || !message) {
+        return res.status(400).json({ message: "Subject and message are required" });
+      }
+      const [created] = await db.insert(feedback).values({
+        userId,
+        userEmail: userRecord[0]?.email || null,
+        userName: [userRecord[0]?.firstName, userRecord[0]?.lastName].filter(Boolean).join(" ") || null,
+        subject,
+        message,
+      }).returning();
+      res.json(created);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/feedback", async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const myFeedback = await db.select().from(feedback)
+        .where(eq(feedback.userId, userId))
+        .orderBy(desc(feedback.createdAt));
+      res.json(myFeedback);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

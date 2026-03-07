@@ -10,6 +10,8 @@ import {
   Brain,
   Camera,
   Radio,
+  ShieldCheck,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,6 +26,9 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -39,6 +44,7 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
 
   return (
     <Sidebar>
@@ -93,17 +99,67 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+              {user?.isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={location === "/admin"}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-accent min-h-[44px]"
+                  >
+                    <Link href="/admin" data-testid="link-nav-admin">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span className="text-sm">Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <div className="rounded-md bg-sidebar-accent/50 p-3">
-          <p className="text-[11px] text-sidebar-foreground/60 leading-relaxed">
-            AI-powered analysis covering form, injuries, byes, captains, cash cows, and live data from AFL sources.
-          </p>
-        </div>
+      <SidebarFooter className="p-4 space-y-3">
+        <FeedbackDialog />
+
+        {user && (
+          <div className="rounded-md bg-sidebar-accent/50 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              {user.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt=""
+                  className="w-7 h-7 rounded-full shrink-0"
+                  data-testid="img-user-sidebar-avatar"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-sidebar-accent flex items-center justify-center shrink-0">
+                  <Users className="w-3.5 h-3.5 text-sidebar-foreground/60" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-sidebar-foreground truncate" data-testid="text-sidebar-username">
+                  {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || "User"}
+                </p>
+                {user.email && (
+                  <p className="text-[10px] text-sidebar-foreground/50 truncate">
+                    {user.email}
+                  </p>
+                )}
+              </div>
+            </div>
+            <a href="/api/logout" className="block">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 h-7 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                data-testid="button-logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="text-xs">Sign Out</span>
+              </Button>
+            </a>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

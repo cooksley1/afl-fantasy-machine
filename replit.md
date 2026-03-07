@@ -15,8 +15,14 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 ## System Architecture
 The application follows a mobile-first, responsive design with a custom navy/gold AFL-themed color scheme, supporting dark mode.
 
+### Authentication
+Uses Replit Auth (OpenID Connect) supporting Google, Apple, GitHub, X, and email/password login. Auth files in `server/replit_integrations/auth/`. User model in `shared/models/auth.ts` with `isAdmin` and `isBlocked` fields. All `/api/*` routes (except auth endpoints) are protected with `isAuthenticated` middleware. Blocked users receive 403. Admin middleware checks `isAdmin` flag. Session stored in PostgreSQL `sessions` table. Impersonation supported for admin users.
+
+### Feedback System
+Users can send feedback via dialog in sidebar. Feedback stored in `feedback` table. Admins can view, respond, archive, and delete feedback from the Admin panel.
+
 ### Frontend
-Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, and Settings. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders.
+Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders. Landing page shown to logged-out users. Admin page accessible only to admin users via sidebar link.
 
 ### Backend
 An Express.js and Node.js server handles API requests, file uploads via Multer, and integrates with various services.

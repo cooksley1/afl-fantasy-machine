@@ -263,9 +263,6 @@ export type TradeRecommendationWithPlayers = TradeRecommendation & {
   playerIn: Player;
 };
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
 export const modelWeights = pgTable("model_weights", {
   id: serial("id").primaryKey(),
   key: text("key").notNull().unique(),
@@ -284,13 +281,4 @@ export type InsertTeamTagProfile = z.infer<typeof insertTeamTagProfileSchema>;
 export type TagMatchupHistory = typeof tagMatchupHistory.$inferSelect;
 export type InsertTagMatchupHistory = z.infer<typeof insertTagMatchupHistorySchema>;
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export * from "./models/auth";
