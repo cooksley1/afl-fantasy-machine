@@ -302,6 +302,95 @@ export async function updatePlayerLiveStats(
   return { fantasyScore };
 }
 
+const fetchInProgress = new Set<string>();
+
+async function fetchMatchFromFootywire(homeTeam: string, awayTeam: string, round: number): Promise<void> {
+  const key = `${homeTeam}-${awayTeam}-${round}`;
+  if (fetchInProgress.has(key)) return;
+  fetchInProgress.add(key);
+
+  try {
+    const year = new Date().getFullYear();
+    const matchIds = await fetchFootywireMatchIds(year);
+
+    const allDbPlayers = await db.select().from(players);
+    const nameMap = new Map(allDbPlayers.map(p => [p.name.toLowerCase(), p]));
+    const lastNameMap = new Map<string, typeof allDbPlayers[0][]>();
+    for (const p of allDbPlayers) {
+      const parts = p.name.split(" ");
+      const ln = parts[parts.length - 1].toLowerCase();
+      if (!lastNameMap.has(ln)) lastNameMap.set(ln, []);
+      lastNameMap.get(ln)!.push(p);
+    }
+
+    for (const mid of matchIds) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(`https://www.footywire.com/afl/footy/ft_match_statistics?mid=${mid}`, {
+          headers: { "User-Agent": UA },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) continue;
+
+        const html = await res.text();
+        const parsed = parseFootywireMatchPage(html);
+        if (!parsed) continue;
+        if (parsed.round !== round) continue;
+
+        const matchTeams = [parsed.team1.toLowerCase(), parsed.team2.toLowerCase()];
+        const requestTeams = [homeTeam.toLowerCase(), awayTeam.toLowerCase()];
+        if (!matchTeams.some(t => requestTeams.includes(t))) continue;
+
+        let updated = 0;
+        for (const fp of parsed.players) {
+          let dbPlayer = nameMap.get(fp.name.toLowerCase());
+          if (!dbPlayer) {
+            const parts = fp.name.split(" ");
+            const lastName = parts[parts.length - 1].toLowerCase();
+            const candidates = lastNameMap.get(lastName) || [];
+            if (candidates.length === 1) dbPlayer = candidates[0];
+            else if (candidates.length > 1) {
+              const firstName = parts[0].toLowerCase();
+              dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstName));
+            }
+          }
+          if (!dbPlayer) {
+            const inferredPos = inferPosition(fp);
+            try {
+              const [newPlayer] = await db.insert(players).values({
+                name: fp.name,
+                team: fp.team,
+                position: inferredPos,
+                price: 200000,
+                avgScore: fp.fantasyScore,
+                last3Avg: fp.fantasyScore,
+                last5Avg: fp.fantasyScore,
+                gamesPlayed: 0,
+                isDebutant: true,
+                isNamedTeam: true,
+              }).returning();
+              dbPlayer = newPlayer;
+              nameMap.set(fp.name.toLowerCase(), newPlayer);
+              console.log(`[LiveScores] Auto-added missing player: ${fp.name} (${fp.team}, ${inferredPos})`);
+            } catch { continue; }
+          }
+          const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
+          await upsertPlayerStats(dbPlayer, round, fp, opponent);
+          updated++;
+        }
+        console.log(`[LiveScores] Auto-populated ${updated} player stats for ${homeTeam} vs ${awayTeam} (round ${round})`);
+        break;
+      } catch { continue; }
+    }
+  } catch (e: any) {
+    console.error(`[LiveScores] fetchMatchFromFootywire error:`, e.message);
+  } finally {
+    fetchInProgress.delete(key);
+  }
+}
+
 export async function getMatchPlayers(
   homeTeam: string,
   awayTeam: string,
@@ -326,7 +415,7 @@ export async function getMatchPlayers(
     ])
   );
 
-  const playerIds = allMatchPlayers.map((p) => p.id);
+  let playerIds = allMatchPlayers.map((p) => p.id);
   let existingStats: any[] = [];
   if (playerIds.length > 0) {
     existingStats = await db
@@ -339,6 +428,26 @@ export async function getMatchPlayers(
         )
       );
   }
+
+  if (existingStats.length === 0) {
+    await fetchMatchFromFootywire(homeTeam, awayTeam, round);
+
+    const refreshedPlayers = await db.select().from(players)
+      .where(inArray(players.team, [homeTeam, awayTeam]));
+    const refreshedIds = refreshedPlayers.map(p => p.id);
+
+    if (refreshedIds.length > 0) {
+      existingStats = await db.select().from(weeklyStats)
+        .where(and(inArray(weeklyStats.playerId, refreshedIds), eq(weeklyStats.round, round)));
+    }
+
+    if (refreshedPlayers.length > allMatchPlayers.length) {
+      allMatchPlayers.length = 0;
+      allMatchPlayers.push(...refreshedPlayers);
+      playerIds = refreshedIds;
+    }
+  }
+
   const statsMap = new Map(existingStats.map((s: any) => [s.playerId, s]));
 
   return allMatchPlayers.map((p) => {
