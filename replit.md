@@ -31,12 +31,15 @@ New users see a 3-step onboarding wizard (`client/src/components/onboarding-wiza
 - Step 3 (Import Your Team): Two cards — "Upload a Screenshot" (→ /analyze, with step-by-step AFL Fantasy share instructions and example image) and "Browse & Pick Players" (→ /players)
 - Completion stored in `localStorage` key `afl_onboarding_complete`. Checked in `App.tsx` `AuthenticatedApp` component.
 
-#### Player Availability Logic
-The risk endpoint (`/api/my-team/risks`) and dashboard use nuanced injury classification:
+#### Player Availability & Selection Status Logic
+The `players` table has a `selectionStatus` field with values: "selected" (confirmed in team), "emergency" (only plays if a teammate is withdrawn), "omitted" (not selected), "unknown" (team sheet not yet announced). The risk endpoint (`/api/my-team/risks`) and dashboard use this alongside injury classification:
 - **Definitely out**: injuries matching keywords like "season", "acl", "hamstring", "suspended", "surgery" → severity "critical"
 - **Monitoring only**: statuses like "test", "managed", "soreness" → severity "low" (not shown as unavailable)
-- **Not named in squad**: Only flagged from round 2 onwards (pre-season teams aren't officially named yet)
-This prevents false positives where players with minor monitoring statuses appear as "out".
+- **Omitted**: selectionStatus "omitted" → severity "high"
+- **Emergency**: selectionStatus "emergency" → severity "medium", message explains they only play if a selected player is withdrawn
+- **Unknown**: selectionStatus "unknown" → no alert (don't flag as unavailable when team sheets haven't been released yet)
+- **Not named in squad**: `isNamedTeam` false from round 2+ only when selectionStatus is not "unknown"
+Dashboard shows a blue info banner when most players have "unknown" status, explaining that team sheets are released by AFL clubs in the days before games and will be updated once announced.
 
 #### Dev Test Login
 In development mode (`NODE_ENV=development`), `POST /api/auth/dev-login` creates a session for a test user (`dev-test-user` / `test@aflmachine.dev`) without OIDC. Used for e2e testing.
@@ -82,7 +85,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Player Data Management**: `server/expand-players.ts` loads and reconciles 780 real 2026 AFL players with seed data. Includes `repairPlayerData()` that runs on startup to fix missing byeRound, venue, startingPrice, breakEven, and clears fake recentScores only for rookies (gamesPlayed=0). `recalculatePlayerAverages()` runs on startup and after Footywire score imports — recalculates avgScore, last3Avg, last5Avg, gamesPlayed, seasonTotal, breakEven, and formTrend from actual `weekly_stats` data for all players with at least one game score. Breakeven formula: `BE = round(initialBE + ((24 - gamesPlayed) / 14) × (initialBE - avgScore))` where `initialBE = startingPrice / 10490`. Pre-season (0 games): `BE = round(startingPrice / 10490)`.
 - **FantasySports.win Scraper**: `server/services/fantasysports-scraper.ts` scrapes breakeven data from fantasysports.win as a secondary BE source. Admin route `POST /api/admin/sync-fantasysports`.
 - **Team Colors**: `client/src/lib/afl-teams.ts` defines all 18 AFL team colors with `primary` (card body), `secondary` (name bar background), `text` (text on primary), and `secondaryText` (text on secondary/name bar) to ensure readable contrast on all card elements.
-- **Team Analyzer Save**: Users can upload a team screenshot to `/analyze`, get AI analysis, then click "Save as My Team" to save identified players to their account. Backend at `POST /api/my-team/save-from-analyzer` matches player names to DB and replaces the current team.
+- **Team Analyzer Save**: Users can upload a team screenshot to `/analyze`, get AI analysis, then click "Save as My Team" to save identified players to their account. Backend at `POST /api/my-team/save-from-analyzer` matches player names to DB and replaces the current team. The AI prompt now detects Captain ("C" badge), Vice-Captain ("V" badge), and Emergency ("EMG" badge) players from the screenshot and preserves those flags when saving.
 
 ## External Dependencies
 - **OpenAI API**: For GPT-4o-mini (text analysis) and GPT-4o (vision/screenshot analysis).

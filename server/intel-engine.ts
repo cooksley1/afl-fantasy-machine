@@ -375,11 +375,13 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
 }
 
 export async function analyzeTeamScreenshot(base64Image: string): Promise<{
-  players: { name: string; position: string; score?: number }[];
+  players: { name: string; position: string; score?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
   tradeSuggestions: string[];
+  captainName: string | null;
+  viceCaptainName: string | null;
 }> {
   const allPlayers = await storage.getAllPlayers();
   const playerNames = allPlayers.map(p => p.name).join(', ');
@@ -395,11 +397,13 @@ Known players in the database: ${playerNames}
 
 When analyzing, identify:
 1. Players visible in the screenshot (name, position, any visible scores/prices)
-2. Team structure strengths and weaknesses
-3. Captain/VC recommendations using the loophole strategy
-4. Trade targets - who to trade in/out
-5. DPP exploitation opportunities
-6. Break-even and price movement concerns
+2. Captain (marked with "C" badge) and Vice-Captain (marked with "V" or "VC" badge) — look carefully for these indicators
+3. Emergency players (marked with "EMG" badge) — these players only play if a selected player is withdrawn
+4. Team structure strengths and weaknesses
+5. Captain/VC recommendations using the loophole strategy
+6. Trade targets - who to trade in/out
+7. DPP exploitation opportunities
+8. Break-even and price movement concerns
 
 If the image is not an AFL Fantasy screenshot, still provide helpful AFL Fantasy advice based on any football content visible, or explain what you see and offer general tips.
 
@@ -412,13 +416,17 @@ Return ONLY valid JSON.`
             type: "text",
             text: `Analyze this AFL Fantasy team screenshot. Identify all players, assess the team structure, and provide actionable recommendations.
 
+IMPORTANT: Look carefully for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators on player cards. Also identify any emergency ("EMG") players. Include "isCaptain": true, "isViceCaptain": true, or "isEmergency": true on the relevant player objects.
+
 Return JSON:
 {
-  "players": [{"name": "Player Name", "position": "DEF/MID/RUC/FWD", "score": 0}],
+  "players": [{"name": "Player Name", "position": "DEF/MID/RUC/FWD", "score": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false}],
   "analysis": "Overall team assessment - strengths, weaknesses, salary situation, structure",
   "recommendations": [{"type": "trade|captain|structure|cash_cow|upgrade", "detail": "Specific recommendation", "priority": "high|medium|low"}],
   "captainTip": "Best captain loophole strategy for this team",
-  "tradeSuggestions": ["Trade suggestion 1", "Trade suggestion 2"]
+  "tradeSuggestions": ["Trade suggestion 1", "Trade suggestion 2"],
+  "captainName": "Name of the player with Captain badge or null",
+  "viceCaptainName": "Name of the player with Vice-Captain badge or null"
 }`
           },
           {
@@ -444,6 +452,8 @@ Return JSON:
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       captainTip: parsed.captainTip || "",
       tradeSuggestions: Array.isArray(parsed.tradeSuggestions) ? parsed.tradeSuggestions : [],
+      captainName: parsed.captainName || null,
+      viceCaptainName: parsed.viceCaptainName || null,
     };
   } catch {
     throw new Error("Failed to parse AI analysis response");

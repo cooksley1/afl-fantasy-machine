@@ -22,11 +22,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AnalysisResult {
-  players: { name: string; position: string; score?: number }[];
+  players: { name: string; position: string; score?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
   tradeSuggestions: string[];
+  captainName: string | null;
+  viceCaptainName: string | null;
 }
 
 const priorityColor: Record<string, string> = {
@@ -76,8 +78,14 @@ export default function TeamAnalyzer() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (players: { name: string; position: string }[]) => {
-      const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", { players });
+    mutationFn: async (players: { name: string; position: string; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[]) => {
+      const captainPlayer = players.find(p => p.isCaptain);
+      const vcPlayer = players.find(p => p.isViceCaptain);
+      const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", {
+        players,
+        captainName: captainPlayer?.name || result?.captainName || null,
+        viceCaptainName: vcPlayer?.name || result?.viceCaptainName || null,
+      });
       return res.json() as Promise<{ success: boolean; savedCount: number; notFound: string[]; totalOnTeam: number }>;
     },
     onSuccess: (data) => {
@@ -254,6 +262,9 @@ export default function TeamAnalyzer() {
                       {p.score !== undefined && p.score > 0 && (
                         <span className="ml-1 font-bold">{p.score}</span>
                       )}
+                      {p.isCaptain && <span className="ml-1 text-[9px] font-bold text-red-500">(C)</span>}
+                      {p.isViceCaptain && <span className="ml-1 text-[9px] font-bold text-emerald-500">(VC)</span>}
+                      {p.isEmergency && <span className="ml-1 text-[9px] font-bold text-amber-500">(EMG)</span>}
                     </Badge>
                   ))}
                 </div>

@@ -136,8 +136,14 @@ export default function Dashboard() {
   const definitelyOutKeywords = ["season", "acl", "knee", "hamstring", "shoulder", "concussion", "suspended", "dropped", "omitted", "delisted", "retired", "broken", "fracture", "surgery", "torn", "rupture"];
   const isDefinitelyOut = (status: string | null) => status ? definitelyOutKeywords.some(s => status.toLowerCase().includes(s)) : false;
   const lateChangeAlerts = (teamPlayers || []).filter(
-    (p) => p.lateChange || isDefinitelyOut(p.injuryStatus) || (!p.isNamedTeam && currentRound >= 2)
+    (p) => p.lateChange || isDefinitelyOut(p.injuryStatus) || p.selectionStatus === "omitted" || (!p.isNamedTeam && currentRound >= 2 && p.selectionStatus !== "unknown")
   );
+  const emergencyPlayers = (teamPlayers || []).filter(
+    (p) => p.selectionStatus === "emergency"
+  );
+  const unknownSelectionCount = onFieldPlayers.filter(
+    (p) => p.selectionStatus === "unknown"
+  ).length;
   const byeRounds = gameRules?.byeRounds || [12, 13, 14];
   const isByeRound = byeRounds.includes(currentRound);
   const tradesThisRound = settings?.tradesRemaining || 0;
@@ -217,6 +223,14 @@ export default function Dashboard() {
           linkLabel: "View Trades",
         });
       }
+    }
+    if (emergencyPlayers.length > 0 && actionItems.length < 3) {
+      actionItems.push({
+        color: "yellow",
+        text: `${emergencyPlayers.length} player${emergencyPlayers.length > 1 ? "s" : ""} named as emergency — won't play unless a teammate is withdrawn`,
+        link: "/team",
+        linkLabel: "Review",
+      });
     }
     if (!captain && actionItems.length < 3) {
       actionItems.push({
@@ -298,6 +312,20 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {currentRound === 0 ? "Opening Round" : `Round ${currentRound}`} — Player averages, form trends, and projections are based on <strong>2025 season data</strong>, not 2026 form.
                 Break-evens are initial values. Full data builds as the season progresses.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasTeam && unknownSelectionCount > 0 && currentRound >= 1 && (
+        <Card className="border-blue-500/30 bg-blue-500/5" data-testid="card-teamsheet-notice">
+          <CardContent className="p-3 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Team Sheets Not Yet Announced</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {unknownSelectionCount} of your on-field players have no team sheet confirmation yet. AFL clubs and the league release team sheets in the days before each game — playing status will be updated once announced. Changes can be made up to the start of each game.
               </p>
             </div>
           </CardContent>

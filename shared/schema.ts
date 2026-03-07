@@ -29,6 +29,7 @@ export const players = pgTable("players", {
   breakEven: integer("break_even").default(null),
   ceilingScore: integer("ceiling_score").default(null),
   isNamedTeam: boolean("is_named_team").notNull().default(true),
+  selectionStatus: text("selection_status").notNull().default("unknown"),
   lateChange: boolean("late_change").notNull().default(false),
   consistencyRating: real("consistency_rating").default(null),
   scoreStdDev: real("score_std_dev").default(null),

@@ -680,8 +680,10 @@ export async function registerRoutes(
 
   app.post("/api/my-team/save-from-analyzer", async (req, res) => {
     try {
-      const { players: identifiedPlayers } = req.body as {
-        players: { name: string; position: string }[];
+      const { players: identifiedPlayers, captainName, viceCaptainName } = req.body as {
+        players: { name: string; position: string; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+        captainName?: string | null;
+        viceCaptainName?: string | null;
       };
       if (!identifiedPlayers || identifiedPlayers.length === 0) {
         return res.status(400).json({ message: "No players identified to save" });
@@ -715,13 +717,21 @@ export async function registerRoutes(
 
         const posRaw = (ip.position || match.position || "MID").toUpperCase();
         const fieldPos = posMap[posRaw] || "MID";
-        const isOnField = savedCount < 22;
+        const isOnField = savedCount < 22 && !ip.isEmergency;
+
+        const playerIsCaptain = ip.isCaptain ||
+          (captainName && match.name.toLowerCase() === captainName.toLowerCase()) ||
+          (captainName && match.name.toLowerCase().split(" ").pop() === captainName.toLowerCase().split(" ").pop());
+
+        const playerIsVC = ip.isViceCaptain ||
+          (viceCaptainName && match.name.toLowerCase() === viceCaptainName.toLowerCase()) ||
+          (viceCaptainName && match.name.toLowerCase().split(" ").pop() === viceCaptainName.toLowerCase().split(" ").pop());
 
         await storage.addToMyTeam({
           playerId: match.id,
           isOnField,
-          isCaptain: false,
-          isViceCaptain: false,
+          isCaptain: !!playerIsCaptain,
+          isViceCaptain: !!playerIsVC,
           fieldPosition: fieldPos,
         });
         savedCount++;
@@ -1129,19 +1139,24 @@ export async function registerRoutes(
       for (const p of onField) {
         const hasDefiniteInjury = isDefinitelyOut(p.injuryStatus);
         const hasMonitoringInjury = !hasDefiniteInjury && !!p.injuryStatus && !isMonitoringOnly(p.injuryStatus);
-        const notNamed = !p.isNamedTeam && currentRound >= 2;
-        const isUnavailable = hasDefiniteInjury || !!p.lateChange || notNamed;
-        const isWarning = hasMonitoringInjury;
+        const selStatus = p.selectionStatus || "unknown";
+        const isOmitted = selStatus === "omitted";
+        const isEmergency = selStatus === "emergency";
+        const notNamed = !p.isNamedTeam && currentRound >= 2 && selStatus !== "unknown";
+        const isUnavailable = hasDefiniteInjury || !!p.lateChange || isOmitted || notNamed;
+        const isWarning = hasMonitoringInjury || isEmergency;
         const isBye = p.byeRound === currentRound;
 
         if (isUnavailable || isWarning || isBye) {
           const reason = hasDefiniteInjury ? `Injury: ${p.injuryStatus}`
             : p.lateChange ? "Late change — may score 0"
+            : isOmitted ? "Not selected for this round"
             : notNamed ? "Not named in squad"
+            : isEmergency ? "Named as emergency — only plays if a selected player is withdrawn"
             : hasMonitoringInjury ? `Monitor: ${p.injuryStatus}`
             : `Bye round ${p.byeRound}`;
 
-          const severity = hasDefiniteInjury || p.lateChange ? "critical" : notNamed ? "high" : hasMonitoringInjury ? "low" : "medium";
+          const severity = hasDefiniteInjury || p.lateChange ? "critical" : isOmitted || notNamed ? "high" : isEmergency ? "medium" : hasMonitoringInjury ? "low" : "medium";
 
           alerts.push({
             playerId: p.id,
@@ -1157,7 +1172,8 @@ export async function registerRoutes(
           });
 
           const eligibleBench = bench.filter(bp => {
-            if (isDefinitelyOut(bp.injuryStatus) || bp.lateChange || (!bp.isNamedTeam && currentRound >= 2)) return false;
+            const bpSelStatus = bp.selectionStatus || "unknown";
+            if (isDefinitelyOut(bp.injuryStatus) || bp.lateChange || bpSelStatus === "omitted" || (!bp.isNamedTeam && currentRound >= 2 && bpSelStatus !== "unknown")) return false;
             if (bp.byeRound === currentRound) return false;
             const slot = p.fieldPosition || p.position;
             if (slot === "UTIL") return true;

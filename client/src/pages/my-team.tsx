@@ -274,6 +274,16 @@ function FieldViewCard({
             <AlertTriangle className="w-2.5 h-2.5 text-white" />
           </div>
         )}
+        {player.selectionStatus === "emergency" && (
+          <div className="absolute -bottom-0.5 -left-1 w-5 h-4 rounded bg-amber-500 flex items-center justify-center ring-1 ring-background" title="Named as emergency — only plays if a selected player is withdrawn" data-testid={`badge-emg-field-${player.id}`}>
+            <span className="text-[7px] font-bold text-white">EMG</span>
+          </div>
+        )}
+        {player.selectionStatus === "omitted" && (
+          <div className="absolute -bottom-0.5 -left-1 w-5 h-4 rounded bg-destructive flex items-center justify-center ring-1 ring-background" title="Not selected for this round" data-testid={`badge-out-field-${player.id}`}>
+            <span className="text-[7px] font-bold text-white">OUT</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -407,6 +417,15 @@ function ListViewRow({
           <span className="text-sm font-semibold">{getInitials(player.name)}</span>
           {player.injuryStatus && (
             <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />
+          )}
+          {player.selectionStatus === "emergency" && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 shrink-0" data-testid={`badge-emg-${player.id}`}>EMG</Badge>
+          )}
+          {player.selectionStatus === "omitted" && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-destructive/15 text-destructive border-destructive/30 shrink-0" data-testid={`badge-out-${player.id}`}>OUT</Badge>
+          )}
+          {player.selectionStatus === "selected" && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shrink-0" data-testid={`badge-sel-${player.id}`}>IN</Badge>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
