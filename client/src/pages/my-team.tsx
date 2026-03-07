@@ -316,7 +316,7 @@ function FieldView({
         if (onField.length === 0 && bench.length === 0) return null;
 
         const half = Math.ceil(onField.length / 2);
-        const topRow = onField.slice(0, Math.min(half, pos === "RUC" ? onField.length : half));
+        const topRow = pos === "RUC" ? onField : onField.slice(0, half);
         const bottomRow = pos === "RUC" ? [] : onField.slice(half);
 
         return (
