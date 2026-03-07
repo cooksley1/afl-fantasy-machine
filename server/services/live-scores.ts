@@ -296,6 +296,101 @@ export async function updatePlayerLiveStats(
   return { fantasyScore };
 }
 
+export async function getMatchPlayers(
+  homeTeam: string,
+  awayTeam: string,
+  round: number
+): Promise<LivePlayerScore[]> {
+  const allMatchPlayers = await db
+    .select()
+    .from(players)
+    .where(
+      inArray(players.team, [homeTeam, awayTeam])
+    );
+
+  const myTeamResult = await db
+    .select()
+    .from(myTeamPlayers)
+    .innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+
+  const myTeamMap = new Map(
+    myTeamResult.map((row) => [
+      row.my_team_players.playerId,
+      row.my_team_players,
+    ])
+  );
+
+  const playerIds = allMatchPlayers.map((p) => p.id);
+  let existingStats: any[] = [];
+  if (playerIds.length > 0) {
+    existingStats = await db
+      .select()
+      .from(weeklyStats)
+      .where(
+        and(
+          inArray(weeklyStats.playerId, playerIds),
+          eq(weeklyStats.round, round)
+        )
+      );
+  }
+  const statsMap = new Map(existingStats.map((s: any) => [s.playerId, s]));
+
+  return allMatchPlayers.map((p) => {
+    const stats = statsMap.get(p.id);
+    const tp = myTeamMap.get(p.id);
+    const kicks = stats?.kickCount || 0;
+    const handballs = stats?.handballCount || 0;
+    const marks = stats?.markCount || 0;
+    const tackles = stats?.tackleCount || 0;
+    const hitouts = stats?.hitouts || 0;
+    const goals = 0;
+    const behinds = 0;
+    const freesAgainst = 0;
+
+    const fantasyScore =
+      stats?.fantasyScore ||
+      calcFantasyScore({
+        kicks,
+        handballs,
+        marks,
+        tackles,
+        hitouts,
+        goals,
+        behinds,
+        freesAgainst,
+      });
+
+    const isCaptain = tp?.isCaptain || false;
+    const isViceCaptain = tp?.isViceCaptain || false;
+    const isOnMyTeam = !!tp;
+    const effectiveScore = isCaptain ? fantasyScore * 2 : fantasyScore;
+
+    return {
+      playerId: p.id,
+      playerName: p.name,
+      team: p.team,
+      position: p.position,
+      fantasyScore,
+      kicks,
+      handballs,
+      marks,
+      tackles,
+      hitouts,
+      goals,
+      behinds,
+      freesAgainst,
+      disposals: kicks + handballs,
+      isOnMyTeam,
+      isCaptain,
+      isViceCaptain,
+      effectiveScore,
+      timeOnGround: stats?.timeOnGroundPercent || null,
+      matchStatus: "upcoming",
+      aflFantasyId: p.aflFantasyId || null,
+    };
+  });
+}
+
 export async function bulkUpdateLiveScores(
   round: number,
   scores: Array<{ playerId: number; fantasyScore: number }>

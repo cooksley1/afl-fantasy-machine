@@ -39,8 +39,8 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Trade Engine**: `server/services/trade-engine.ts` offers comprehensive trade recommendations based on over 20 factors, categorizing trades as urgent, upgrade, cash generation, or structural. It supports phase-specific trade strategies for different parts of the season.
 - **Tag Intelligence System**: `server/services/tag-intelligence.ts` provides evidence-based tag warnings by analyzing `teamTagProfiles` and `tagMatchupHistory` tables, cross-referencing with live RSS feeds for keyword detection.
 - **Data Gathering**: `server/data-gatherer.ts` fetches live data from Squiggle API, AFL.com.au RSS, and 18 AFL club Google News feeds. This process is automated via `server/scheduler.ts` on a 4-hour cycle.
-- **Live Scores**: `server/services/live-scores.ts` tracks live match statuses and fantasy scores, allowing manual entry and bulk updates.
-- **Player Data Management**: `server/expand-players.ts` loads and reconciles 780 real 2026 AFL players with seed data.
+- **Live Scores**: `server/services/live-scores.ts` tracks live match statuses and fantasy scores, allowing manual entry and bulk updates. Match expansion shows ALL players from both teams (not just user's team), with user's players highlighted. Pre-season Round 0 context message when no scores exist.
+- **Player Data Management**: `server/expand-players.ts` loads and reconciles 780 real 2026 AFL players with seed data. Includes `repairPlayerData()` that runs on startup to fix missing byeRound, venue, startingPrice, breakEven, and clears fake recentScores for players with 0 games played.
 
 ## External Dependencies
 - **OpenAI API**: For GPT-4o-mini (text analysis) and GPT-4o (vision/screenshot analysis).

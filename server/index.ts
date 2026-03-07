@@ -67,7 +67,7 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
-  const { expandPlayerDatabase, populateConsistencyData, populateBaselineData, seedModelWeights, syncAflFantasyIds } = await import("./expand-players");
+  const { expandPlayerDatabase, populateConsistencyData, populateBaselineData, seedModelWeights, syncAflFantasyIds, repairPlayerData } = await import("./expand-players");
   await seedModelWeights();
   const added = await expandPlayerDatabase();
   if (added > 0) {
@@ -78,6 +78,7 @@ app.use((req, res, next) => {
     log(`Populated consistency data for ${consistencyUpdated} players`);
   }
   await populateBaselineData();
+  await repairPlayerData();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
   const { seedTagData } = await import("./services/tag-intelligence");

@@ -164,6 +164,47 @@ function deriveLast3Avg(avgPoints: number, l5Avg: number): number {
   return Math.round((l5Avg + diff * 0.6) * 10) / 10;
 }
 
+export async function repairPlayerData(): Promise<number> {
+  const allPlayers = await db.select().from(players);
+  let repaired = 0;
+
+  for (const p of allPlayers) {
+    const updates: Record<string, any> = {};
+
+    if (!p.byeRound && p.team && BYE_ROUNDS[p.team]) {
+      updates.byeRound = BYE_ROUNDS[p.team];
+    }
+
+    if (!p.venue && p.team && TEAM_VENUES[p.team]) {
+      updates.venue = TEAM_VENUES[p.team];
+    }
+
+    if (!p.startingPrice && p.price) {
+      updates.startingPrice = p.price;
+    }
+
+    if (p.gamesPlayed === 0 && p.recentScores && p.recentScores.length > 0) {
+      updates.recentScores = '';
+    }
+
+    if (p.breakEven === null && p.price) {
+      const avg = p.avgScore || 0;
+      const leagueAvgSPP = 5500;
+      updates.breakEven = avg > 0 ? Math.round(p.price / leagueAvgSPP) : 0;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db.update(players).set(updates).where(eq(players.id, p.id));
+      repaired++;
+    }
+  }
+
+  if (repaired > 0) {
+    console.log(`[ExpandPlayers] Repaired core data for ${repaired} players`);
+  }
+  return repaired;
+}
+
 export async function expandPlayerDatabase(): Promise<number> {
   const existingPlayers = await db.select().from(players);
   const existingNames = new Set(existingPlayers.map(p => p.name));
@@ -412,9 +453,9 @@ export async function populateConsistencyData(): Promise<number> {
     if (Math.random() < 0.15) baseStdDev *= 0.5;
     if (Math.random() < 0.1) baseStdDev *= 1.6;
 
-    const scores = generateRecentScores(avg, baseStdDev);
-    const consistencyRating = calcConsistencyRating(scores, avg, w);
-    const actualStdDev = Math.round(Math.sqrt(scores.reduce((sum, s) => sum + Math.pow(s - avg, 2), 0) / scores.length) * 10) / 10;
+    const scores: number[] = [];
+    const consistencyRating = avg >= 80 ? "reliable" : avg >= 60 ? "average" : "volatile";
+    const actualStdDev = baseStdDev;
 
     const { isCandidate, probability } = isDebutantCandidate(price, w);
     const isDebutant = isCandidate && Math.random() < probability;
@@ -447,7 +488,7 @@ export async function populateConsistencyData(): Promise<number> {
       .set({
         consistencyRating,
         scoreStdDev: actualStdDev,
-        recentScores: scores.join(','),
+        recentScores: '',
         isDebutant,
         debutRound,
         cashGenPotential,

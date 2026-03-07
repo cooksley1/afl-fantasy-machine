@@ -446,7 +446,7 @@ Return JSON:
         }
       ],
       temperature: 0.4,
-      max_tokens: 3000,
+      max_tokens: 6000,
       response_format: { type: "json_object" },
     });
 
@@ -592,7 +592,7 @@ Return ONLY valid JSON:
       }
     ],
     temperature: 0.5,
-    max_tokens: 3000,
+    max_tokens: 6000,
     response_format: { type: "json_object" },
   });
 

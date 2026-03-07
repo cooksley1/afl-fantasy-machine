@@ -285,12 +285,12 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 min-w-0">
                         <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
+                          <p className="text-sm font-medium">
                             {alert.playerName}
                             {alert.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
                             {alert.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
                           </p>
-                          <p className="text-[11px] text-muted-foreground truncate">{alert.reason}</p>
+                          <p className="text-[11px] text-muted-foreground leading-snug">{alert.reason}</p>
                         </div>
                       </div>
                       <Badge variant={alert.severity === "critical" ? "destructive" : "secondary"} className="text-[9px] shrink-0">
@@ -325,8 +325,8 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 min-w-0">
                   <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{player.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-sm font-medium">{player.name}</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
                       {player.injuryStatus ? `Injury: ${player.injuryStatus}` : player.isOnField ? 'Late change risk — may score 0' : 'Not named in team'}
                     </p>
                   </div>
@@ -350,13 +350,13 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 min-w-0">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${tw.riskLevel === 'high' ? 'bg-red-500' : tw.riskLevel === 'moderate' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
                         <div className="min-w-0">
-                          <p className="text-sm truncate">
+                          <p className="text-sm">
                             {tw.playerName}
                             {tw.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
                             {tw.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
                             <span className="text-[10px] ml-1 text-muted-foreground">vs {tw.nextOpponent}</span>
                           </p>
-                          <p className="text-[10px] text-muted-foreground">{tw.advice}</p>
+                          <p className="text-[10px] text-muted-foreground leading-snug">{tw.advice}</p>
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
@@ -419,7 +419,7 @@ export default function Dashboard() {
                 {coldPlayers.slice(0, 3).map((p) => (
                   <div key={p.id} className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm truncate">{p.name}</span>
+                      <span className="text-sm">{p.name}</span>
                       <Badge variant="secondary" className="text-[9px]">{p.position}</Badge>
                     </div>
                     <div className="text-right shrink-0">
@@ -454,8 +454,8 @@ export default function Dashboard() {
                     <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">VC</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{viceCaptain.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-sm font-semibold">{viceCaptain.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
                       {viceCaptain.team} vs {viceCaptain.nextOpponent}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -479,8 +479,8 @@ export default function Dashboard() {
                     <span className="text-xs font-bold text-accent">C</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{captain.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-sm font-semibold">{captain.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
                       {captain.team} vs {captain.nextOpponent}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -536,11 +536,11 @@ export default function Dashboard() {
               >
                 <div className="flex items-center justify-between mb-1 gap-2">
                   <div className="flex items-center gap-1.5 text-sm min-w-0 flex-wrap">
-                    <span className="text-destructive font-medium truncate">
+                    <span className="text-destructive font-medium">
                       {trade.playerOut.name}
                     </span>
                     <ArrowLeftRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                    <span className="text-green-600 dark:text-green-400 font-medium truncate">
+                    <span className="text-green-600 dark:text-green-400 font-medium">
                       {trade.playerIn.name}
                     </span>
                   </div>
@@ -599,8 +599,8 @@ export default function Dashboard() {
                       {i + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{player.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">
+                      <p className="text-sm font-medium">{player.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
                         {player.team} - {player.position}
                         {player.dualPosition ? `/${player.dualPosition}` : ""}
                       </p>
@@ -625,10 +625,10 @@ export default function Dashboard() {
 
       <Card data-testid="card-simulation">
         <CardHeader className="pb-2 px-4 pt-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
               <Activity className="w-4 h-4 text-violet-500" />
-              Round Simulation
+              Round Score Simulator
             </CardTitle>
             <Button
               size="sm"
@@ -646,14 +646,19 @@ export default function Dashboard() {
               ) : simResult ? "Re-run" : "Run Simulation"}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            10,000 iteration Monte Carlo simulation of your team's round score
+          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed" data-testid="text-simulation-description">
+            Runs 10,000 Monte Carlo simulations using each player's scoring variance to predict your team's total AFL Classic score range this round. Helps you understand best-case, worst-case, and most likely outcomes.
           </p>
         </CardHeader>
         <CardContent className="px-3 pb-3">
           {!simResult && !simulationMutation.isPending && (
-            <div className="text-center py-8 text-muted-foreground text-sm" data-testid="text-simulation-prompt">
-              Click "Run Simulation" to model your team's scoring range
+            <div className="text-center py-8 space-y-2" data-testid="text-simulation-prompt">
+              <p className="text-sm text-muted-foreground">
+                Click "Run Simulation" to model your team's scoring range
+              </p>
+              <p className="text-[11px] text-muted-foreground max-w-md mx-auto leading-relaxed">
+                The simulator accounts for each player's scoring consistency, form trends, and historical variance to give you a realistic range of possible round totals for your on-field squad.
+              </p>
             </div>
           )}
           {simulationMutation.isPending && (
@@ -668,19 +673,40 @@ export default function Dashboard() {
                 <div className="bg-muted/30 rounded-md p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expected</p>
                   <p className="text-lg font-bold font-mono" data-testid="text-sim-expected">{Math.round(simResult.expectedTotal)}</p>
+                  <p className="text-[9px] text-muted-foreground">Average outcome</p>
                 </div>
                 <div className="bg-muted/30 rounded-md p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Median</p>
                   <p className="text-lg font-bold font-mono" data-testid="text-sim-median">{Math.round(simResult.medianTotal)}</p>
+                  <p className="text-[9px] text-muted-foreground">50/50 midpoint</p>
                 </div>
                 <div className="bg-muted/30 rounded-md p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Floor (10th)</p>
                   <p className="text-lg font-bold font-mono text-red-500" data-testid="text-sim-floor">{Math.round(simResult.floor)}</p>
+                  <p className="text-[9px] text-muted-foreground">Bad week score</p>
                 </div>
                 <div className="bg-muted/30 rounded-md p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ceiling (90th)</p>
                   <p className="text-lg font-bold font-mono text-green-500" data-testid="text-sim-ceiling">{Math.round(simResult.ceiling)}</p>
+                  <p className="text-[9px] text-muted-foreground">Great week score</p>
                 </div>
+              </div>
+
+              <div className="p-2.5 rounded-md bg-violet-500/5 border border-violet-500/15" data-testid="section-sim-context">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-foreground">How to read this:</span>{" "}
+                  Your on-field squad is projected to score between{" "}
+                  <span className="font-mono font-semibold text-red-500">{Math.round(simResult.floor)}</span> (floor) and{" "}
+                  <span className="font-mono font-semibold text-green-500">{Math.round(simResult.ceiling)}</span> (ceiling) in 80% of simulated rounds.
+                  The <span className="font-semibold">expected score</span> of{" "}
+                  <span className="font-mono font-semibold">{Math.round(simResult.expectedTotal)}</span>{" "}
+                  is what you'd average over many rounds with this lineup.
+                  {simResult.ceiling - simResult.floor > 400 && (
+                    <span className="block mt-1 text-amber-600 dark:text-amber-400">
+                      Wide range ({Math.round(simResult.ceiling - simResult.floor)} pts) suggests high-variance players in your squad. Consider trading volatile players for more consistent scorers if you want predictable weekly totals.
+                    </span>
+                  )}
+                </p>
               </div>
 
               <div>
@@ -714,6 +740,20 @@ export default function Dashboard() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                <div className="flex items-center justify-center gap-4 mt-1">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(0 70% 50% / 0.5)" }} />
+                    <span className="text-[9px] text-muted-foreground">Floor zone</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(var(--primary) / 0.7)" }} />
+                    <span className="text-[9px] text-muted-foreground">Expected range</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(142 70% 45% / 0.5)" }} />
+                    <span className="text-[9px] text-muted-foreground">Ceiling zone</span>
+                  </div>
+                </div>
               </div>
 
               {simResult.playerRiskContributions.length > 0 && (
@@ -722,21 +762,104 @@ export default function Dashboard() {
                     <AlertTriangle className="w-3 h-3" />
                     Top Variance Contributors
                   </p>
+                  <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
+                    These players have the most inconsistent scoring. High variance means bigger swings in your weekly total. Trading them for steadier scorers narrows your floor-ceiling gap.
+                  </p>
                   <div className="space-y-1">
                     {simResult.playerRiskContributions.slice(0, 3).map((p, i) => (
                       <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/20" data-testid={`card-risk-contributor-${i}`}>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <p className="text-sm font-medium">{p.name}</p>
                           <p className="text-[10px] text-muted-foreground">{p.team}</p>
                         </div>
                         <Badge variant="outline" className="text-[10px] font-mono shrink-0">
-                          ±{p.stdDev.toFixed(1)}
+                          ±{p.stdDev.toFixed(1)} pts
                         </Badge>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const recommendations: { icon: typeof Target; text: string; type: "info" | "warning" | "success" }[] = [];
+                const spread = simResult.ceiling - simResult.floor;
+                const topVariance = simResult.playerRiskContributions[0];
+
+                if (spread > 500) {
+                  recommendations.push({
+                    icon: AlertTriangle,
+                    text: `Your scoring range is very wide (${Math.round(spread)} pts). Your team is boom-or-bust. Consider trading high-variance players for consistent 80+ scorers to stabilise your weekly output.`,
+                    type: "warning",
+                  });
+                } else if (spread > 350) {
+                  recommendations.push({
+                    icon: Target,
+                    text: `Moderate scoring variance (${Math.round(spread)} pts spread). Your team has a decent balance of consistency and upside. Focus trades on lifting your floor score.`,
+                    type: "info",
+                  });
+                } else {
+                  recommendations.push({
+                    icon: Shield,
+                    text: `Tight scoring range (${Math.round(spread)} pts spread). Your team is very consistent — great for head-to-head leagues. Look for ceiling upside through premium upgrades.`,
+                    type: "success",
+                  });
+                }
+
+                if (topVariance && topVariance.stdDev > 25) {
+                  recommendations.push({
+                    icon: ArrowLeftRight,
+                    text: `${topVariance.name} (±${topVariance.stdDev.toFixed(1)} pts) is your biggest wildcard. Trading them for a steadier scorer at a similar average could significantly reduce your downside risk.`,
+                    type: "warning",
+                  });
+                }
+
+                if (simResult.expectedTotal < 1600 && onFieldPlayers.length >= 18) {
+                  recommendations.push({
+                    icon: TrendingUp,
+                    text: `Expected score of ${Math.round(simResult.expectedTotal)} is below the typical competitive threshold (~1700+). Prioritise upgrading your lowest-averaging on-field players.`,
+                    type: "warning",
+                  });
+                }
+
+                if (simResult.percentiles.p25 > 1700) {
+                  recommendations.push({
+                    icon: Zap,
+                    text: `Strong squad depth — even your 25th percentile outcome (${Math.round(simResult.percentiles.p25)}) is competitive. You're well-positioned for a top finish this round.`,
+                    type: "success",
+                  });
+                }
+
+                return recommendations.length > 0 ? (
+                  <div className="space-y-2" data-testid="section-sim-recommendations">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      Recommendations
+                    </p>
+                    {recommendations.map((rec, i) => {
+                      const RecIcon = rec.icon;
+                      return (
+                        <div
+                          key={i}
+                          className={`p-2.5 rounded-md border text-[11px] leading-relaxed ${
+                            rec.type === "warning"
+                              ? "bg-amber-500/5 border-amber-500/15 text-amber-700 dark:text-amber-300"
+                              : rec.type === "success"
+                              ? "bg-emerald-500/5 border-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : "bg-blue-500/5 border-blue-500/15 text-blue-700 dark:text-blue-300"
+                          }`}
+                          data-testid={`text-sim-recommendation-${i}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <RecIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            <span>{rec.text}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null;
+              })()}
 
               <p className="text-[10px] text-muted-foreground text-center">
                 Based on {simResult.iterations.toLocaleString()} iterations • P25: {Math.round(simResult.percentiles.p25)} | P75: {Math.round(simResult.percentiles.p75)} | P95: {Math.round(simResult.percentiles.p95)}
@@ -769,7 +892,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2 min-w-0">
                     <FormTrendIcon trend={p.formTrend} />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <p className="text-sm font-medium">{p.name}</p>
                       <p className="text-[11px] text-muted-foreground">{p.position} | {formatPrice(p.price)}</p>
                     </div>
                   </div>
@@ -820,8 +943,8 @@ export default function Dashboard() {
                       <Flame className={`w-3.5 h-3.5 ${isHot ? 'text-red-500' : 'text-amber-500'}`} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{player.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">
+                      <p className="text-sm font-medium">{player.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
                         {player.team} | {player.position}{player.dualPosition ? `/${player.dualPosition}` : ''} | {formatPrice(player.price)}
                       </p>
                     </div>

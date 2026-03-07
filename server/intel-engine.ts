@@ -205,14 +205,46 @@ Generate 10-14 reports. Prioritize the most impactful advice first.`;
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      max_tokens: 6000,
+      max_tokens: 16000,
       response_format: { type: "json_object" },
     });
 
+    const finishReason = response.choices[0]?.finish_reason;
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response from AI");
 
-    const parsed = JSON.parse(content);
+    if (finishReason === "length") {
+      console.warn("Intel generation response was truncated due to token limit - attempting to parse partial response");
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      const fixedContent = content.replace(/,\s*\]/, ']').replace(/,\s*\}/, '}');
+      const reportsMatch = fixedContent.match(/"reports"\s*:\s*\[/);
+      if (reportsMatch) {
+        let depth = 0;
+        let lastCompleteReport = -1;
+        const startIdx = fixedContent.indexOf('[', reportsMatch.index!);
+        for (let i = startIdx; i < fixedContent.length; i++) {
+          if (fixedContent[i] === '{') depth++;
+          if (fixedContent[i] === '}') {
+            depth--;
+            if (depth === 0) lastCompleteReport = i;
+          }
+        }
+        if (lastCompleteReport > startIdx) {
+          const truncatedJson = `{"reports": [${fixedContent.substring(startIdx + 1, lastCompleteReport + 1)}]}`;
+          parsed = JSON.parse(truncatedJson);
+        } else {
+          throw new Error("Could not recover any complete reports from truncated AI response");
+        }
+      } else {
+        throw new Error("Failed to parse AI response as JSON");
+      }
+    }
+
     const reports = parsed.reports || [];
 
     if (reports.length === 0) {
@@ -583,7 +615,7 @@ RULES:
         { role: "user", content: prompt },
       ],
       temperature: 0.6,
-      max_tokens: 6000,
+      max_tokens: 12000,
       response_format: { type: "json_object" },
     });
 

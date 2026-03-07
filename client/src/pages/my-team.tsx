@@ -395,7 +395,7 @@ function ListViewRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold truncate">{getInitials(player.name)}</span>
+          <span className="text-sm font-semibold">{getInitials(player.name)}</span>
           {player.injuryStatus && (
             <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />
           )}
@@ -408,7 +408,7 @@ function ListViewRow({
             {formatPrice(player.price)}
           </Badge>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+        <p className="text-[10px] text-muted-foreground mt-0.5">
           {player.nextOpponent ? `vs ${player.nextOpponent}` : player.team}
           {player.gameTime ? `, ${player.gameTime}` : ""}
         </p>

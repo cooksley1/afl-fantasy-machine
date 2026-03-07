@@ -15,7 +15,7 @@ import {
   buildWeightConfig,
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
-import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses } from "./services/live-scores";
+import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers } from "./services/live-scores";
 import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
@@ -149,12 +149,31 @@ export async function registerRoutes(
       const allPlayers = await storage.getAllPlayers();
       const findPlayer = (name: string) => allPlayers.find(p => p.name === name);
 
+      const BYE_ROUNDS: Record<string, number> = {
+        "Adelaide": 12, "Brisbane Lions": 15, "Carlton": 13, "Collingwood": 13,
+        "Essendon": 13, "Fremantle": 15, "Geelong": 14, "Gold Coast": 12,
+        "GWS Giants": 13, "Hawthorn": 14, "Melbourne": 13, "North Melbourne": 12,
+        "Port Adelaide": 12, "Richmond": 13, "St Kilda": 12, "Sydney": 15,
+        "West Coast": 15, "Western Bulldogs": 14,
+      };
+      const TEAM_VENUES: Record<string, string> = {
+        "Adelaide": "Adelaide Oval", "Brisbane Lions": "The Gabba", "Carlton": "MCG",
+        "Collingwood": "MCG", "Essendon": "Marvel Stadium", "Fremantle": "Optus Stadium",
+        "Geelong": "GMHBA Stadium", "Gold Coast": "People First Stadium",
+        "GWS Giants": "GIANTS Stadium", "Hawthorn": "MCG", "Melbourne": "MCG",
+        "North Melbourne": "Marvel Stadium", "Port Adelaide": "Adelaide Oval",
+        "Richmond": "MCG", "St Kilda": "Marvel Stadium", "Sydney": "SCG",
+        "West Coast": "Optus Stadium", "Western Bulldogs": "Marvel Stadium",
+      };
+
       const missingPlayers = [
         { name: "Will Derksen", team: "Essendon", position: "DEF", price: 230000 },
         { name: "Tom Blamires", team: "North Melbourne", position: "MID", price: 230000 },
       ];
       for (const mp of missingPlayers) {
         if (!findPlayer(mp.name)) {
+          const byeRound = BYE_ROUNDS[mp.team] || 12;
+          const venue = TEAM_VENUES[mp.team] || "TBC";
           await storage.createPlayer({
             name: mp.name,
             team: mp.team,
@@ -169,6 +188,10 @@ export async function registerRoutes(
             formTrend: "stable",
             isNamedTeam: true,
             isDebutant: true,
+            byeRound,
+            venue,
+            breakEven: 0,
+            startingPrice: mp.price,
           });
         }
       }
@@ -885,6 +908,21 @@ export async function registerRoutes(
       const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
       const matches = await fetchMatchStatuses(round);
       res.json(matches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/live-scores/match-players", async (req, res) => {
+    try {
+      const homeTeam = req.query.homeTeam as string;
+      const awayTeam = req.query.awayTeam as string;
+      const round = req.query.round != null ? parseInt(req.query.round as string) : 0;
+      if (!homeTeam || !awayTeam) {
+        return res.status(400).json({ message: "homeTeam and awayTeam are required" });
+      }
+      const matchPlayers = await getMatchPlayers(homeTeam, awayTeam, round);
+      res.json(matchPlayers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

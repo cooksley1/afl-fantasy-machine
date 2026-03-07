@@ -252,10 +252,10 @@ export default function Players() {
                 size="sm"
               />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate" data-testid={`text-player-name-${player.id}`}>
+                <p className="text-sm font-medium" data-testid={`text-player-name-${player.id}`}>
                   {player.name}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground">
                   {player.team}
                   {player.nextOpponent && ` vs ${player.nextOpponent}`}
                 </p>
@@ -364,7 +364,7 @@ export default function Players() {
           />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-medium truncate">{player.name}</p>
+              <p className="text-sm font-medium">{player.name}</p>
               <PlayerBadges player={player} isOnTeam={isOnTeam} />
             </div>
             <p className="text-xs text-muted-foreground">

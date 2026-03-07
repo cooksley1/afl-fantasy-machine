@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap, Star, Info } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -76,7 +76,10 @@ function MatchStatusBadge({ complete, timeStr }: { complete: number; timeStr: st
 
 function MatchPlayerRow({ player }: { player: LivePlayerScore }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5" data-testid={`match-player-${player.playerId}`}>
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 ${player.isOnMyTeam ? "bg-primary/5" : ""}`}
+      data-testid={`match-player-${player.playerId}`}
+    >
       <PlayerAvatar
         aflFantasyId={player.aflFantasyId}
         playerName={player.playerName}
@@ -84,8 +87,9 @@ function MatchPlayerRow({ player }: { player: LivePlayerScore }) {
         size="xs"
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
-          <span className="text-xs font-medium truncate">{player.playerName}</span>
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className={`text-xs font-medium ${player.isOnMyTeam ? "text-primary" : ""}`}>{player.playerName}</span>
+          {player.isOnMyTeam && <Star className="w-2.5 h-2.5 text-primary fill-primary" />}
           {player.isCaptain && <Badge className="text-[7px] px-0.5 py-0 bg-accent text-accent-foreground">C</Badge>}
           {player.isViceCaptain && <Badge variant="outline" className="text-[7px] px-0.5 py-0">VC</Badge>}
         </div>
@@ -103,36 +107,127 @@ function MatchPlayerRow({ player }: { player: LivePlayerScore }) {
   );
 }
 
-function MatchCard({ match, myPlayers, expanded, onToggle }: {
+function MatchPlayersPanel({ match, round, myPlayers }: { match: MatchStatus; round: number; myPlayers: LivePlayerScore[] }) {
+  const { data: allPlayers, isLoading } = useQuery<LivePlayerScore[]>({
+    queryKey: ["/api/live-scores/match-players", match.homeTeam, match.awayTeam, round],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        round: String(round),
+      });
+      const res = await fetch(`/api/live-scores/match-players?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch match players");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-4">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const players = allPlayers || [];
+  const homePlayers = players
+    .filter((p) => p.team === match.homeTeam)
+    .sort((a, b) => b.fantasyScore - a.fantasyScore);
+  const awayPlayers = players
+    .filter((p) => p.team === match.awayTeam)
+    .sort((a, b) => b.fantasyScore - a.fantasyScore);
+
+  const myMatchPlayers = myPlayers.filter(
+    (p) => p.team === match.homeTeam || p.team === match.awayTeam
+  );
+  const myMatchTotal = myMatchPlayers.reduce((sum, p) => sum + p.effectiveScore, 0);
+
+  const homeColors = getTeamColors(match.homeTeam);
+  const awayColors = getTeamColors(match.awayTeam);
+
+  return (
+    <div data-testid={`match-players-${match.id}`}>
+      {myMatchPlayers.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-primary/5 border-b">
+          <span className="text-[10px] font-medium flex items-center gap-1">
+            <Star className="w-2.5 h-2.5 text-primary fill-primary" />
+            My Players in Match: {myMatchPlayers.length}
+          </span>
+          <span className="text-xs font-bold" data-testid={`text-match-total-${match.id}`}>{myMatchTotal} pts</span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b bg-muted/30">
+        <div
+          className="w-4 h-4 rounded flex items-center justify-center text-[7px] font-bold shrink-0"
+          style={{ backgroundColor: homeColors.primary, color: homeColors.text }}
+        >
+          {getTeamAbbr(match.homeTeam).substring(0, 2)}
+        </div>
+        <span className="text-[10px] font-bold">{match.homeTeam}</span>
+        <span className="text-[10px] text-muted-foreground">({homePlayers.length})</span>
+      </div>
+      <div className="py-0.5">
+        {homePlayers.length > 0 ? (
+          homePlayers.map((p) => <MatchPlayerRow key={p.playerId} player={p} />)
+        ) : (
+          <p className="text-[10px] text-muted-foreground text-center py-2">No players found</p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-b bg-muted/30">
+        <div
+          className="w-4 h-4 rounded flex items-center justify-center text-[7px] font-bold shrink-0"
+          style={{ backgroundColor: awayColors.primary, color: awayColors.text }}
+        >
+          {getTeamAbbr(match.awayTeam).substring(0, 2)}
+        </div>
+        <span className="text-[10px] font-bold">{match.awayTeam}</span>
+        <span className="text-[10px] text-muted-foreground">({awayPlayers.length})</span>
+      </div>
+      <div className="py-0.5">
+        {awayPlayers.length > 0 ? (
+          awayPlayers.map((p) => <MatchPlayerRow key={p.playerId} player={p} />)
+        ) : (
+          <p className="text-[10px] text-muted-foreground text-center py-2">No players found</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({ match, myPlayers, expanded, onToggle, round }: {
   match: MatchStatus;
   myPlayers: LivePlayerScore[];
   expanded: boolean;
   onToggle: () => void;
+  round: number;
 }) {
   const homeColors = getTeamColors(match.homeTeam);
   const awayColors = getTeamColors(match.awayTeam);
   const isLive = match.complete > 0 && match.complete < 100;
   const isComplete = match.complete === 100;
 
-  const matchPlayers = myPlayers.filter(
+  const myMatchPlayers = myPlayers.filter(
     (p) => p.team === match.homeTeam || p.team === match.awayTeam
   );
-  const hasPlayers = matchPlayers.length > 0;
-  const matchPlayerTotal = matchPlayers.reduce((sum, p) => sum + p.effectiveScore, 0);
+  const hasMyPlayers = myMatchPlayers.length > 0;
 
   return (
     <Card
-      className={`overflow-visible ${isLive ? "ring-1 ring-red-500/50" : ""} ${hasPlayers ? "cursor-pointer hover-elevate" : ""}`}
+      className={`overflow-visible ${isLive ? "ring-1 ring-red-500/50" : ""} cursor-pointer hover-elevate`}
       data-testid={`card-match-${match.id}`}
-      onClick={hasPlayers ? onToggle : undefined}
+      onClick={onToggle}
     >
       <CardContent className="p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] text-muted-foreground">{match.venue}</span>
           <div className="flex items-center gap-1.5">
-            {hasPlayers && (
+            {hasMyPlayers && (
               <Badge variant="outline" className="text-[9px]" data-testid={`badge-player-count-${match.id}`}>
-                {matchPlayers.length} player{matchPlayers.length !== 1 ? "s" : ""}
+                <Star className="w-2 h-2 mr-0.5 fill-current" />
+                {myMatchPlayers.length}
               </Badge>
             )}
             <MatchStatusBadge complete={match.complete} timeStr={match.timeStr} />
@@ -147,7 +242,8 @@ function MatchCard({ match, myPlayers, expanded, onToggle }: {
             >
               {getTeamAbbr(match.homeTeam)}
             </div>
-            <span className="text-sm font-medium truncate">{match.homeTeam}</span>
+            <span className="text-sm font-medium hidden sm:inline">{match.homeTeam}</span>
+            <span className="text-sm font-medium sm:hidden">{getTeamAbbr(match.homeTeam)}</span>
           </div>
 
           <div className="text-center px-2">
@@ -174,7 +270,8 @@ function MatchCard({ match, myPlayers, expanded, onToggle }: {
           </div>
 
           <div className="flex items-center gap-2 flex-1 justify-end">
-            <span className="text-sm font-medium truncate text-right">{match.awayTeam}</span>
+            <span className="text-sm font-medium text-right hidden sm:inline">{match.awayTeam}</span>
+            <span className="text-sm font-medium text-right sm:hidden">{getTeamAbbr(match.awayTeam)}</span>
             <div
               className="w-8 h-8 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0"
               style={{ backgroundColor: awayColors.primary, color: awayColors.text }}
@@ -184,29 +281,17 @@ function MatchCard({ match, myPlayers, expanded, onToggle }: {
           </div>
         </div>
 
-        {hasPlayers && (
-          <div className="flex items-center justify-end mt-1.5 gap-1">
-            <span className="text-[10px] text-muted-foreground">
-              {expanded ? "Hide" : "Show"} my players
-            </span>
-            {expanded ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-          </div>
-        )}
+        <div className="flex items-center justify-end mt-1.5 gap-1">
+          <span className="text-[10px] text-muted-foreground">
+            {expanded ? "Hide" : "Show"} all players
+          </span>
+          {expanded ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+        </div>
       </CardContent>
 
-      {expanded && hasPlayers && (
-        <div className="border-t" data-testid={`match-players-${match.id}`}>
-          <div className="py-1">
-            {matchPlayers
-              .sort((a, b) => b.effectiveScore - a.effectiveScore)
-              .map((p) => (
-                <MatchPlayerRow key={p.playerId} player={p} />
-              ))}
-          </div>
-          <div className="flex items-center justify-between px-3 py-1.5 border-t bg-muted/30">
-            <span className="text-[10px] font-medium text-muted-foreground">Match Total</span>
-            <span className="text-xs font-bold" data-testid={`text-match-total-${match.id}`}>{matchPlayerTotal}</span>
-          </div>
+      {expanded && (
+        <div className="border-t" onClick={(e) => e.stopPropagation()}>
+          <MatchPlayersPanel match={match} round={round} myPlayers={myPlayers} />
         </div>
       )}
     </Card>
@@ -286,7 +371,7 @@ function PlayerScoreRow({ player, round, expanded, onToggle }: {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="text-sm font-medium truncate">{player.playerName}</span>
+            <span className="text-sm font-medium">{player.playerName}</span>
             {player.isCaptain && <Badge className="text-[8px] px-1 py-0 bg-accent text-accent-foreground">C</Badge>}
             {player.isViceCaptain && <Badge variant="outline" className="text-[8px] px-1 py-0">VC</Badge>}
           </div>
@@ -420,7 +505,7 @@ function BulkScoreDialog({ players, round }: { players: LivePlayerScore[]; round
           {players.map((p) => (
             <div key={p.playerId} className="flex items-center gap-2" data-testid={`bulk-row-${p.playerId}`}>
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium truncate block">{p.playerName}</span>
+                <span className="text-sm font-medium block">{p.playerName}</span>
                 <span className="text-[10px] text-muted-foreground">{p.position} • {getTeamAbbr(p.team)}</span>
               </div>
               <Input
@@ -545,6 +630,20 @@ export default function LiveScoresPage() {
         </Card>
       </div>
 
+      {data?.round === 0 && (
+        <Card data-testid="card-preseason-notice">
+          <CardContent className="p-3 flex items-start gap-2">
+            <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium">Pre-Season — Round 0</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                The season hasn't started yet, so all scores are zero. Click any match to see the full squad list for both teams. Once Round 1 begins, live fantasy scores will appear here.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {(liveMatches.length > 0 || upcomingMatches.length > 0 || completedMatches.length > 0) && (
         <div className="space-y-3">
           <h2 className="text-sm font-bold tracking-tight flex items-center gap-1.5">
@@ -561,6 +660,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                  round={data?.round ?? 0}
                 />
               ))}
             </div>
@@ -575,6 +675,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                  round={data?.round ?? 0}
                 />
               ))}
             </div>
@@ -589,6 +690,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                  round={data?.round ?? 0}
                 />
               ))}
             </div>

@@ -124,7 +124,25 @@ function PerformanceCharts({ player }: { player: Player }) {
     });
   }, [scores, player.startingPrice, player.price]);
 
-  if (scores.length < 2) return null;
+  if (scores.length < 2) {
+    return (
+      <div className="space-y-4" data-testid="section-performance-charts">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary" />
+          Performance Charts
+        </h2>
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Calendar className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm font-medium">Pre-Season — No Round Data Yet</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              Performance charts will populate once the 2026 AFL season begins. Stats shown below are based on 2025 baseline data and pre-season projections.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const avgScore = player.avgScore || 0;
 
