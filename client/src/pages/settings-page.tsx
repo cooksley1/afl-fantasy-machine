@@ -23,7 +23,7 @@ import type { LeagueSettings } from "@shared/schema";
 const settingsFormSchema = z.object({
   teamName: z.string().min(1, "Team name is required").max(50),
   salaryCap: z.coerce.number().min(1000000).max(20000000),
-  currentRound: z.coerce.number().min(1).max(24),
+  currentRound: z.coerce.number().min(0).max(24),
   tradesRemaining: z.coerce.number().min(0).max(100),
 });
 
@@ -41,7 +41,7 @@ export default function SettingsPage() {
     defaultValues: {
       teamName: settings?.teamName || "My Team",
       salaryCap: settings?.salaryCap || 18300000,
-      currentRound: settings?.currentRound || 1,
+      currentRound: settings?.currentRound ?? 1,
       tradesRemaining: settings?.tradesRemaining || 2,
     },
     values: settings

@@ -54,7 +54,12 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 4. **Trade EV Formula**: (ProjDiff × trade_ev_proj_multiplier) - (VolPenalty × trade_ev_vol_penalty) + (CashGen × trade_ev_cashgen_multiplier)
 5. **Consistency Rating**: CV-inverse (consistency_cv_weight) + avg factor (consistency_avg_weight) → 1-10 scale
 6. **Trade Confidence**: Base + EV bonus + form bonus + trend bonuses + injury/DPP bonuses, capped at confidence_max
-7. **Trade Engine**: scoreTradeOut() ranks team players for trading out (injury, form decline, BE above avg, cash cow peaked, bye); scoreTradeIn() evaluates replacements (form differential, cash generation, DPP, POD, bye coverage, ceiling upside); trades categorized as urgent/upgrade/cash_gen/structure with urgency levels critical/high/medium/low; quality threshold filters out marginal trades
+7. **Trade Engine** (`server/services/trade-engine.ts`): Comprehensive scoring system with 20+ factors:
+   - **scoreTradeOut**: injury/late change/not named (urgent), form decline (L3 vs season), BE surpassing average (non set-and-forget), cash cow peaked (sell high), fill-in player detection (may lose spot), reduced TOG risk, overpriced output, veteran age management, zero-game bench players, mass sell detection, bye coverage, round 0/early season duds
+   - **scoreTradeIn**: negative breakeven (guaranteed cash), DPP position upgrade value (MID>RUC>DEF>FWD scoring tiers), cash cow potential, price trajectory estimation, underpriced bounce-backs, set-and-forget quality, captain probability, POD value, consistency rating, bye coverage fixes, recent score trends, durability advantage, round 0 named rookies
+   - **Diversification**: Max 2 appearances per playerIn/playerOut, up to 15 recommendations
+   - **Categories**: urgent/upgrade/cash_gen/structure with urgency critical/high/medium/low
+   - **Round 0 support**: Preseason trade evaluation with early-season specific logic
 
 ## API Endpoints
 - `GET /api/players` - All players with advanced metrics
