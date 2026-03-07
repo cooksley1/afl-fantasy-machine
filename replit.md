@@ -22,7 +22,31 @@ Uses Replit Auth (OpenID Connect) supporting Google, Apple, GitHub, X, and email
 Users can send feedback via dialog in sidebar. Feedback stored in `feedback` table. Admins can view, respond, archive, and delete feedback from the Admin panel.
 
 ### Frontend
-Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders. Landing page shown to logged-out users. Admin page accessible only to admin users via sidebar link. App logo (Fantasy AFL Machine badge) is imported from `@assets/1772915052518_1772915124902_no_bg.png` and displayed in the sidebar header, landing page navbar, and footer.
+Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders. Landing page shown to logged-out users. Admin page accessible only to admin users via sidebar link. App logo (Fantasy AFL Machine badge) is imported from `@assets/1772915052518_1772915124902_no_bg.png` and displayed in the sidebar header, landing page navbar, mobile header, and footer.
+
+#### Onboarding Wizard
+New users see a 3-step onboarding wizard (`client/src/components/onboarding-wizard.tsx`) before the main app:
+- Step 1 (Welcome): Logo, value proposition, "Let's Get Started" CTA
+- Step 2 (League Settings): Inline settings form (team name, salary cap, round, trades) with "Skip for now" and "Save & Continue"
+- Step 3 (Build Your Team): Two cards — "Upload a Screenshot" (→ /analyze) and "Browse & Pick Players" (→ /players)
+- Completion stored in `localStorage` key `afl_onboarding_complete`. Checked in `App.tsx` `AuthenticatedApp` component.
+
+#### Sidebar Navigation
+Sidebar (`client/src/components/app-sidebar.tsx`) groups nav items into 4 labelled sections:
+- **MY TEAM**: Dashboard, My Team, Trade Centre
+- **INTELLIGENCE**: Intel Hub, Form Guide, Player Database
+- **TOOLS**: Team Analyser, Live Scores, Schedule
+- **ACCOUNT**: Settings, FAQ, Admin (admin-only)
+Each item has a subtitle description visible on desktop only.
+
+#### Dashboard Redesign
+Dashboard (`client/src/pages/dashboard.tsx`) displays sections in this order:
+1. Status Bar (compact top bar: round, team name, projected score, team value)
+2. "What You Need to Do Today" (priority actions from risk/trade/captain data)
+3. Captain Loophole Panel (VC/C side-by-side with P(120+) pills)
+4. My Team Snapshot (top 8 players in responsive grid)
+5. Intel Flash (3 most recent intel reports, horizontally scrollable)
+6. Existing sections (Round Score Simulator, Recommended Trades, Top Guns, etc.)
 
 ### Backend
 An Express.js and Node.js server handles API requests, file uploads via Multer, and integrates with various services.

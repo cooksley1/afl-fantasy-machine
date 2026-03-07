@@ -84,12 +84,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       (data) => {
         updateMutation.mutate(data, {
           onSuccess: () => {
-            completeOnboarding();
+            setStep(2);
           },
         });
       },
       () => {
-        completeOnboarding();
+        setStep(2);
       },
     )();
   }
