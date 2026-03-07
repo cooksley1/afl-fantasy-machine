@@ -352,4 +352,34 @@ export type InsertTeamTagProfile = z.infer<typeof insertTeamTagProfileSchema>;
 export type TagMatchupHistory = typeof tagMatchupHistory.$inferSelect;
 export type InsertTagMatchupHistory = z.infer<typeof insertTagMatchupHistorySchema>;
 
+export const savedTeams = pgTable("saved_teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").default(null),
+  playerData: text("player_data").notNull(),
+  teamValue: integer("team_value").notNull().default(0),
+  projectedScore: integer("projected_score").default(null),
+  isActive: boolean("is_active").notNull().default(false),
+  source: text("source").notNull().default("manual"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const leagueOpponents = pgTable("league_opponents", {
+  id: serial("id").primaryKey(),
+  leagueName: text("league_name").notNull(),
+  opponentName: text("opponent_name").notNull(),
+  playerData: text("player_data").default(null),
+  totalScore: integer("total_score").default(null),
+  lastRoundScore: integer("last_round_score").default(null),
+  notes: text("notes").default(null),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSavedTeamSchema = createInsertSchema(savedTeams).omit({ id: true, createdAt: true });
+export const insertLeagueOpponentSchema = createInsertSchema(leagueOpponents).omit({ id: true, createdAt: true });
+export type SavedTeam = typeof savedTeams.$inferSelect;
+export type InsertSavedTeam = z.infer<typeof insertSavedTeamSchema>;
+export type LeagueOpponent = typeof leagueOpponents.$inferSelect;
+export type InsertLeagueOpponent = z.infer<typeof insertLeagueOpponentSchema>;
+
 export * from "./models/auth";

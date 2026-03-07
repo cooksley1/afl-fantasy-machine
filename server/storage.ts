@@ -36,6 +36,12 @@ import {
   type InsertProjection,
   type ModelWeight,
   type InsertModelWeight,
+  savedTeams,
+  leagueOpponents,
+  type SavedTeam,
+  type InsertSavedTeam,
+  type LeagueOpponent,
+  type InsertLeagueOpponent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -96,6 +102,20 @@ export interface IStorage {
   getModelWeight(key: string): Promise<ModelWeight | undefined>;
   upsertModelWeight(weight: InsertModelWeight): Promise<ModelWeight>;
   deleteModelWeight(key: string): Promise<void>;
+
+  getSavedTeams(): Promise<SavedTeam[]>;
+  getSavedTeam(id: number): Promise<SavedTeam | undefined>;
+  createSavedTeam(data: InsertSavedTeam): Promise<SavedTeam>;
+  updateSavedTeam(id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam>;
+  deleteSavedTeam(id: number): Promise<void>;
+  activateSavedTeam(id: number): Promise<void>;
+  saveCurrentTeamAsVariant(name: string, description: string | null, source: string): Promise<SavedTeam>;
+
+  getLeagueOpponents(leagueName?: string): Promise<LeagueOpponent[]>;
+  getLeagueOpponent(id: number): Promise<LeagueOpponent | undefined>;
+  createLeagueOpponent(data: InsertLeagueOpponent): Promise<LeagueOpponent>;
+  updateLeagueOpponent(id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent>;
+  deleteLeagueOpponent(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -448,6 +468,114 @@ export class DatabaseStorage implements IStorage {
 
   async deleteModelWeight(key: string): Promise<void> {
     await db.delete(modelWeights).where(eq(modelWeights.key, key));
+  }
+
+  async getSavedTeams(): Promise<SavedTeam[]> {
+    return db.select().from(savedTeams).orderBy(desc(savedTeams.createdAt));
+  }
+
+  async getSavedTeam(id: number): Promise<SavedTeam | undefined> {
+    const [team] = await db.select().from(savedTeams).where(eq(savedTeams.id, id));
+    return team;
+  }
+
+  async createSavedTeam(data: InsertSavedTeam): Promise<SavedTeam> {
+    const [created] = await db.insert(savedTeams).values(data).returning();
+    return created;
+  }
+
+  async updateSavedTeam(id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam> {
+    const [updated] = await db.update(savedTeams).set(data).where(eq(savedTeams.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSavedTeam(id: number): Promise<void> {
+    await db.delete(savedTeams).where(eq(savedTeams.id, id));
+  }
+
+  async activateSavedTeam(id: number): Promise<void> {
+    await db.update(savedTeams).set({ isActive: false });
+    await db.update(savedTeams).set({ isActive: true }).where(eq(savedTeams.id, id));
+
+    const team = await this.getSavedTeam(id);
+    if (!team) throw new Error("Saved team not found");
+
+    const playerEntries: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }> = JSON.parse(team.playerData);
+
+    await db.delete(myTeamPlayers);
+    for (const entry of playerEntries) {
+      await db.insert(myTeamPlayers).values({
+        playerId: entry.playerId,
+        isOnField: entry.isOnField,
+        isCaptain: entry.isCaptain,
+        isViceCaptain: entry.isViceCaptain,
+        fieldPosition: entry.fieldPosition,
+      });
+    }
+  }
+
+  async saveCurrentTeamAsVariant(name: string, description: string | null, source: string): Promise<SavedTeam> {
+    const teamEntries = await db.select().from(myTeamPlayers);
+    const allPlayers = await db.select().from(players);
+    const playerMap = new Map(allPlayers.map(p => [p.id, p]));
+
+    const playerData = teamEntries.map(e => ({
+      playerId: e.playerId,
+      isOnField: e.isOnField,
+      isCaptain: e.isCaptain,
+      isViceCaptain: e.isViceCaptain,
+      fieldPosition: e.fieldPosition,
+    }));
+
+    const teamValue = teamEntries.reduce((sum, e) => {
+      const p = playerMap.get(e.playerId);
+      return sum + (p?.price || 0);
+    }, 0);
+
+    const projectedScore = teamEntries
+      .filter(e => e.isOnField)
+      .reduce((sum, e) => {
+        const p = playerMap.get(e.playerId);
+        return sum + (p?.avgScore || 0);
+      }, 0);
+
+    return this.createSavedTeam({
+      name,
+      description,
+      playerData: JSON.stringify(playerData),
+      teamValue,
+      projectedScore: Math.round(projectedScore),
+      isActive: false,
+      source,
+    });
+  }
+
+  async getLeagueOpponents(leagueName?: string): Promise<LeagueOpponent[]> {
+    if (leagueName) {
+      return db.select().from(leagueOpponents)
+        .where(eq(leagueOpponents.leagueName, leagueName))
+        .orderBy(desc(leagueOpponents.createdAt));
+    }
+    return db.select().from(leagueOpponents).orderBy(desc(leagueOpponents.createdAt));
+  }
+
+  async getLeagueOpponent(id: number): Promise<LeagueOpponent | undefined> {
+    const [opp] = await db.select().from(leagueOpponents).where(eq(leagueOpponents.id, id));
+    return opp;
+  }
+
+  async createLeagueOpponent(data: InsertLeagueOpponent): Promise<LeagueOpponent> {
+    const [created] = await db.insert(leagueOpponents).values(data).returning();
+    return created;
+  }
+
+  async updateLeagueOpponent(id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent> {
+    const [updated] = await db.update(leagueOpponents).set(data).where(eq(leagueOpponents.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLeagueOpponent(id: number): Promise<void> {
+    await db.delete(leagueOpponents).where(eq(leagueOpponents.id, id));
   }
 }
 

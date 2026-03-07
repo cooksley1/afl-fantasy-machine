@@ -25,6 +25,9 @@ import AdminPage from "@/pages/admin";
 import SchedulePage from "@/pages/schedule";
 import FAQPage from "@/pages/faq";
 import SeasonRoadmap from "@/pages/season-roadmap";
+import LeagueSpy from "@/pages/league-spy";
+import TeamSandbox from "@/pages/team-sandbox";
+import GameDayGuide from "@/pages/game-day-guide";
 import { Loader2 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 
@@ -45,6 +48,9 @@ function Router() {
       <Route path="/admin" component={AdminPage} />
       <Route path="/faq" component={FAQPage} />
       <Route path="/roadmap" component={SeasonRoadmap} />
+      <Route path="/game-day" component={GameDayGuide} />
+      <Route path="/sandbox" component={TeamSandbox} />
+      <Route path="/league" component={LeagueSpy} />
       <Route component={NotFound} />
     </Switch>
   );

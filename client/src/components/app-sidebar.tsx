@@ -14,6 +14,9 @@ import {
   LogOut,
   HelpCircle,
   Map,
+  Eye,
+  ClipboardCheck,
+  FlaskConical,
 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import {
@@ -42,6 +45,8 @@ const navGroups = [
       { title: "My Team", subtitle: "Manage your squad", url: "/team", icon: Users },
       { title: "Trade Centre", subtitle: "Find and execute trades", url: "/trades", icon: ArrowLeftRight },
       { title: "Season Roadmap", subtitle: "Your path to #1", url: "/roadmap", icon: Map },
+      { title: "Game Day Guide", subtitle: "Step-by-step checklist", url: "/game-day", icon: ClipboardCheck },
+      { title: "Team Lab", subtitle: "Build & compare teams", url: "/sandbox", icon: FlaskConical },
     ],
   },
   {
@@ -51,6 +56,7 @@ const navGroups = [
       { title: "Intel Hub", subtitle: "AI-powered insights", url: "/intel", icon: Brain, badge: "Live", badgeClass: "bg-accent text-accent-foreground" },
       { title: "Form Guide", subtitle: "Player trends & stats", url: "/form", icon: TrendingUp },
       { title: "Player Database", subtitle: "Browse all players", url: "/players", icon: Trophy },
+      { title: "League Spy", subtitle: "Track opponents", url: "/league", icon: Eye },
     ],
   },
   {

@@ -42,6 +42,30 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Team Analyzer**: Allows users to upload team screenshots for AI analysis and saving identified players.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
 - **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks.
+- **Team Lab (Sandbox)**: Save, create, compare, and swap between multiple team configurations. Supports AI-built variants and manual saves. Compare any saved team side-by-side with the active team showing player overlaps, score diffs, and value diffs. Activate any saved team to make it the main team.
+- **Game Day Guide**: Step-by-step transfer checklist for updating the official AFL Fantasy app. Lists trades (out→in), captain/VC picks, field/bench swaps needed, and numbered instructions. Copy-to-clipboard and Web Share API support. Checkable items stored in localStorage.
+- **League Spy**: Track opponents across multiple fantasy leagues. Add opponents manually, upload their team screenshots for AI analysis, then get matchup breakdowns: projected advantage, unique picks each side, captain differential tips, and weekly win strategy advice.
+
+### New DB Tables (Team Lab / League Spy)
+- `saved_teams`: id, name, description, playerData (JSON), teamValue, projectedScore, isActive, source, createdAt
+- `league_opponents`: id, leagueName, opponentName, playerData (JSON), totalScore, lastRoundScore, notes, createdAt
+
+### New API Routes
+- `GET/POST /api/saved-teams` — list and create saved teams
+- `POST /api/saved-teams/from-wizard` — AI-build a new team variant without changing active team
+- `PUT/DELETE /api/saved-teams/:id` — update/delete saved teams
+- `POST /api/saved-teams/:id/activate` — activate a saved team (loads into my_team_players)
+- `GET /api/saved-teams/:id/compare` — compare saved team vs active team
+- `GET/POST /api/league/opponents` — list and create league opponents
+- `PUT/DELETE /api/league/opponents/:id` — update/delete opponents
+- `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
+- `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
+- `GET /api/game-day-guide` — generate game day transfer checklist
+
+### New Frontend Pages
+- `/sandbox` — Team Lab (saved teams management, comparison, activation)
+- `/game-day` — Game Day Guide (transfer checklist with copy/share)
+- `/league` — League Spy (opponent tracking, screenshot upload, matchup analysis)
 
 ## External Dependencies
 - **OpenAI API**: For GPT-4o-mini (text analysis) and GPT-4o (vision/screenshot analysis).

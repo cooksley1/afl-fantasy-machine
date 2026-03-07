@@ -1622,5 +1622,347 @@ export async function registerRoutes(
     }
   });
 
+  // ============ SAVED TEAMS (TEAM LAB) ROUTES ============
+
+  app.get("/api/saved-teams", async (req, res) => {
+    try {
+      const teams = await storage.getSavedTeams();
+      res.json(teams);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/saved-teams", async (req, res) => {
+    try {
+      const { name, description, source } = req.body;
+      if (!name) return res.status(400).json({ message: "Team name is required" });
+      const team = await storage.saveCurrentTeamAsVariant(name, description || null, source || "manual");
+      res.json(team);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/saved-teams/from-wizard", async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      const teamName = name || `AI Build ${new Date().toLocaleDateString()}`;
+      const allPlayers = await storage.getAllPlayers();
+      const builtTeam = buildOptimalTeam(allPlayers);
+
+      const playerData = builtTeam.map((p, i) => {
+        const pos = p.position?.split("/")[0] || "MID";
+        return {
+          playerId: p.id,
+          isOnField: i < 22,
+          isCaptain: false,
+          isViceCaptain: false,
+          fieldPosition: pos,
+        };
+      });
+
+      const teamValue = builtTeam.reduce((sum, p) => sum + p.price, 0);
+      const projectedScore = builtTeam.slice(0, 22).reduce((sum, p) => sum + (p.avgScore || 0), 0);
+
+      const bestScorer = builtTeam.filter((_, i) => i < 22).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+      if (bestScorer[0]) playerData.find(e => e.playerId === bestScorer[0].id)!.isCaptain = true;
+      if (bestScorer[1]) playerData.find(e => e.playerId === bestScorer[1].id)!.isViceCaptain = true;
+
+      const team = await storage.createSavedTeam({
+        name: teamName,
+        description: description || "AI-generated optimal team",
+        playerData: JSON.stringify(playerData),
+        teamValue,
+        projectedScore: Math.round(projectedScore),
+        isActive: false,
+        source: "ai-built",
+      });
+
+      res.json(team);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/saved-teams/:id", async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      const updated = await storage.updateSavedTeam(Number(req.params.id), { name, description });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/saved-teams/:id", async (req, res) => {
+    try {
+      await storage.deleteSavedTeam(Number(req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/saved-teams/:id/activate", async (req, res) => {
+    try {
+      await storage.activateSavedTeam(Number(req.params.id));
+      res.json({ success: true, message: "Team activated and loaded" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/saved-teams/:id/compare", async (req, res) => {
+    try {
+      const savedTeam = await storage.getSavedTeam(Number(req.params.id));
+      if (!savedTeam) return res.status(404).json({ message: "Team not found" });
+
+      const currentTeam = await storage.getMyTeam();
+      const savedPlayers: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }> = JSON.parse(savedTeam.playerData);
+      const allPlayers = await storage.getAllPlayers();
+      const playerMap = new Map(allPlayers.map(p => [p.id, p]));
+
+      const currentIds = new Set(currentTeam.map(p => p.id));
+      const savedIds = new Set(savedPlayers.map(p => p.playerId));
+
+      const shared = [...currentIds].filter(id => savedIds.has(id));
+      const onlyInCurrent = [...currentIds].filter(id => !savedIds.has(id)).map(id => {
+        const p = playerMap.get(id);
+        return p ? { id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price } : null;
+      }).filter(Boolean);
+      const onlyInSaved = [...savedIds].filter(id => !currentIds.has(id)).map(id => {
+        const p = playerMap.get(id);
+        return p ? { id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price } : null;
+      }).filter(Boolean);
+
+      const currentValue = currentTeam.reduce((sum, p) => sum + p.price, 0);
+      const currentProjected = currentTeam.filter(p => p.isOnField).reduce((sum, p) => sum + (p.avgScore || 0), 0);
+
+      res.json({
+        currentTeam: { value: currentValue, projectedScore: Math.round(currentProjected), playerCount: currentTeam.length },
+        savedTeam: { value: savedTeam.teamValue, projectedScore: savedTeam.projectedScore, playerCount: savedPlayers.length, name: savedTeam.name },
+        sharedPlayers: shared.length,
+        onlyInCurrent,
+        onlyInSaved,
+        scoreDiff: Math.round((savedTeam.projectedScore || 0) - currentProjected),
+        valueDiff: savedTeam.teamValue - currentValue,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ LEAGUE SPY ROUTES ============
+
+  app.get("/api/league/opponents", async (req, res) => {
+    try {
+      const leagueName = req.query.leagueName as string | undefined;
+      const opponents = await storage.getLeagueOpponents(leagueName);
+      res.json(opponents);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/league/opponents", async (req, res) => {
+    try {
+      const { leagueName, opponentName, totalScore, lastRoundScore, notes } = req.body;
+      if (!leagueName || !opponentName) {
+        return res.status(400).json({ message: "League name and opponent name are required" });
+      }
+      const opponent = await storage.createLeagueOpponent({
+        leagueName,
+        opponentName,
+        totalScore: totalScore || null,
+        lastRoundScore: lastRoundScore || null,
+        notes: notes || null,
+      });
+      res.json(opponent);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/league/opponents/:id", async (req, res) => {
+    try {
+      const { opponentName, totalScore, lastRoundScore, notes, leagueName } = req.body;
+      const updated = await storage.updateLeagueOpponent(Number(req.params.id), {
+        opponentName, totalScore, lastRoundScore, notes, leagueName,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/league/opponents/:id", async (req, res) => {
+    try {
+      await storage.deleteLeagueOpponent(Number(req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/league/opponents/:id/analyze-screenshot", upload.single("screenshot"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No screenshot uploaded" });
+
+      const base64Image = req.file.buffer.toString("base64");
+      const { analyzeTeamScreenshot } = await import("./intel-engine");
+      const analysis = await analyzeTeamScreenshot(base64Image);
+
+      if (analysis.players && analysis.players.length > 0) {
+        const allPlayers = await storage.getAllPlayers();
+        const matchedPlayers = analysis.players.map((ip: any) => {
+          const normalName = ip.name.trim().toLowerCase();
+          const match = allPlayers.find(p => p.name.toLowerCase() === normalName) ||
+            allPlayers.find(p => {
+              const parts = p.name.toLowerCase().split(" ");
+              return parts[parts.length - 1] === normalName.split(" ").pop();
+            });
+          return match ? {
+            playerId: match.id,
+            name: match.name,
+            position: match.position,
+            avgScore: match.avgScore,
+            price: match.price,
+          } : { name: ip.name, position: ip.position, avgScore: null, price: null };
+        });
+
+        await storage.updateLeagueOpponent(Number(req.params.id), {
+          playerData: JSON.stringify(matchedPlayers),
+        });
+
+        res.json({ success: true, playersFound: matchedPlayers.length, players: matchedPlayers });
+      } else {
+        res.json({ success: false, message: "No players identified in screenshot" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/league/opponents/:id/matchup", async (req, res) => {
+    try {
+      const opponent = await storage.getLeagueOpponent(Number(req.params.id));
+      if (!opponent) return res.status(404).json({ message: "Opponent not found" });
+      if (!opponent.playerData) return res.json({ message: "No squad data for this opponent. Upload a screenshot of their team." });
+
+      const currentTeam = await storage.getMyTeam();
+      const oppPlayers: Array<{ playerId?: number; name: string; position: string; avgScore: number | null; price: number | null }> = JSON.parse(opponent.playerData);
+
+      const myIds = new Set(currentTeam.map(p => p.id));
+      const oppIds = new Set(oppPlayers.filter(p => p.playerId).map(p => p.playerId));
+
+      const myUnique = currentTeam
+        .filter(p => !oppIds.has(p.id))
+        .map(p => ({ id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price, isOnField: p.isOnField }));
+      const theirUnique = oppPlayers
+        .filter(p => p.playerId && !myIds.has(p.playerId))
+        .map(p => ({ id: p.playerId, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price }));
+      const sharedPlayers = currentTeam
+        .filter(p => oppIds.has(p.id))
+        .map(p => ({ id: p.id, name: p.name, position: p.position, avgScore: p.avgScore }));
+
+      const myProjected = currentTeam.filter(p => p.isOnField).reduce((sum, p) => sum + (p.avgScore || 0), 0);
+      const oppProjected = oppPlayers.reduce((sum, p) => sum + (p.avgScore || 0), 0);
+      const advantage = Math.round(myProjected - oppProjected);
+
+      const captainTips: string[] = [];
+      const myUniqueOnField = myUnique.filter(p => p.isOnField).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+      if (myUniqueOnField.length > 0) {
+        captainTips.push(`Captain ${myUniqueOnField[0].name} (avg ${Math.round(myUniqueOnField[0].avgScore || 0)}) — your opponent doesn't have them, so a big score doubles your advantage`);
+      }
+      if (theirUnique.length > 0) {
+        const theirBest = [...theirUnique].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
+        captainTips.push(`Watch out for ${theirBest.name} (avg ${Math.round(theirBest.avgScore || 0)}) — they have this player and you don't`);
+      }
+
+      res.json({
+        opponentName: opponent.opponentName,
+        leagueName: opponent.leagueName,
+        projectedAdvantage: advantage,
+        myProjected: Math.round(myProjected),
+        oppProjected: Math.round(oppProjected),
+        sharedPlayers,
+        myUniquePicks: myUnique,
+        theirUniquePicks: theirUnique,
+        captainTips,
+        weeklyWinStrategy: advantage > 0
+          ? `You're projected +${advantage}pts ahead. Maintain your edge by captaining a high-ceiling unique pick.`
+          : `You're projected ${advantage}pts behind. Consider a high-ceiling captain differential to close the gap, even if it's riskier for your season.`,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============ GAME DAY GUIDE ROUTES ============
+
+  app.get("/api/game-day-guide", async (req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      const currentTeam = await storage.getMyTeam();
+      const tradeRecs = await storage.getTradeRecommendations();
+
+      const pendingTrades = tradeRecs.filter(t => t.status === "pending").slice(0, settings.tradesRemaining);
+
+      const captain = currentTeam.find(p => p.isCaptain);
+      const viceCaptain = currentTeam.find(p => p.isViceCaptain);
+
+      const benchPlayers = currentTeam.filter(p => !p.isOnField);
+      const injuredOnField = currentTeam.filter(p => p.isOnField && (p.selectionStatus === "omitted" || p.injuryStatus === "OUT"));
+      const fieldMoves: Array<{ action: string; player: string; reason: string }> = [];
+      for (const injured of injuredOnField) {
+        const replacement = benchPlayers.find(b =>
+          b.fieldPosition === injured.fieldPosition && b.selectionStatus !== "omitted" && b.injuryStatus !== "OUT"
+        );
+        if (replacement) {
+          fieldMoves.push({
+            action: "Swap",
+            player: `${injured.name} → ${replacement.name}`,
+            reason: `${injured.name} is ${injured.injuryStatus || "unavailable"}`,
+          });
+        }
+      }
+
+      const tradeSteps = pendingTrades.map((t, i) => ({
+        step: i + 1,
+        out: { name: t.playerOut.name, price: t.playerOut.price, avgScore: t.playerOut.avgScore },
+        in: { name: t.playerIn.name, price: t.playerIn.price, avgScore: t.playerIn.avgScore },
+        reason: t.reason,
+        scoreDiff: t.scoreDifference,
+      }));
+
+      const guide = {
+        round: settings.currentRound,
+        tradesRemaining: settings.tradesRemaining,
+        trades: tradeSteps,
+        captain: captain ? { name: captain.name, avgScore: captain.avgScore, position: captain.position } : null,
+        viceCaptain: viceCaptain ? { name: viceCaptain.name, avgScore: viceCaptain.avgScore, position: viceCaptain.position } : null,
+        fieldMoves,
+        tips: [
+          "Open the AFL Fantasy app → My Team",
+          ...(tradeSteps.length > 0 ? [
+            "Go to Trades tab",
+            ...tradeSteps.map(t => `Search for "${t.in.name}" and trade out "${t.out.name}"`),
+            "Confirm all trades",
+          ] : []),
+          ...(captain ? [`Set ${captain.name} as Captain (tap the 'C' badge)`] : []),
+          ...(viceCaptain ? [`Set ${viceCaptain.name} as Vice-Captain (tap the 'VC' badge)`] : []),
+          ...(fieldMoves.length > 0 ? fieldMoves.map(m => `${m.action}: ${m.player}`) : []),
+          "Review your team and confirm before lockout",
+        ],
+        isEmpty: tradeSteps.length === 0 && fieldMoves.length === 0,
+      };
+
+      res.json(guide);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
