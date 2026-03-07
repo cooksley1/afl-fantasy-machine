@@ -14,54 +14,52 @@ async function migrateDatabase() {
       AND column_name IN ('username', 'password')
     `);
     if (colCheck.rows.length > 0) {
-      console.log("Detected old users table with username/password columns, rebuilding...");
+      console.log("Detected old users table with username/password columns, dropping...");
       await client.query("DROP TABLE IF EXISTS feedback CASCADE");
       await client.query("DROP TABLE IF EXISTS sessions CASCADE");
       await client.query("DROP TABLE IF EXISTS users CASCADE");
-
-      await client.query(`
-        CREATE TABLE users (
-          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-          email varchar UNIQUE,
-          first_name varchar,
-          last_name varchar,
-          profile_image_url varchar,
-          is_admin boolean DEFAULT false,
-          is_blocked boolean DEFAULT false,
-          created_at timestamp DEFAULT now(),
-          updated_at timestamp DEFAULT now()
-        )
-      `);
-
-      await client.query(`
-        CREATE TABLE sessions (
-          sid varchar PRIMARY KEY,
-          sess jsonb NOT NULL,
-          expire timestamp NOT NULL
-        )
-      `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON sessions (expire)`);
-
-      await client.query(`
-        CREATE TABLE feedback (
-          id serial PRIMARY KEY,
-          user_id varchar NOT NULL,
-          user_email varchar,
-          user_name varchar,
-          subject text NOT NULL,
-          message text NOT NULL,
-          status text NOT NULL DEFAULT 'unread',
-          admin_response text,
-          responded_at timestamp,
-          is_archived boolean DEFAULT false,
-          created_at timestamp DEFAULT now()
-        )
-      `);
-
-      console.log("Tables rebuilt with correct schema");
-    } else {
-      console.log("Users table schema is correct, no migration needed");
     }
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        email varchar UNIQUE,
+        first_name varchar,
+        last_name varchar,
+        profile_image_url varchar,
+        is_admin boolean DEFAULT false,
+        is_blocked boolean DEFAULT false,
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        sid varchar PRIMARY KEY,
+        sess jsonb NOT NULL,
+        expire timestamp NOT NULL
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON sessions (expire)`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id serial PRIMARY KEY,
+        user_id varchar NOT NULL,
+        user_email varchar,
+        user_name varchar,
+        subject text NOT NULL,
+        message text NOT NULL,
+        status text NOT NULL DEFAULT 'unread',
+        admin_response text,
+        responded_at timestamp,
+        is_archived boolean DEFAULT false,
+        created_at timestamp DEFAULT now()
+      )
+    `);
+
+    console.log("Auth tables ensured");
   } catch (err) {
     console.error("Migration error (non-fatal):", err);
   } finally {
