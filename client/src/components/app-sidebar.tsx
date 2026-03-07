@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   LogOut,
   HelpCircle,
+  Map,
 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import {
@@ -40,6 +41,7 @@ const navGroups = [
       { title: "Dashboard", subtitle: "Your command centre", url: "/", icon: LayoutDashboard },
       { title: "My Team", subtitle: "Manage your squad", url: "/team", icon: Users },
       { title: "Trade Centre", subtitle: "Find and execute trades", url: "/trades", icon: ArrowLeftRight },
+      { title: "Season Roadmap", subtitle: "Your path to #1", url: "/roadmap", icon: Map },
     ],
   },
   {

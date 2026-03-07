@@ -16,7 +16,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
-import { Camera, Users, ArrowRight, Loader2, Smartphone, Share2, Download, Upload, DollarSign } from "lucide-react";
+import { Camera, Users, ArrowRight, Loader2, Smartphone, Share2, Download, Upload, DollarSign, Sparkles, Brain } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { LeagueSettings } from "@shared/schema";
@@ -94,6 +94,20 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       },
     )();
   }
+
+  const buildTeamMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/season-plan/build-team"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/season-plan"] });
+      toast({ title: "Team built!", description: "Your optimal squad and season roadmap are ready." });
+      completeOnboarding();
+      navigate("/roadmap");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error building team", description: error.message, variant: "destructive" });
+    },
+  });
 
   function handleTeamSetupChoice(path: string) {
     completeOnboarding();
@@ -276,15 +290,70 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             <CardContent className="pt-6 pb-6 space-y-5">
               <div className="text-center space-y-1">
                 <h2 className="text-xl font-bold tracking-tight" data-testid="text-build-title">
-                  Import Your Team
+                  Build Your Team
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  The fastest way is to upload a screenshot from the AFL Fantasy app
+                  Choose how you'd like to set up your squad
                 </p>
               </div>
 
               <Card
-                className="hover-elevate cursor-pointer border-primary/30"
+                className={`hover-elevate cursor-pointer border-primary/30 ${buildTeamMutation.isPending ? "pointer-events-none opacity-80" : ""}`}
+                onClick={() => !buildTeamMutation.isPending && buildTeamMutation.mutate()}
+                data-testid="card-ai-build-team"
+              >
+                <CardContent className="pt-5 pb-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Brain className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm" data-testid="text-ai-build-title">Let AI Build Your Team</p>
+                      <p className="text-xs text-muted-foreground">
+                        Our analytics engine picks the optimal 30-man squad
+                      </p>
+                    </div>
+                    {buildTeamMutation.isPending && (
+                      <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span>Premium scorers on-field</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span>Cash cows on bench</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span>Bye round coverage</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-primary" />
+                      <span>Full season roadmap</span>
+                    </div>
+                  </div>
+                  {buildTeamMutation.isPending && (
+                    <p className="text-xs text-primary font-medium text-center">
+                      Building your optimal squad and generating season plan...
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-card px-3 text-xs text-muted-foreground">or import your own team</span>
+                </div>
+              </div>
+
+              <Card
+                className="hover-elevate cursor-pointer"
                 onClick={() => handleTeamSetupChoice("/analyze")}
                 data-testid="card-upload-screenshot"
               >

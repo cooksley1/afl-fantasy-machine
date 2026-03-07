@@ -323,6 +323,21 @@ export const modelWeights = pgTable("model_weights", {
   category: text("category").notNull().default("general"),
 });
 
+export const seasonPlans = pgTable("season_plans", {
+  id: serial("id").primaryKey(),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  currentRound: integer("current_round").notNull().default(0),
+  teamSnapshot: text("team_snapshot").notNull(),
+  overallStrategy: text("overall_strategy").notNull(),
+  weeklyPlans: text("weekly_plans").notNull(),
+  totalProjectedScore: integer("total_projected_score").default(null),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertSeasonPlanSchema = createInsertSchema(seasonPlans).omit({ id: true, generatedAt: true });
+export type SeasonPlan = typeof seasonPlans.$inferSelect;
+export type InsertSeasonPlan = z.infer<typeof insertSeasonPlanSchema>;
+
 export const insertFixtureSchema = createInsertSchema(fixtures).omit({ id: true });
 export type Fixture = typeof fixtures.$inferSelect;
 export type InsertFixture = z.infer<typeof insertFixtureSchema>;

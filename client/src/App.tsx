@@ -24,6 +24,7 @@ import LandingPage from "@/pages/landing";
 import AdminPage from "@/pages/admin";
 import SchedulePage from "@/pages/schedule";
 import FAQPage from "@/pages/faq";
+import SeasonRoadmap from "@/pages/season-roadmap";
 import { Loader2 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/faq" component={FAQPage} />
+      <Route path="/roadmap" component={SeasonRoadmap} />
       <Route component={NotFound} />
     </Switch>
   );

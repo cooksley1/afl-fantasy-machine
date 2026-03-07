@@ -16,6 +16,7 @@ import {
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
 import { evaluateTrade } from "./services/trade-optimizer";
+import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan } from "./services/season-planner";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
@@ -400,6 +401,92 @@ export async function registerRoutes(
       const teamPlayerIds = myTeam.map(p => p.id);
       const evaluation = await evaluateTrade(candidateId, teamPlayerIds, settings.currentRound);
       res.json(evaluation);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/season-plan", async (_req, res) => {
+    try {
+      const plan = await getActiveSeasonPlan();
+      if (!plan) return res.json(null);
+      res.json({
+        ...plan,
+        weeklyPlans: JSON.parse(plan.weeklyPlans),
+        teamSnapshot: JSON.parse(plan.teamSnapshot),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/season-plan/generate", async (_req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      const myTeam = await storage.getMyTeam();
+      const teamPlayerIds = myTeam.map(p => p.id);
+      if (teamPlayerIds.length === 0) {
+        return res.status(400).json({ message: "No team found. Import or build a team first." });
+      }
+      const plan = await generateSeasonPlan(teamPlayerIds, settings.currentRound);
+      const saved = await saveSeasonPlan(plan, settings.currentRound);
+      res.json({
+        ...saved,
+        weeklyPlans: JSON.parse(saved.weeklyPlans),
+        teamSnapshot: JSON.parse(saved.teamSnapshot),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/season-plan/build-team", async (_req, res) => {
+    try {
+      const result = await buildOptimalTeam();
+      await storage.clearMyTeam();
+      for (const p of result.teamPlayers) {
+        await storage.addToMyTeam({
+          playerId: p.id,
+          isOnField: p.isOnField,
+          isCaptain: false,
+          isViceCaptain: false,
+          fieldPosition: p.fieldPosition,
+        });
+      }
+      const settings = await storage.getSettings();
+      const teamPlayerIds = result.teamPlayers.map(p => p.id);
+      const plan = await generateSeasonPlan(teamPlayerIds, settings.currentRound);
+      const saved = await saveSeasonPlan(plan, settings.currentRound);
+
+      const bestScorer = result.teamPlayers
+        .filter(p => p.isOnField)
+        .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
+      const secondBest = result.teamPlayers
+        .filter(p => p.isOnField && p.id !== bestScorer?.id)
+        .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
+
+      if (bestScorer) {
+        const myTeam = await storage.getMyTeam();
+        const captainEntry = myTeam.find(p => p.id === bestScorer.id);
+        if (captainEntry?.myTeamPlayerId) {
+          await storage.setCaptain(captainEntry.myTeamPlayerId);
+        }
+        if (secondBest) {
+          const vcEntry = myTeam.find(p => p.id === secondBest.id);
+          if (vcEntry?.myTeamPlayerId) {
+            await storage.setViceCaptain(vcEntry.myTeamPlayerId);
+          }
+        }
+      }
+
+      res.json({
+        team: result,
+        seasonPlan: {
+          ...saved,
+          weeklyPlans: JSON.parse(saved.weeklyPlans),
+          teamSnapshot: JSON.parse(saved.teamSnapshot),
+        },
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
