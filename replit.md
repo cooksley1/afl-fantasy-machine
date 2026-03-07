@@ -41,7 +41,8 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Data Gathering**: `server/data-gatherer.ts` fetches live data from Squiggle API, AFL.com.au RSS, and 18 AFL club Google News feeds. This process is automated via `server/scheduler.ts` on a 4-hour cycle.
 - **Live Scores**: `server/services/live-scores.ts` tracks live match statuses and fantasy scores, allowing manual entry and bulk updates. Match expansion shows ALL players from both teams (not just user's team), with user's players highlighted. Opening Round context message when round=0.
 - **Season Schedule**: `server/services/fixture-service.ts` fetches full 2026 AFL season fixture data from Squiggle API on startup. Stores in `fixtures` table (207 games). `client/src/pages/schedule.tsx` shows the full schedule with round navigation, team badges, scores, and bye team display. Round 0 = "Opening Round" (not practice matches).
-- **Player Data Management**: `server/expand-players.ts` loads and reconciles 780 real 2026 AFL players with seed data. Includes `repairPlayerData()` that runs on startup to fix missing byeRound, venue, startingPrice, breakEven, and clears fake recentScores for players with 0 games played.
+- **Player Data Management**: `server/expand-players.ts` loads and reconciles 780 real 2026 AFL players with seed data. Includes `repairPlayerData()` that runs on startup to fix missing byeRound, venue, startingPrice, breakEven, and clears ALL fake recentScores (since no 2026 competitive rounds have been played yet).
+- **Team Colors**: `client/src/lib/afl-teams.ts` defines all 18 AFL team colors with `primary` (card body), `secondary` (name bar background), `text` (text on primary), and `secondaryText` (text on secondary/name bar) to ensure readable contrast on all card elements.
 
 ## External Dependencies
 - **OpenAI API**: For GPT-4o-mini (text analysis) and GPT-4o (vision/screenshot analysis).

@@ -220,12 +220,12 @@ function FieldViewCard({
 
           <div
             className="px-1 py-0.5 text-center"
-            style={{ backgroundColor: teamColors.secondary, borderTop: `1px solid ${teamColors.text}33` }}
+            style={{ backgroundColor: teamColors.secondary, borderTop: `1px solid ${teamColors.secondaryText}33` }}
           >
-            <p className="text-[8px] sm:text-[9px] font-bold truncate leading-tight" style={{ color: teamColors.text }}>
+            <p className="text-[8px] sm:text-[9px] font-bold truncate leading-tight" style={{ color: teamColors.secondaryText }}>
               {lastName.toUpperCase()}
             </p>
-            <p className="text-[7px] sm:text-[8px] font-medium opacity-70" style={{ color: teamColors.text }}>
+            <p className="text-[7px] sm:text-[8px] font-medium opacity-70" style={{ color: teamColors.secondaryText }}>
               {teamAbbr} {getPositionDisplay(player)}
             </p>
           </div>
