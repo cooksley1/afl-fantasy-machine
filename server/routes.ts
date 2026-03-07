@@ -15,7 +15,7 @@ import {
   buildWeightConfig,
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
-import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers } from "./services/live-scores";
+import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
 
@@ -1067,6 +1067,22 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
       }
       const result = await bulkUpdateLiveScores(parsed.data.round, parsed.data.scores);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/live-scores/fetch-scores", async (req, res) => {
+    try {
+      const schema = z.object({
+        round: z.number(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const result = await fetchAndStorePlayerScores(parsed.data.round);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

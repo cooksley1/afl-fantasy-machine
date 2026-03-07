@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap, Star, Info } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap, Star, Info, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -533,29 +533,78 @@ function BulkScoreDialog({ players, round }: { players: LivePlayerScore[]; round
   );
 }
 
+function getRoundLabel(round: number): string {
+  if (round === 0) return "Opening Round";
+  return `Round ${round}`;
+}
+
 export default function LiveScoresPage() {
   const [expandedPlayer, setExpandedPlayer] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
+  const [selectedRound, setSelectedRound] = useState<number | null>(null);
+
+  const roundParam = selectedRound !== null ? `?round=${selectedRound}` : "";
 
   const { data, isLoading, isFetching } = useQuery<LiveRoundData>({
-    queryKey: ["/api/live-scores"],
+    queryKey: ["/api/live-scores", selectedRound],
+    queryFn: async () => {
+      const res = await fetch(`/api/live-scores${roundParam}`);
+      if (!res.ok) throw new Error("Failed to fetch live scores");
+      return res.json();
+    },
     refetchInterval: 60000,
   });
 
   const { toast } = useToast();
 
+  const currentRound = data?.round ?? selectedRound ?? 0;
+
   const refreshMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("GET", "/api/live-scores");
+      return apiRequest("GET", `/api/live-scores${roundParam}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/live-scores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/live-scores", selectedRound] });
       toast({ title: "Scores refreshed", description: "Latest match data loaded" });
     },
     onError: (e: any) => {
       toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
     },
   });
+
+  const fetchScoresMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/live-scores/fetch-scores", { round: currentRound });
+    },
+    onSuccess: async (res: any) => {
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/live-scores", selectedRound] });
+      if (result.updated > 0) {
+        toast({ title: "Scores fetched", description: `Updated ${result.updated} player scores from Squiggle` });
+      } else if (result.errors?.length > 0) {
+        toast({ title: "No scores available", description: result.errors[0], variant: "destructive" });
+      } else {
+        toast({ title: "No new scores", description: "No player stats found for this round yet" });
+      }
+    },
+    onError: (e: any) => {
+      toast({ title: "Fetch failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const handlePrevRound = () => {
+    const newRound = Math.max(0, currentRound - 1);
+    setSelectedRound(newRound);
+    setExpandedMatch(null);
+    setExpandedPlayer(null);
+  };
+
+  const handleNextRound = () => {
+    const newRound = Math.min(24, currentRound + 1);
+    setSelectedRound(newRound);
+    setExpandedMatch(null);
+    setExpandedPlayer(null);
+  };
 
   if (isLoading) {
     return (
@@ -589,26 +638,63 @@ export default function LiveScoresPage() {
             )}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Round {data?.round != null ? data.round : "—"}
-            {data?.lastUpdated && ` • Updated ${new Date(data.lastUpdated).toLocaleTimeString()}`}
+            {data?.lastUpdated && `Updated ${new Date(data.lastUpdated).toLocaleTimeString()}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1 text-xs h-8 px-2"
+            onClick={() => fetchScoresMutation.mutate()}
+            disabled={fetchScoresMutation.isPending}
+            data-testid="button-fetch-scores"
+            title="Fetch player scores from Squiggle API"
+          >
+            {fetchScoresMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Fetch</span>
+          </Button>
           {data?.myTeamScores && data.myTeamScores.length > 0 && (
-            <BulkScoreDialog players={data.myTeamScores} round={data.round} />
+            <BulkScoreDialog players={data.myTeamScores} round={currentRound} />
           )}
           <Button
             size="sm"
             variant="outline"
-            className="gap-1.5 text-xs"
+            className="gap-1 text-xs h-8 px-2"
             onClick={() => refreshMutation.mutate()}
             disabled={refreshMutation.isPending || isFetching}
             data-testid="button-refresh-scores"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${(refreshMutation.isPending || isFetching) ? "animate-spin" : ""}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-3" data-testid="round-navigator">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={handlePrevRound}
+          disabled={currentRound <= 0}
+          data-testid="button-prev-round"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="text-sm font-bold min-w-[130px] text-center" data-testid="text-current-round">
+          {getRoundLabel(currentRound)}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={handleNextRound}
+          disabled={currentRound >= 24}
+          data-testid="button-next-round"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -660,7 +746,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
-                  round={data?.round ?? 0}
+                  round={currentRound}
                 />
               ))}
             </div>
@@ -675,7 +761,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
-                  round={data?.round ?? 0}
+                  round={currentRound}
                 />
               ))}
             </div>
@@ -690,7 +776,7 @@ export default function LiveScoresPage() {
                   myPlayers={data?.myTeamScores || []}
                   expanded={expandedMatch === m.id}
                   onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
-                  round={data?.round ?? 0}
+                  round={currentRound}
                 />
               ))}
             </div>
@@ -716,7 +802,7 @@ export default function LiveScoresPage() {
               <PlayerScoreRow
                 key={p.playerId}
                 player={p}
-                round={data?.round != null ? data.round : 1}
+                round={currentRound}
                 expanded={expandedPlayer === p.playerId}
                 onToggle={() => setExpandedPlayer(expandedPlayer === p.playerId ? null : p.playerId)}
               />

@@ -62,6 +62,9 @@ export const weeklyStats = pgTable("weekly_stats", {
   markCount: integer("mark_count").default(null),
   tackleCount: integer("tackle_count").default(null),
   hitouts: integer("hitouts").default(null),
+  goalsKicked: integer("goals_kicked").default(null),
+  behindsKicked: integer("behinds_kicked").default(null),
+  freesAgainst: integer("frees_against").default(null),
   inside50s: integer("inside_50s").default(null),
   rebound50s: integer("rebound_50s").default(null),
   contestedPossessions: integer("contested_possessions").default(null),
@@ -131,7 +134,7 @@ export const leagueSettings = pgTable("league_settings", {
   id: serial("id").primaryKey(),
   teamName: text("team_name").notNull().default("My Team"),
   salaryCap: integer("salary_cap").notNull().default(18300000),
-  currentRound: integer("current_round").notNull().default(1),
+  currentRound: integer("current_round").notNull().default(0),
   tradesRemaining: integer("trades_remaining").notNull().default(2),
   totalTradesUsed: integer("total_trades_used").notNull().default(0),
 });

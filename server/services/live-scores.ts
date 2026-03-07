@@ -155,9 +155,9 @@ export async function getLiveRoundData(round?: number): Promise<LiveRoundData> {
       const marks = stats?.markCount || 0;
       const tackles = stats?.tackleCount || 0;
       const hitouts = stats?.hitouts || 0;
-      const goals = 0;
-      const behinds = 0;
-      const freesAgainst = 0;
+      const goals = stats?.goalsKicked || 0;
+      const behinds = stats?.behindsKicked || 0;
+      const freesAgainst = stats?.freesAgainst || 0;
 
       const fantasyScore = stats?.fantasyScore || calcFantasyScore({
         kicks, handballs, marks, tackles, hitouts, goals, behinds, freesAgainst,
@@ -268,6 +268,9 @@ export async function updatePlayerLiveStats(
         markCount: stats.marks ?? existing[0].markCount,
         tackleCount: stats.tackles ?? existing[0].tackleCount,
         hitouts: stats.hitouts ?? existing[0].hitouts,
+        goalsKicked: stats.goals ?? existing[0].goalsKicked,
+        behindsKicked: stats.behinds ?? existing[0].behindsKicked,
+        freesAgainst: stats.freesAgainst ?? existing[0].freesAgainst,
         timeOnGroundPercent: stats.timeOnGround ?? existing[0].timeOnGroundPercent,
       })
       .where(eq(weeklyStats.id, existing[0].id));
@@ -289,6 +292,9 @@ export async function updatePlayerLiveStats(
       markCount: stats.marks || 0,
       tackleCount: stats.tackles || 0,
       hitouts: stats.hitouts || 0,
+      goalsKicked: stats.goals || 0,
+      behindsKicked: stats.behinds || 0,
+      freesAgainst: stats.freesAgainst || 0,
       timeOnGroundPercent: stats.timeOnGround || null,
     });
   }
@@ -343,9 +349,9 @@ export async function getMatchPlayers(
     const marks = stats?.markCount || 0;
     const tackles = stats?.tackleCount || 0;
     const hitouts = stats?.hitouts || 0;
-    const goals = 0;
-    const behinds = 0;
-    const freesAgainst = 0;
+    const goals = stats?.goalsKicked || 0;
+    const behinds = stats?.behindsKicked || 0;
+    const freesAgainst = stats?.freesAgainst || 0;
 
     const fantasyScore =
       stats?.fantasyScore ||
@@ -389,6 +395,207 @@ export async function getMatchPlayers(
       aflFantasyId: p.aflFantasyId || null,
     };
   });
+}
+
+async function fetchFootywireMatchIds(year: number): Promise<number[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(`https://www.footywire.com/afl/footy/ft_match_list?year=${year}`, {
+      headers: { "User-Agent": UA },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const ids: number[] = [];
+    const regex = /mid=(\d+)/g;
+    let m;
+    while ((m = regex.exec(html))) {
+      const id = parseInt(m[1]);
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  } catch {
+    return [];
+  }
+}
+
+interface FootywirePlayerStat {
+  name: string;
+  kicks: number;
+  handballs: number;
+  marks: number;
+  goals: number;
+  behinds: number;
+  tackles: number;
+  hitouts: number;
+  freesAgainst: number;
+  fantasyScore: number;
+  inside50s: number;
+  rebound50s: number;
+}
+
+function parseFootywireMatchPage(html: string): { round: number; team1: string; team2: string; players: FootywirePlayerStat[] } | null {
+  const titleMatch = html.match(/<TITLE>[^:]*:\s*(.+?)\s+(?:defeats|drew with)\s+(.+?)\s+at\s+.+?Round\s+(\d+)/i);
+  if (!titleMatch) return null;
+
+  const team1Name = titleMatch[1].trim();
+  const team2Name = titleMatch[2].trim();
+  const round = parseInt(titleMatch[3]);
+
+  const allPlayers: FootywirePlayerStat[] = [];
+  const rowRegex = /title="([^"]+)">[^<]+<\/a>\s*<\/td>([\s\S]*?)(?=<\/tr>)/g;
+  let m;
+  while ((m = rowRegex.exec(html))) {
+    const name = m[1];
+    const cellsHtml = m[2];
+    const vals: number[] = [];
+    const cellRegex = /<td[^>]*class="statdata"[^>]*>([^<]*)<\/td>/g;
+    let c;
+    while ((c = cellRegex.exec(cellsHtml))) {
+      vals.push(parseInt(c[1].trim()) || 0);
+    }
+    if (vals.length >= 15) {
+      allPlayers.push({
+        name,
+        kicks: vals[0],
+        handballs: vals[1],
+        marks: vals[3],
+        goals: vals[4],
+        behinds: vals[5],
+        tackles: vals[6],
+        hitouts: vals[7],
+        inside50s: vals[9] || 0,
+        rebound50s: vals[12] || 0,
+        freesAgainst: vals[14],
+        fantasyScore: vals[15] || 0,
+      });
+    }
+  }
+
+  return { round, team1: team1Name, team2: team2Name, players: allPlayers };
+}
+
+async function upsertPlayerStats(
+  dbPlayer: any,
+  round: number,
+  stats: FootywirePlayerStat,
+  opponent: string | null
+): Promise<void> {
+  const existing = await db.select().from(weeklyStats)
+    .where(and(eq(weeklyStats.playerId, dbPlayer.id), eq(weeklyStats.round, round)))
+    .limit(1);
+
+  const data = {
+    fantasyScore: stats.fantasyScore || calcFantasyScore({
+      kicks: stats.kicks, handballs: stats.handballs, marks: stats.marks,
+      tackles: stats.tackles, hitouts: stats.hitouts, goals: stats.goals,
+      behinds: stats.behinds, freesAgainst: stats.freesAgainst,
+    }),
+    kickCount: stats.kicks,
+    handballCount: stats.handballs,
+    markCount: stats.marks,
+    tackleCount: stats.tackles,
+    hitouts: stats.hitouts,
+    goalsKicked: stats.goals,
+    behindsKicked: stats.behinds,
+    freesAgainst: stats.freesAgainst,
+    inside50s: stats.inside50s,
+    rebound50s: stats.rebound50s,
+  };
+
+  if (existing.length > 0) {
+    await db.update(weeklyStats).set(data).where(eq(weeklyStats.id, existing[0].id));
+  } else {
+    await db.insert(weeklyStats).values({
+      playerId: dbPlayer.id,
+      round,
+      opponent,
+      ...data,
+    });
+  }
+}
+
+export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let fetched = 0;
+  let updated = 0;
+
+  try {
+    const year = new Date().getFullYear();
+    const matchIds = await fetchFootywireMatchIds(year);
+
+    if (matchIds.length === 0) {
+      errors.push("No matches found on Footywire for this season");
+      return { fetched: 0, updated: 0, errors };
+    }
+
+    const allDbPlayers = await db.select().from(players);
+    const nameMap = new Map(allDbPlayers.map(p => [p.name.toLowerCase(), p]));
+    const lastNameMap = new Map<string, typeof allDbPlayers[0][]>();
+    for (const p of allDbPlayers) {
+      const parts = p.name.split(" ");
+      const lastName = parts[parts.length - 1].toLowerCase();
+      if (!lastNameMap.has(lastName)) lastNameMap.set(lastName, []);
+      lastNameMap.get(lastName)!.push(p);
+    }
+
+    for (const mid of matchIds) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(`https://www.footywire.com/afl/footy/ft_match_statistics?mid=${mid}`, {
+          headers: { "User-Agent": UA },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) continue;
+
+        const html = await res.text();
+        const parsed = parseFootywireMatchPage(html);
+        if (!parsed) continue;
+        if (parsed.round !== round) continue;
+
+        fetched += parsed.players.length;
+
+        for (const fp of parsed.players) {
+          let dbPlayer = nameMap.get(fp.name.toLowerCase());
+
+          if (!dbPlayer) {
+            const parts = fp.name.split(" ");
+            const lastName = parts[parts.length - 1].toLowerCase();
+            const candidates = lastNameMap.get(lastName) || [];
+            if (candidates.length === 1) {
+              dbPlayer = candidates[0];
+            } else if (candidates.length > 1) {
+              const firstName = parts[0].toLowerCase();
+              dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstName));
+            }
+          }
+
+          if (!dbPlayer) continue;
+
+          const opponent = fp.name === parsed.team1 ? parsed.team2 : parsed.team1;
+          await upsertPlayerStats(dbPlayer, round, fp, opponent);
+          updated++;
+        }
+      } catch (matchErr: any) {
+        console.error(`[LiveScores] Error fetching match ${mid}:`, matchErr.message);
+      }
+    }
+
+    if (fetched === 0) {
+      errors.push(`No completed matches found on Footywire for round ${round}. Stats may not be available yet.`);
+    } else {
+      console.log(`[LiveScores] Footywire: Fetched ${fetched} player stats, matched ${updated} to DB for round ${round}`);
+    }
+  } catch (e: any) {
+    errors.push(`Fetch error: ${e.message}`);
+    console.error("[LiveScores] fetchAndStorePlayerScores error:", e.message);
+  }
+
+  return { fetched, updated, errors };
 }
 
 export async function bulkUpdateLiveScores(
