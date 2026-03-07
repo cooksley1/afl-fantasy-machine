@@ -22,7 +22,7 @@ Uses Replit Auth (OpenID Connect) supporting Google, Apple, GitHub, X, and email
 Users can send feedback via dialog in sidebar. Feedback stored in `feedback` table. Admins can view, respond, archive, and delete feedback from the Admin panel.
 
 ### Frontend
-Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders. Landing page shown to logged-out users. Admin page accessible only to admin users via sidebar link.
+Developed with React, TypeScript, Vite, Tailwind CSS, Shadcn UI for components, TanStack React Query for data fetching, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars are displayed with headshot photos from the AFL Fantasy API, falling back to team-colored placeholders. Landing page shown to logged-out users. Admin page accessible only to admin users via sidebar link. App logo (Fantasy AFL Machine badge) is imported from `@assets/1772915052518_1772915124902_no_bg.png` and displayed in the sidebar header, landing page navbar, and footer.
 
 ### Backend
 An Express.js and Node.js server handles API requests, file uploads via Multer, and integrates with various services.

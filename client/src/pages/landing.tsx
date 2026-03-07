@@ -99,9 +99,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/80 border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
-              <Zap className="w-4 h-4 text-accent-foreground" />
-            </div>
+            <img src={logoImg} alt="AFL Fantasy Machine" className="w-8 h-8 object-contain" data-testid="img-nav-logo" />
             <span className="font-bold tracking-tight text-foreground">AFL Fantasy Machine</span>
           </div>
           <a href="/api/login">
@@ -209,7 +207,7 @@ export default function LandingPage() {
       <footer className="border-t py-6 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <Zap className="w-3 h-3 text-accent" />
+            <img src={logoImg} alt="AFL Fantasy Machine" className="w-4 h-4 object-contain" data-testid="img-footer-logo" />
             <span>AFL Fantasy Machine</span>
           </div>
           <span>&copy; 2026 All rights reserved</span>

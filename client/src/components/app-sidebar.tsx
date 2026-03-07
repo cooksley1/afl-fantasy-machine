@@ -55,9 +55,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/">
           <div className="flex items-center gap-3 cursor-pointer" data-testid="link-home">
-            <div className="w-10 h-10 rounded-md bg-accent flex items-center justify-center shrink-0">
-              <Zap className="w-5 h-5 text-accent-foreground" />
-            </div>
+            <img src={logoImg} alt="AFL Fantasy Machine" className="w-10 h-10 rounded-md object-contain shrink-0" data-testid="img-sidebar-logo" />
             <div>
               <h1 className="text-base font-bold tracking-tight text-sidebar-foreground">
                 AFL Fantasy
