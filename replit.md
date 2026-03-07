@@ -41,8 +41,8 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
 - **Team Analyzer**: Allows users to upload team screenshots for AI analysis and saving identified players.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
-- **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks.
-- **Team Lab (Sandbox)**: Save, create, compare, and swap between multiple team configurations. Supports AI-built variants and manual saves. Compare any saved team side-by-side with the active team showing player overlaps, score diffs, and value diffs. Activate any saved team to make it the main team.
+- **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks. `buildOptimalTeam` accepts optional `excludePlayerIds` and `variationSeed` for generating distinct team variants.
+- **Team Lab (Sandbox)**: Save, create, compare, and swap between multiple team configurations. AI-built teams exclude ~40% of current premiums and use seeded scoring variation to generate genuinely different alternatives. Compare any saved team side-by-side with the active team showing player overlaps, score diffs, and value diffs. Activate any saved team to make it the main team.
 - **Game Day Guide**: Step-by-step transfer checklist for updating the official AFL Fantasy app. Lists trades (out→in), captain/VC picks, field/bench swaps needed, and numbered instructions. Copy-to-clipboard and Web Share API support. Checkable items stored in localStorage.
 - **League Spy**: Track opponents across multiple fantasy leagues. Add opponents manually, upload their team screenshots for AI analysis, then get matchup breakdowns: projected advantage, unique picks each side, captain differential tips, and weekly win strategy advice.
 

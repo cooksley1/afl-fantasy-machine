@@ -278,7 +278,7 @@ export class DatabaseStorage implements IStorage {
       .values({
         teamName: "My Team",
         salaryCap: 10000000,
-        currentRound: 0,
+        currentRound: 1,
         tradesRemaining: 30,
         totalTradesUsed: 0,
       })

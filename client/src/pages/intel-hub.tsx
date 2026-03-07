@@ -36,6 +36,7 @@ import {
   ArrowUpDown,
   Filter,
   ChevronDown,
+  ChevronUp,
   AlertCircle,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -205,7 +206,7 @@ function IntelCard({ report }: { report: IntelReport }) {
 
   return (
     <Card data-testid={`card-intel-${report.id}`} className={`${isLiveIntel ? "border-primary/30" : ""} ${isStale ? "opacity-60" : ""}`}>
-      <CardContent className="p-4 sm:p-5">
+      <CardContent className="p-3">
         <div className="flex items-start gap-3">
           <div className={`p-2 rounded-md shrink-0 mt-0.5 ${isLiveIntel ? 'bg-primary/20' : 'bg-primary/10'}`}>
             <Icon className="w-4 h-4 text-primary" />
@@ -347,6 +348,8 @@ export default function IntelHub() {
   const [sortMode, setSortMode] = useState<SortMode>("date_desc");
   const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const [sourceStatsExpanded, setSourceStatsExpanded] = useState(false);
+  const [preGameExpanded, setPreGameExpanded] = useState(false);
 
   const sinceDate = useMemo(() => {
     if (dateFilter === "all") return undefined;
@@ -598,41 +601,85 @@ export default function IntelHub() {
       {sourceStats?.lastFetched && (
         <Card className="bg-muted/30">
           <CardContent className="p-3">
-            <div className="flex items-center gap-1 mb-2">
-              <Clock className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">
-                Last gather: {new Date(sourceStats.lastFetched).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(sourceStats.sourceBreakdown || {}).map(([key, count]) => {
-                const sourceLabels: Record<string, string> = {
-                  squiggle_fixtures: "Squiggle Fixtures",
-                  squiggle_tips: "Squiggle Tips",
-                  squiggle_ladder: "Ladder",
-                  afl_news: "AFL.com.au",
-                  club_news: "Club News",
-                  club_official: "Official Club",
-                  fantasy_news: "Fantasy News",
-                };
-                const isClub = key === "club_news" || key === "club_official";
-                return (
-                  <Badge
-                    key={key}
-                    variant="secondary"
-                    className={`text-[10px] ${isClub ? 'bg-green-500/10 text-green-600 dark:text-green-400' : ''}`}
-                    data-testid={`badge-source-${key}`}
-                  >
-                    {sourceLabels[key] || key}: {count}
-                  </Badge>
-                );
-              })}
-            </div>
+            <button
+              onClick={() => setSourceStatsExpanded(!sourceStatsExpanded)}
+              className="flex items-center justify-between w-full"
+              data-testid="button-toggle-source-stats"
+            >
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">
+                  Last gather: {new Date(sourceStats.lastFetched).toLocaleString()}
+                </span>
+                <span className="text-[10px] text-muted-foreground ml-1">
+                  ({Object.values(sourceStats.sourceBreakdown || {}).reduce((a, b) => a + b, 0)} sources)
+                </span>
+              </div>
+              {sourceStatsExpanded ? (
+                <ChevronUp className="w-3 h-3 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              )}
+            </button>
+            {sourceStatsExpanded && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {Object.entries(sourceStats.sourceBreakdown || {}).map(([key, count]) => {
+                  const sourceLabels: Record<string, string> = {
+                    squiggle_fixtures: "Squiggle Fixtures",
+                    squiggle_tips: "Squiggle Tips",
+                    squiggle_ladder: "Ladder",
+                    afl_news: "AFL.com.au",
+                    club_news: "Club News",
+                    club_official: "Official Club",
+                    fantasy_news: "Fantasy News",
+                  };
+                  const isClub = key === "club_news" || key === "club_official";
+                  return (
+                    <Badge
+                      key={key}
+                      variant="secondary"
+                      className={`text-[10px] ${isClub ? 'bg-green-500/10 text-green-600 dark:text-green-400' : ''}`}
+                      data-testid={`badge-source-${key}`}
+                    >
+                      {sourceLabels[key] || key}: {count}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {preGameAdvice && <PreGamePanel advice={preGameAdvice} />}
+      {preGameAdvice && (
+        <Card className="border-orange-500/30">
+          <CardContent className="p-3">
+            <button
+              onClick={() => setPreGameExpanded(!preGameExpanded)}
+              className="flex items-center justify-between w-full"
+              data-testid="button-toggle-pregame"
+            >
+              <div className="flex items-center gap-2">
+                <Siren className="w-4 h-4 text-orange-500" />
+                <span className="text-sm font-semibold">Pre-Game Advice</span>
+                <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 dark:text-orange-400">
+                  {preGameAdvice.playerAlerts.length} alerts
+                </Badge>
+              </div>
+              {preGameExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+            {preGameExpanded && (
+              <div className="mt-3">
+                <PreGamePanel advice={preGameAdvice} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {preGameMutation.isPending && (
         <Card className="border-orange-500/30">
@@ -759,7 +806,7 @@ export default function IntelHub() {
         </Card>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {visibleReports.map((report) => (
           <IntelCard key={report.id} report={report} />
         ))}

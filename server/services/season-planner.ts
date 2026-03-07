@@ -418,8 +418,10 @@ function validatePlan(result: SeasonPlanResult, allPlayers: Player[]): Validatio
   return items;
 }
 
-export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
+export async function buildOptimalTeam(options?: { excludePlayerIds?: Set<number>; variationSeed?: number }): Promise<OptimalTeamResult> {
   const allPlayers = await db.select().from(players);
+  const excludeIds = options?.excludePlayerIds || new Set();
+  const seed = options?.variationSeed ?? 0;
 
   const viable = allPlayers.filter(p =>
     p.avgScore > 0 &&
@@ -427,6 +429,13 @@ export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
     !p.injuryStatus?.toLowerCase().includes("season") &&
     !p.injuryStatus?.toLowerCase().includes("acl")
   );
+
+  function seededScore(p: Player, index: number): number {
+    if (seed === 0) return p.avgScore || 0;
+    const hash = ((p.id * 2654435761 + seed) >>> 0) / 4294967296;
+    const variance = 0.7 + hash * 0.6;
+    return (p.avgScore || 0) * variance;
+  }
 
   const byPosition: Record<string, Player[]> = { DEF: [], MID: [], RUC: [], FWD: [] };
   for (const p of viable) {
@@ -437,7 +446,7 @@ export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
   }
 
   for (const pos of Object.keys(byPosition)) {
-    byPosition[pos].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+    byPosition[pos].sort((a, b) => seededScore(b, 0) - seededScore(a, 0));
   }
 
   const selected: Array<Player & { fieldPosition: string; isOnField: boolean; reasoning: string }> = [];
@@ -446,6 +455,7 @@ export async function buildOptimalTeam(): Promise<OptimalTeamResult> {
 
   function addPlayer(p: Player, position: string, isOnField: boolean, reasoning: string) {
     if (usedIds.has(p.id)) return false;
+    if (excludeIds.has(p.id)) return false;
     if (totalCost + p.price > SALARY_CAP) return false;
     selected.push({ ...p, fieldPosition: position, isOnField, reasoning });
     usedIds.add(p.id);

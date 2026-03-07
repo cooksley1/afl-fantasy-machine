@@ -138,7 +138,7 @@ export const leagueSettings = pgTable("league_settings", {
   id: serial("id").primaryKey(),
   teamName: text("team_name").notNull().default("My Team"),
   salaryCap: integer("salary_cap").notNull().default(18300000),
-  currentRound: integer("current_round").notNull().default(0),
+  currentRound: integer("current_round").notNull().default(1),
   tradesRemaining: integer("trades_remaining").notNull().default(2),
   totalTradesUsed: integer("total_trades_used").notNull().default(0),
 });
@@ -326,7 +326,7 @@ export const modelWeights = pgTable("model_weights", {
 export const seasonPlans = pgTable("season_plans", {
   id: serial("id").primaryKey(),
   generatedAt: timestamp("generated_at").defaultNow(),
-  currentRound: integer("current_round").notNull().default(0),
+  currentRound: integer("current_round").notNull().default(1),
   teamSnapshot: text("team_snapshot").notNull(),
   overallStrategy: text("overall_strategy").notNull(),
   weeklyPlans: text("weekly_plans").notNull(),

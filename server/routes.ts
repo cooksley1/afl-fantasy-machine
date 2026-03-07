@@ -878,7 +878,7 @@ export async function registerRoutes(
       const team = await storage.getMyTeam();
       res.json({
         success: true,
-        savedCount,
+        savedCount: resolvedPlayers.length,
         notFound,
         totalOnTeam: team.length,
       });
@@ -1684,30 +1684,48 @@ export async function registerRoutes(
     try {
       const { name, description } = req.body;
       const teamName = name || `AI Build ${new Date().toLocaleDateString()}`;
-      const allPlayers = await storage.getAllPlayers();
-      const builtTeam = buildOptimalTeam(allPlayers);
 
-      const playerData = builtTeam.map((p, i) => {
-        const pos = p.position?.split("/")[0] || "MID";
-        return {
-          playerId: p.id,
-          isOnField: i < 22,
-          isCaptain: false,
-          isViceCaptain: false,
-          fieldPosition: pos,
-        };
-      });
+      const currentTeam = await storage.getMyTeam();
+
+      const excludePremiumIds = new Set<number>();
+      const premiumOnTeam = currentTeam
+        .filter(p => p.isOnField && (p.avgScore || 0) >= 85)
+        .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+      const premiumsToExclude = Math.min(Math.ceil(premiumOnTeam.length * 0.4), 4);
+      for (let i = 0; i < premiumsToExclude; i++) {
+        excludePremiumIds.add(premiumOnTeam[i].id);
+      }
+
+      const variationSeed = Date.now() % 100000;
+
+      const builtResult = await buildOptimalTeam({ excludePlayerIds: excludePremiumIds, variationSeed });
+      const builtTeam = builtResult.teamPlayers;
+
+      const playerData = builtTeam.map((p) => ({
+        playerId: p.id,
+        isOnField: p.isOnField,
+        isCaptain: false,
+        isViceCaptain: false,
+        fieldPosition: p.fieldPosition,
+      }));
 
       const teamValue = builtTeam.reduce((sum, p) => sum + p.price, 0);
-      const projectedScore = builtTeam.slice(0, 22).reduce((sum, p) => sum + (p.avgScore || 0), 0);
+      const onFieldPlayers = builtTeam.filter(p => p.isOnField);
+      const projectedScore = onFieldPlayers.reduce((sum, p) => sum + (p.avgScore || 0), 0);
 
-      const bestScorer = builtTeam.filter((_, i) => i < 22).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
-      if (bestScorer[0]) playerData.find(e => e.playerId === bestScorer[0].id)!.isCaptain = true;
-      if (bestScorer[1]) playerData.find(e => e.playerId === bestScorer[1].id)!.isViceCaptain = true;
+      const bestScorer = [...onFieldPlayers].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+      if (bestScorer[0]) {
+        const entry = playerData.find(e => e.playerId === bestScorer[0].id);
+        if (entry) entry.isCaptain = true;
+      }
+      if (bestScorer[1]) {
+        const entry = playerData.find(e => e.playerId === bestScorer[1].id);
+        if (entry) entry.isViceCaptain = true;
+      }
 
       const team = await storage.createSavedTeam({
         name: teamName,
-        description: description || "AI-generated optimal team",
+        description: description || "AI-generated alternative team",
         playerData: JSON.stringify(playerData),
         teamValue,
         projectedScore: Math.round(projectedScore),
