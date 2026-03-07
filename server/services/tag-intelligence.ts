@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { teamTagProfiles, tagMatchupHistory, players, weeklyStats } from "@shared/schema";
+import { teamTagProfiles, tagMatchupHistory, players, weeklyStats, tagPredictionOutcomes } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 const KNOWN_TAG_PROFILES: {
@@ -163,13 +163,16 @@ export async function getTagWarningsForTeam(
     const opponentProfile = profileMap.get(player.nextOpponent);
     if (!opponentProfile || !opponentProfile.usesTaggers) continue;
 
-    const playerHistory = allHistory.filter(
+    const allPlayerHistory = allHistory.filter(
       h => h.targetName === player.name || h.targetPlayerId === player.id
     );
 
-    const taggedByThisOpponent = allHistory.filter(
-      h => h.taggerTeam === player.nextOpponent &&
-        (h.targetName === player.name || h.targetPlayerId === player.id)
+    const sameTeamHistory = allPlayerHistory.filter(h => h.targetTeam === player.team);
+    const diffTeamHistory = allPlayerHistory.filter(h => h.targetTeam !== player.team);
+    const playerHistory = sameTeamHistory;
+
+    const taggedByThisOpponent = sameTeamHistory.filter(
+      h => h.taggerTeam === player.nextOpponent
     );
 
     const hasHistoricalEvidence = playerHistory.length > 0;
@@ -200,6 +203,10 @@ export async function getTagWarningsForTeam(
       if (avgScoreWhenTagged !== null) {
         evidence.push(`Averages ${avgScoreWhenTagged} when tagged (${avgScoreImpact! > 0 ? "-" : "+"}${Math.abs(avgScoreImpact!)} pts)`);
       }
+    }
+
+    if (diffTeamHistory.length > 0 && sameTeamHistory.length === 0) {
+      evidence.push(`Previous tag history was at ${diffTeamHistory[0].targetTeam} (different team context)`);
     }
 
     if (opponentProfile.primaryTagger) {
@@ -289,6 +296,129 @@ export async function recordTagMatchup(data: {
     source: data.source,
     confirmed: true,
   });
+}
+
+export async function saveTagPredictions(round: number, warnings: TagWarning[]): Promise<number> {
+  const existing = await db.select().from(tagPredictionOutcomes)
+    .where(and(eq(tagPredictionOutcomes.round, round), eq(tagPredictionOutcomes.season, 2026)));
+  if (existing.length > 0) {
+    return 0;
+  }
+
+  let saved = 0;
+  for (const w of warnings) {
+    await db.insert(tagPredictionOutcomes).values({
+      round,
+      season: 2026,
+      playerId: w.playerId,
+      playerName: w.playerName,
+      team: w.team,
+      opponent: w.nextOpponent,
+      predictedRiskLevel: w.riskLevel,
+      predictedTagger: w.opponentTagger,
+      playerAvgAtTime: w.avgScore,
+      predictedImpact: w.avgScoreImpact,
+    });
+    saved++;
+  }
+  console.log(`[TagIntel] Saved ${saved} tag predictions for round ${round}`);
+  return saved;
+}
+
+export async function evaluateTagOutcomes(round: number): Promise<{
+  evaluated: number;
+  accurate: number;
+  inaccurate: number;
+  results: { playerName: string; predicted: string; actualScore: number; wasImpacted: boolean }[];
+}> {
+  const predictions = await db.select().from(tagPredictionOutcomes)
+    .where(and(
+      eq(tagPredictionOutcomes.round, round),
+      eq(tagPredictionOutcomes.season, 2026),
+      sql`${tagPredictionOutcomes.evaluatedAt} IS NULL`
+    ));
+
+  const results: { playerName: string; predicted: string; actualScore: number; wasImpacted: boolean }[] = [];
+  let accurate = 0;
+  let inaccurate = 0;
+
+  for (const pred of predictions) {
+    const stats = await db.select().from(weeklyStats)
+      .where(and(
+        eq(weeklyStats.playerId, pred.playerId),
+        eq(weeklyStats.round, round)
+      ));
+
+    if (stats.length === 0) continue;
+
+    const actualScore = stats[0].fantasyScore || 0;
+    const avgAtTime = pred.playerAvgAtTime || 0;
+    const actualImpact = avgAtTime - actualScore;
+    const scoredBelowAvg = actualScore < avgAtTime * 0.85;
+    const wasLikelyTagged = scoredBelowAvg && actualImpact > 15;
+    const predictionWasHighOrMod = pred.predictedRiskLevel === "high" || pred.predictedRiskLevel === "moderate";
+    const outcomeAccurate = predictionWasHighOrMod ? wasLikelyTagged : !wasLikelyTagged;
+
+    if (outcomeAccurate) accurate++;
+    else inaccurate++;
+
+    await db.update(tagPredictionOutcomes)
+      .set({
+        actualScore,
+        actualImpact,
+        wasActuallyTagged: wasLikelyTagged,
+        outcomeAccurate,
+        evaluatedAt: new Date(),
+        notes: wasLikelyTagged
+          ? `Scored ${actualScore} (avg ${avgAtTime}), likely tagged (-${actualImpact.toFixed(0)} pts)`
+          : `Scored ${actualScore} (avg ${avgAtTime}), no significant tag impact`,
+      })
+      .where(eq(tagPredictionOutcomes.id, pred.id));
+
+    results.push({
+      playerName: pred.playerName,
+      predicted: pred.predictedRiskLevel,
+      actualScore,
+      wasImpacted: wasLikelyTagged,
+    });
+  }
+
+  console.log(`[TagIntel] Evaluated ${predictions.length} tag predictions for round ${round}: ${accurate} accurate, ${inaccurate} inaccurate`);
+  return { evaluated: predictions.length, accurate, inaccurate, results };
+}
+
+export async function getTagAccuracyStats(): Promise<{
+  totalPredictions: number;
+  evaluated: number;
+  accurate: number;
+  inaccurate: number;
+  accuracyRate: number;
+  byRiskLevel: { level: string; total: number; accurate: number; rate: number }[];
+}> {
+  const all = await db.select().from(tagPredictionOutcomes);
+  const evaluated = all.filter(p => p.evaluatedAt !== null);
+  const accurate = evaluated.filter(p => p.outcomeAccurate === true);
+  const inaccurate = evaluated.filter(p => p.outcomeAccurate === false);
+
+  const byLevel = ["high", "moderate", "low"].map(level => {
+    const levelPreds = evaluated.filter(p => p.predictedRiskLevel === level);
+    const levelAccurate = levelPreds.filter(p => p.outcomeAccurate === true);
+    return {
+      level,
+      total: levelPreds.length,
+      accurate: levelAccurate.length,
+      rate: levelPreds.length > 0 ? Math.round(levelAccurate.length / levelPreds.length * 100) : 0,
+    };
+  });
+
+  return {
+    totalPredictions: all.length,
+    evaluated: evaluated.length,
+    accurate: accurate.length,
+    inaccurate: inaccurate.length,
+    accuracyRate: evaluated.length > 0 ? Math.round(accurate.length / evaluated.length * 100) : 0,
+    byRiskLevel: byLevel,
+  };
 }
 
 export function extractTagMentionsFromText(text: string): {

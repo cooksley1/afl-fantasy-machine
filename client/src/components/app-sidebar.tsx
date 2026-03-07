@@ -13,6 +13,7 @@ import {
   Calendar,
   ShieldCheck,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,7 @@ const navItems = [
   { title: "Intel Hub", url: "/intel", icon: Brain },
   { title: "Team Analyzer", url: "/analyze", icon: Camera },
   { title: "Settings", url: "/settings", icon: Settings },
+  { title: "FAQ", url: "/faq", icon: HelpCircle },
 ];
 
 export function AppSidebar() {

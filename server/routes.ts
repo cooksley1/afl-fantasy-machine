@@ -1353,6 +1353,72 @@ export async function registerRoutes(
     }
   });
 
+  // ============ TAG PREDICTION TRACKING ============
+
+  app.post("/api/admin/tag-predictions/save", isAdmin, async (_req, res) => {
+    try {
+      const { getTagWarningsForTeam, saveTagPredictions } = await import("./services/tag-intelligence");
+      const settings = await storage.getSettings();
+      const currentRound = settings?.currentRound;
+      if (!currentRound || currentRound < 1) {
+        return res.status(400).json({ message: "Current round must be set to at least 1 before saving predictions" });
+      }
+
+      const team = await storage.getMyTeam();
+      const onField = team.filter(p => p.isOnField);
+      if (onField.length === 0) {
+        return res.status(400).json({ message: "No on-field players found — add players to your team first" });
+      }
+
+      const warnings = await getTagWarningsForTeam(
+        onField.map(p => ({
+          id: p.id,
+          name: p.name,
+          team: p.team,
+          position: p.position,
+          dualPosition: p.dualPosition,
+          avgScore: p.avgScore,
+          nextOpponent: p.nextOpponent,
+          isCaptain: p.isCaptain,
+          isViceCaptain: p.isViceCaptain,
+        }))
+      );
+
+      if (warnings.length === 0) {
+        return res.json({ message: `No tag warnings to save for round ${currentRound}`, saved: 0, round: currentRound });
+      }
+
+      const saved = await saveTagPredictions(currentRound, warnings);
+      res.json({ message: `Saved ${saved} tag predictions for round ${currentRound}`, saved, round: currentRound });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/tag-predictions/evaluate/:round", isAdmin, async (req, res) => {
+    try {
+      const round = parseInt(req.params.round);
+      if (isNaN(round) || round < 1) {
+        return res.status(400).json({ message: "Round must be a valid number >= 1" });
+      }
+      const { evaluateTagOutcomes } = await import("./services/tag-intelligence");
+      const result = await evaluateTagOutcomes(round);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/admin/tag-predictions/accuracy", isAdmin, async (_req, res) => {
+    try {
+      const { getTagAccuracyStats } = await import("./services/tag-intelligence");
+      const stats = await getTagAccuracyStats();
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============ USER FEEDBACK ROUTES ============
 
   app.post("/api/feedback", async (req: any, res) => {

@@ -218,6 +218,29 @@ export const tagMatchupHistory = pgTable("tag_matchup_history", {
   confirmed: boolean("confirmed").notNull().default(false),
 });
 
+export const tagPredictionOutcomes = pgTable("tag_prediction_outcomes", {
+  id: serial("id").primaryKey(),
+  round: integer("round").notNull(),
+  season: integer("season").notNull().default(2026),
+  playerId: integer("player_id").notNull(),
+  playerName: text("player_name").notNull(),
+  team: text("team").notNull(),
+  opponent: text("opponent").notNull(),
+  predictedRiskLevel: text("predicted_risk_level").notNull(),
+  predictedTagger: text("predicted_tagger").default(null),
+  wasActuallyTagged: boolean("was_actually_tagged").default(null),
+  actualScore: real("actual_score").default(null),
+  playerAvgAtTime: real("player_avg_at_time").default(null),
+  predictedImpact: real("predicted_impact").default(null),
+  actualImpact: real("actual_impact").default(null),
+  outcomeAccurate: boolean("outcome_accurate").default(null),
+  notes: text("notes").default(null),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  evaluatedAt: timestamp("evaluated_at").default(null),
+});
+
+export const insertTagPredictionOutcomeSchema = createInsertSchema(tagPredictionOutcomes).omit({ id: true, createdAt: true });
+
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({ id: true });
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
@@ -252,6 +275,8 @@ export type PositionConcession = typeof positionConcessions.$inferSelect;
 export type InsertPositionConcession = z.infer<typeof insertPositionConcessionSchema>;
 export type Projection = typeof projections.$inferSelect;
 export type InsertProjection = z.infer<typeof insertProjectionSchema>;
+export type TagPredictionOutcome = typeof tagPredictionOutcomes.$inferSelect;
+export type InsertTagPredictionOutcome = z.infer<typeof insertTagPredictionOutcomeSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;
