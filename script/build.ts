@@ -8,60 +8,62 @@ async function migrateDatabase() {
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
-    const tableCheck = await client.query(`
-      SELECT table_name FROM information_schema.tables 
-      WHERE table_name = 'users' AND table_schema = 'public'
+    const colCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'users' AND table_schema = 'public' 
+      AND column_name IN ('username', 'password')
     `);
-    if (tableCheck.rows.length > 0) {
-      const colCheck = await client.query(`
-        SELECT column_name FROM information_schema.columns 
-        WHERE table_name = 'users' AND column_name IN ('username', 'password')
+    if (colCheck.rows.length > 0) {
+      console.log("Detected old users table with username/password columns, rebuilding...");
+      await client.query("DROP TABLE IF EXISTS feedback CASCADE");
+      await client.query("DROP TABLE IF EXISTS sessions CASCADE");
+      await client.query("DROP TABLE IF EXISTS users CASCADE");
+
+      await client.query(`
+        CREATE TABLE users (
+          id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+          email varchar UNIQUE,
+          first_name varchar,
+          last_name varchar,
+          profile_image_url varchar,
+          is_admin boolean DEFAULT false,
+          is_blocked boolean DEFAULT false,
+          created_at timestamp DEFAULT now(),
+          updated_at timestamp DEFAULT now()
+        )
       `);
-      if (colCheck.rows.length > 0) {
-        console.log("Detected old users table with username/password columns, dropping dependents...");
-        await client.query("DROP TABLE IF EXISTS sessions CASCADE");
-        await client.query("DROP TABLE IF EXISTS feedback CASCADE");
-        await client.query("DROP TABLE IF EXISTS users CASCADE");
-        console.log("Old tables dropped successfully");
-      }
+
+      await client.query(`
+        CREATE TABLE sessions (
+          sid varchar PRIMARY KEY,
+          sess jsonb NOT NULL,
+          expire timestamp NOT NULL
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON sessions (expire)`);
+
+      await client.query(`
+        CREATE TABLE feedback (
+          id serial PRIMARY KEY,
+          user_id varchar NOT NULL,
+          user_email varchar,
+          user_name varchar,
+          subject text NOT NULL,
+          message text NOT NULL,
+          status text NOT NULL DEFAULT 'unread',
+          admin_response text,
+          responded_at timestamp,
+          is_archived boolean DEFAULT false,
+          created_at timestamp DEFAULT now()
+        )
+      `);
+
+      console.log("Tables rebuilt with correct schema");
+    } else {
+      console.log("Users table schema is correct, no migration needed");
     }
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        email TEXT,
-        first_name TEXT,
-        last_name TEXT,
-        profile_image_url TEXT,
-        is_admin BOOLEAN NOT NULL DEFAULT FALSE,
-        is_blocked BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        sid VARCHAR NOT NULL PRIMARY KEY,
-        sess JSON NOT NULL,
-        expire TIMESTAMP(6) NOT NULL
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS feedback (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        message TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'general',
-        status TEXT NOT NULL DEFAULT 'new',
-        admin_response TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    console.log("Auth tables verified/created");
+  } catch (err) {
+    console.error("Migration error (non-fatal):", err);
   } finally {
     await client.end();
   }
