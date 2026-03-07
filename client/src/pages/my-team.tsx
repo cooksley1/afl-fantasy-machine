@@ -25,6 +25,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, LeagueSettings } from "@shared/schema";
 
 interface PlayerAdvice {
@@ -128,6 +129,13 @@ function FieldViewCard({
   player: PlayerWithTeamInfo;
   onViewReport: (id: number) => void;
 }) {
+  const teamColors = getTeamColors(player.team);
+  const teamAbbr = getTeamAbbr(player.team);
+  const nameParts = player.name.split(" ");
+  const initials = nameParts.length >= 2
+    ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
+    : player.name.slice(0, 2).toUpperCase();
+
   return (
     <div
       className="flex flex-col items-center cursor-pointer group"
@@ -135,25 +143,46 @@ function FieldViewCard({
       data-testid={`field-card-${player.id}`}
     >
       <div className="relative">
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gradient-to-br from-muted to-muted/60 border border-border flex items-center justify-center group-hover:border-primary/50 transition-colors">
-          <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase">
-            {getPositionDisplay(player)}
-          </span>
+        <div
+          className="w-[60px] h-[68px] sm:w-[68px] sm:h-[76px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
+          style={{ background: `linear-gradient(135deg, ${teamColors.primary} 0%, ${teamColors.primary}dd 100%)` }}
+        >
+          <div className="flex-1 flex items-center justify-center">
+            <span
+              className="text-lg sm:text-xl font-black opacity-90"
+              style={{ color: teamColors.text }}
+            >
+              {initials}
+            </span>
+          </div>
+          <div
+            className="px-1 py-0.5 text-center"
+            style={{ backgroundColor: teamColors.secondary, borderTop: `1px solid ${teamColors.text}33` }}
+          >
+            <span className="text-[8px] sm:text-[9px] font-bold tracking-wider" style={{ color: teamColors.text }}>
+              {teamAbbr}
+            </span>
+          </div>
         </div>
         {player.isCaptain && (
-          <div className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center" data-testid={`field-captain-${player.id}`}>
+          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-background" data-testid={`field-captain-${player.id}`}>
             <span className="text-[9px] font-bold text-white">C</span>
           </div>
         )}
         {player.isViceCaptain && (
-          <div className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center" data-testid={`field-vc-${player.id}`}>
+          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center ring-2 ring-background" data-testid={`field-vc-${player.id}`}>
             <span className="text-[9px] font-bold text-white">V</span>
           </div>
         )}
+        {player.injuryStatus && (
+          <div className="absolute -bottom-0.5 -right-1 w-4 h-4 rounded-full bg-destructive flex items-center justify-center ring-1 ring-background">
+            <AlertTriangle className="w-2.5 h-2.5 text-white" />
+          </div>
+        )}
       </div>
-      <div className="mt-1 text-center max-w-[70px] sm:max-w-[80px]">
-        <p className="text-[10px] sm:text-xs font-semibold truncate">{getInitials(player.name)}</p>
-        <p className="text-[9px] sm:text-[10px] font-mono text-primary font-bold">{formatPrice(player.price)}</p>
+      <div className="mt-1 text-center max-w-[68px] sm:max-w-[76px]">
+        <p className="text-[10px] sm:text-xs font-semibold truncate leading-tight">{getInitials(player.name)}</p>
+        <p className="text-[9px] sm:text-[10px] font-mono font-bold" style={{ color: teamColors.primary }}>{formatPrice(player.price)}</p>
       </div>
     </div>
   );
@@ -265,15 +294,18 @@ function ListViewRow({
       data-testid={`list-row-${player.id}`}
       onClick={() => onViewReport(player.id)}
     >
-      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-border flex items-center justify-center shrink-0">
+      <div
+        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-border flex items-center justify-center shrink-0 relative"
+        style={{ backgroundColor: getTeamColors(player.team).primary }}
+      >
         {player.isCaptain && (
-          <span className="text-[10px] font-bold text-red-500">C</span>
+          <span className="text-[10px] font-bold" style={{ color: getTeamColors(player.team).text }}>C</span>
         )}
         {player.isViceCaptain && (
-          <span className="text-[10px] font-bold text-emerald-500">V</span>
+          <span className="text-[10px] font-bold" style={{ color: getTeamColors(player.team).text }}>V</span>
         )}
         {!player.isCaptain && !player.isViceCaptain && (
-          <span className="text-[9px] font-bold text-muted-foreground">{getPositionDisplay(player)}</span>
+          <span className="text-[9px] font-bold" style={{ color: getTeamColors(player.team).text }}>{getTeamAbbr(player.team)}</span>
         )}
       </div>
 

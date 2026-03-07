@@ -11,20 +11,85 @@ import {
   TrendingDown,
   ChevronRight,
   RefreshCw,
-  CheckCircle2,
   AlertTriangle,
   Brain,
+  DollarSign,
+  Shield,
+  Flame,
+  ArrowUpCircle,
+  Settings2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { TradeRecommendationWithPlayers, LeagueSettings } from "@shared/schema";
 
+const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Flame; color: string; bgColor: string; description: string }> = {
+  urgent: { label: "Must Trade", icon: Flame, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800", description: "Injured, dropped, or late change — act now" },
+  upgrade: { label: "Score Upgrade", icon: ArrowUpCircle, color: "text-green-600 dark:text-green-400", bgColor: "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800", description: "Higher ceiling, better form — win this week" },
+  cash_gen: { label: "Cash Generation", icon: DollarSign, color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", description: "Build bank for premium upgrades later" },
+  structure: { label: "Structure Fix", icon: Settings2, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800", description: "DPP, bye coverage, or positional balance" },
+};
+
+const URGENCY_BADGE: Record<string, { label: string; variant: "destructive" | "default" | "secondary" | "outline" }> = {
+  critical: { label: "CRITICAL", variant: "destructive" },
+  high: { label: "HIGH", variant: "default" },
+  medium: { label: "MEDIUM", variant: "secondary" },
+  low: { label: "LOW", variant: "outline" },
+};
+
 function ConfidenceBar({ confidence }: { confidence: number }) {
-  const pct = Math.round(confidence * 100);
+  const pct = Math.round((confidence || 0) * 100);
+  const color = pct >= 70 ? "bg-green-500" : pct >= 45 ? "bg-amber-500" : "bg-red-400";
   return (
     <div className="flex items-center gap-2">
-      <Progress value={pct} className="h-1.5 flex-1" />
+      <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
       <span className="text-xs font-mono font-medium w-8 text-right">{pct}%</span>
+    </div>
+  );
+}
+
+function PlayerPill({ player, direction }: { player: any; direction: "out" | "in" }) {
+  const teamColors = getTeamColors(player.team);
+  const abbr = getTeamAbbr(player.team);
+  const isOut = direction === "out";
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 border"
+        style={{ backgroundColor: teamColors.primary, borderColor: teamColors.secondary }}
+      >
+        <span className="text-[9px] font-bold" style={{ color: teamColors.text }}>{abbr}</span>
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Badge
+            variant={isOut ? "destructive" : "default"}
+            className={`text-[9px] px-1.5 py-0 ${!isOut ? "bg-green-600 dark:bg-green-700 text-white" : ""}`}
+          >
+            {isOut ? "OUT" : "IN"}
+          </Badge>
+          <p className="text-sm font-semibold truncate" data-testid={`text-trade-player-${direction}-${player.id}`}>{player.name}</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>{player.position}</span>
+          <span className="opacity-40">•</span>
+          <span>Avg {player.avgScore?.toFixed(1) || "—"}</span>
+          <span className="opacity-40">•</span>
+          <span className="font-mono">${(player.price / 1000).toFixed(0)}K</span>
+          {player.last3Avg && (
+            <>
+              <span className="opacity-40">•</span>
+              <span className={player.formTrend === "up" ? "text-green-500" : player.formTrend === "down" ? "text-red-400" : ""}>
+                L3: {player.last3Avg.toFixed(1)}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -44,7 +109,7 @@ export default function Trades() {
     mutationFn: () => apiRequest("POST", "/api/trade-recommendations/generate"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trade-recommendations"] });
-      toast({ title: "Trade recommendations generated", description: "New suggestions based on current form and data" });
+      toast({ title: "Trade recommendations generated", description: "Filtered to only worthwhile trades" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -55,7 +120,7 @@ export default function Trades() {
     mutationFn: () => apiRequest("POST", "/api/trade-recommendations/generate-ai"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trade-recommendations"] });
-      toast({ title: "AI trade analysis complete", description: "Deep analysis of form, matchups, bye strategy, and more" });
+      toast({ title: "AI trade analysis complete", description: "Deep analysis with form, matchups, bye strategy" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -90,11 +155,15 @@ export default function Trades() {
     );
   }
 
-  const highConfidence = (trades || []).filter((t) => t.confidence >= 0.7);
-  const medConfidence = (trades || []).filter(
-    (t) => t.confidence >= 0.4 && t.confidence < 0.7
-  );
-  const lowConfidence = (trades || []).filter((t) => t.confidence < 0.4);
+  const allTrades = trades || [];
+  const grouped: Record<string, TradeRecommendationWithPlayers[]> = {};
+  for (const t of allTrades) {
+    const cat = t.category || "upgrade";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(t);
+  }
+
+  const categoryOrder = ["urgent", "upgrade", "cash_gen", "structure"];
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-trades">
@@ -102,7 +171,7 @@ export default function Trades() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Trade Centre</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            AI-powered trade recommendations for your team
+            Only worthwhile trades — filtered by form, value, and win impact
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -151,22 +220,22 @@ export default function Trades() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-accent">
+              <p className="text-3xl font-bold text-accent" data-testid="text-trades-remaining">
                 {settings?.tradesRemaining || 0}
               </p>
-              <p className="text-[10px] text-muted-foreground">this round</p>
+              <p className="text-[10px] text-muted-foreground">remaining</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {(!trades || trades.length === 0) && (
+      {allTrades.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">
             <ArrowLeftRight className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <h3 className="font-semibold text-lg mb-1">No recommendations yet</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-              Click "Generate Recommendations" to get AI-powered trade suggestions based on your team's form, upcoming fixtures, and player values.
+              Generate trade suggestions based on form differentials, breakevens, cash generation, and win probability.
             </p>
             <Button
               onClick={() => generateMutation.mutate()}
@@ -180,55 +249,35 @@ export default function Trades() {
         </Card>
       )}
 
-      {highConfidence.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-green-600 dark:text-green-400 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            Strong Recommendations
-          </h2>
-          {highConfidence.map((trade) => (
-            <TradeCard
-              key={trade.id}
-              trade={trade}
-              onExecute={() => executeTradeMutation.mutate(trade.id)}
-              isPending={executeTradeMutation.isPending}
-            />
-          ))}
-        </div>
-      )}
+      {categoryOrder.map((cat) => {
+        const catTrades = grouped[cat];
+        if (!catTrades || catTrades.length === 0) return null;
+        const config = CATEGORY_CONFIG[cat] || CATEGORY_CONFIG.upgrade;
+        const Icon = config.icon;
 
-      {medConfidence.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-accent flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            Worth Considering
-          </h2>
-          {medConfidence.map((trade) => (
-            <TradeCard
-              key={trade.id}
-              trade={trade}
-              onExecute={() => executeTradeMutation.mutate(trade.id)}
-              isPending={executeTradeMutation.isPending}
-            />
-          ))}
-        </div>
-      )}
-
-      {lowConfidence.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            Speculative
-          </h2>
-          {lowConfidence.map((trade) => (
-            <TradeCard
-              key={trade.id}
-              trade={trade}
-              onExecute={() => executeTradeMutation.mutate(trade.id)}
-              isPending={executeTradeMutation.isPending}
-            />
-          ))}
-        </div>
-      )}
+        return (
+          <div key={cat} className="space-y-3" data-testid={`section-category-${cat}`}>
+            <div className={`rounded-lg border p-3 ${config.bgColor}`}>
+              <div className="flex items-center gap-2">
+                <Icon className={`w-4 h-4 ${config.color}`} />
+                <h2 className={`text-sm font-bold uppercase tracking-wide ${config.color}`}>
+                  {config.label}
+                </h2>
+                <Badge variant="outline" className="text-[10px] ml-auto">{catTrades.length}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{config.description}</p>
+            </div>
+            {catTrades.map((trade) => (
+              <TradeCard
+                key={trade.id}
+                trade={trade}
+                onExecute={() => executeTradeMutation.mutate(trade.id)}
+                isPending={executeTradeMutation.isPending}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -242,56 +291,44 @@ function TradeCard({
   onExecute: () => void;
   isPending: boolean;
 }) {
+  const urgencyConfig = URGENCY_BADGE[trade.urgency || "medium"] || URGENCY_BADGE.medium;
+
   return (
-    <Card data-testid={`card-trade-${trade.id}`}>
+    <Card className="hover-elevate" data-testid={`card-trade-${trade.id}`}>
       <CardContent className="p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="destructive" className="text-[10px]">OUT</Badge>
-                  <p className="text-sm font-semibold truncate">{trade.playerOut.name}</p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {trade.playerOut.team} | {trade.playerOut.position} | Avg: {trade.playerOut.avgScore?.toFixed(1)} | ${(trade.playerOut.price / 1000).toFixed(0)}K
-                </p>
-              </div>
-
-              <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="default" className="bg-green-600 dark:bg-green-700 text-white text-[10px]">IN</Badge>
-                  <p className="text-sm font-semibold truncate">{trade.playerIn.name}</p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {trade.playerIn.team} | {trade.playerIn.position} | Avg: {trade.playerIn.avgScore?.toFixed(1)} | ${(trade.playerIn.price / 1000).toFixed(0)}K
-                </p>
-              </div>
-            </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <Badge variant={urgencyConfig.variant} className="text-[10px]" data-testid={`badge-urgency-${trade.id}`}>
+              {urgencyConfig.label}
+            </Badge>
+            {trade.tradeEv !== null && trade.tradeEv !== undefined && (
+              <span
+                className={`text-xs font-mono font-bold ${trade.tradeEv > 30 ? "text-green-500" : trade.tradeEv > 10 ? "text-amber-500" : "text-muted-foreground"}`}
+                data-testid={`text-trade-ev-${trade.id}`}
+              >
+                EV: {trade.tradeEv.toFixed(0)}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 sm:gap-4">
-            <div className="flex-1 max-w-48">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <PlayerPill player={trade.playerOut} direction="out" />
+            <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0 hidden sm:block" />
+            <PlayerPill player={trade.playerIn} direction="in" />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t pt-3">
+            <div className="flex-1">
               <ConfidenceBar confidence={trade.confidence} />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 flex-wrap">
-                <span className={trade.scoreDifference > 0 ? "text-green-500" : trade.scoreDifference < 0 ? "text-red-500" : ""}>
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5 flex-wrap">
+                <span className={trade.scoreDifference > 0 ? "text-green-500 font-medium" : trade.scoreDifference < 0 ? "text-red-400" : ""}>
                   {trade.scoreDifference > 0 ? "+" : ""}
-                  {trade.scoreDifference?.toFixed(1)} pts
+                  {trade.scoreDifference?.toFixed(1)} pts/gm
                 </span>
-                <span>|</span>
-                <span className={trade.priceChange > 0 ? "text-green-500" : trade.priceChange < 0 ? "text-red-500" : ""}>
-                  {trade.priceChange > 0 ? "+" : ""}${(trade.priceChange / 1000).toFixed(0)}K
+                <span className="opacity-40">•</span>
+                <span className={(trade.priceChange || 0) < 0 ? "text-green-500" : (trade.priceChange || 0) > 0 ? "text-red-400" : ""}>
+                  {(trade.priceChange || 0) < 0 ? "saves " : "+"}${Math.abs((trade.priceChange || 0) / 1000).toFixed(0)}K
                 </span>
-                {trade.tradeEv !== null && trade.tradeEv !== undefined && (
-                  <>
-                    <span>|</span>
-                    <span className={trade.tradeEv > 30 ? "text-green-500 font-medium" : trade.tradeEv > 15 ? "text-yellow-500" : "text-muted-foreground"} data-testid={`text-trade-ev-${trade.id}`}>
-                      EV: {trade.tradeEv.toFixed(0)}
-                    </span>
-                  </>
-                )}
               </div>
             </div>
 
@@ -301,14 +338,16 @@ function TradeCard({
               disabled={isPending}
               data-testid={`button-execute-trade-${trade.id}`}
             >
-              Execute Trade
+              Execute
             </Button>
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-3 leading-relaxed border-t pt-3">
-          {trade.reason}
-        </p>
+        <div className="mt-3 pt-3 border-t">
+          <p className="text-xs text-muted-foreground leading-relaxed" data-testid={`text-trade-reason-${trade.id}`}>
+            {trade.reason}
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

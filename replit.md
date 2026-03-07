@@ -28,6 +28,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/scheduler.ts` - Automated 4-hour intelligence gathering cycle
 - `client/src/App.tsx` - Main app with sidebar navigation, mobile header branding, and routing
 - `client/src/pages/` - Dashboard, MyTeam (dual view: Field + List), Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
+- `client/src/lib/afl-teams.ts` - AFL team colors (18 teams with primary/secondary/text hex + abbreviations), getTeamColors(), getTeamAbbr()
 - `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
 
 ## Data Model
@@ -53,6 +54,7 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 4. **Trade EV Formula**: (ProjDiff × trade_ev_proj_multiplier) - (VolPenalty × trade_ev_vol_penalty) + (CashGen × trade_ev_cashgen_multiplier)
 5. **Consistency Rating**: CV-inverse (consistency_cv_weight) + avg factor (consistency_avg_weight) → 1-10 scale
 6. **Trade Confidence**: Base + EV bonus + form bonus + trend bonuses + injury/DPP bonuses, capped at confidence_max
+7. **Trade Engine**: scoreTradeOut() ranks team players for trading out (injury, form decline, BE above avg, cash cow peaked, bye); scoreTradeIn() evaluates replacements (form differential, cash generation, DPP, POD, bye coverage, ceiling upside); trades categorized as urgent/upgrade/cash_gen/structure with urgency levels critical/high/medium/low; quality threshold filters out marginal trades
 
 ## API Endpoints
 - `GET /api/players` - All players with advanced metrics

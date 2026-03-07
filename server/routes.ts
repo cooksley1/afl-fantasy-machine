@@ -210,76 +210,226 @@ export async function registerRoutes(
       }
 
       const allPlayers = await storage.getAllPlayers();
+      const settings = await storage.getSettings();
       const teamPlayerIds = new Set(myTeam.map((p) => p.id));
       const availablePlayers = allPlayers.filter(
         (p) => !teamPlayerIds.has(p.id) && !p.injuryStatus
       );
+      const currentRound = settings?.currentRound || 1;
+      const salaryCap = settings?.salaryCap || 18300000;
+      const isBye = gameRules.byeRounds.includes(currentRound);
 
       const w = getCachedWeights();
+      const totalSalary = myTeam.reduce((s, p) => s + p.price, 0);
+      const remainingSalary = salaryCap - totalSalary;
 
-      const underperformers = myTeam
-        .filter((p) => p.isOnField)
-        .sort((a, b) => {
-          const aFormDiff = (a.last3Avg || 0) - (a.avgScore || 0);
-          const bFormDiff = (b.last3Avg || 0) - (b.avgScore || 0);
-          return aFormDiff - bFormDiff;
-        })
-        .slice(0, 5);
-
-      for (const playerOut of underperformers) {
-        const samePosPlayers = availablePlayers
-          .filter((p) => p.position === playerOut.position)
-          .sort((a, b) => {
-            const aScore = calcTradeRankingScore(a.last3Avg || 0, a.avgScore || 0, a.formTrend, w);
-            const bScore = calcTradeRankingScore(b.last3Avg || 0, b.avgScore || 0, b.formTrend, w);
-            return bScore - aScore;
-          })
-          .slice(0, 3);
-
-        for (const playerIn of samePosPlayers) {
-          const projIn = playerIn.projectedScore || playerIn.avgScore || 0;
-          const projOut = playerOut.projectedScore || playerOut.avgScore || 0;
-          const volIn = playerIn.volatilityScore || 5;
-          const volOut = playerOut.volatilityScore || 5;
-          const cashGen = playerIn.cashGenPotential === "elite" ? 40 : playerIn.cashGenPotential === "high" ? 25 : playerIn.cashGenPotential === "medium" ? 15 : 0;
-          const tradeEv = calcTradeEV(projIn, projOut, volIn, volOut, cashGen, w);
-
-          const scoreDiff = (playerIn.avgScore || 0) - (playerOut.avgScore || 0);
-          const formDiff = (playerIn.last3Avg || 0) - (playerOut.last3Avg || 0);
-          const priceDiff = playerIn.price - playerOut.price;
-
-          const confidence = calcTradeConfidence(
-            tradeEv,
-            formDiff,
-            playerIn.formTrend,
-            playerOut.formTrend,
-            !!playerOut.injuryStatus,
-            !!playerIn.dualPosition,
-            w
-          );
-
-          const reasons = [];
-          if (tradeEv > w.confidence_ev_strong_threshold) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (strong)`);
-          else if (tradeEv > w.confidence_ev_moderate_threshold) reasons.push(`Trade EV: ${tradeEv.toFixed(0)} (marginal)`);
-          if (playerIn.formTrend === "up") reasons.push(`${playerIn.name} trending up (L3: ${playerIn.last3Avg?.toFixed(1)})`);
-          if (playerOut.formTrend === "down") reasons.push(`${playerOut.name} trending down`);
-          if (scoreDiff > 0) reasons.push(`+${scoreDiff.toFixed(1)} avg pts/game`);
-          if (priceDiff < 0) reasons.push(`saves $${Math.abs(priceDiff / 1000).toFixed(0)}K`);
-          if (playerIn.captainProbability && playerIn.captainProbability > 0.3) reasons.push(`P(120+): ${(playerIn.captainProbability * 100).toFixed(0)}%`);
-          if (playerIn.dualPosition) reasons.push(`DPP: ${playerIn.position}/${playerIn.dualPosition}`);
-          if (playerIn.volatilityScore !== null && playerIn.volatilityScore < 3) reasons.push("Low volatility (safe)");
-          if (reasons.length === 0) reasons.push("Potential upgrade based on form analysis");
-
-          await storage.createTradeRecommendation({
-            playerOutId: playerOut.id,
-            playerInId: playerIn.id,
-            reason: reasons.join(". ") + ".",
-            confidence,
-            priceChange: priceDiff,
-            scoreDifference: scoreDiff,
-            tradeEv,
-          });
+      const teamByeCount: Record<number, number> = {};
+      for (const p of myTeam.filter(pp => pp.isOnField)) {
+        if (p.byeRound) {
+          teamByeCount[p.byeRound] = (teamByeCount[p.byeRound] || 0) + 1;
         }
+      }
+
+      interface TradeCandidate {
+        playerOut: typeof myTeam[0];
+        playerIn: typeof availablePlayers[0];
+        category: string;
+        urgency: string;
+        tradeEv: number;
+        confidence: number;
+        scoreDiff: number;
+        priceDiff: number;
+        cashImpact: number;
+        projectedImpact: number;
+        reasons: string[];
+      }
+
+      const candidates: TradeCandidate[] = [];
+
+      function scoreTradeOut(p: typeof myTeam[0]): { score: number; reasons: string[]; category: string } {
+        let score = 0;
+        const reasons: string[] = [];
+        let category = "upgrade";
+
+        const formDiff = (p.last3Avg || 0) - (p.avgScore || 0);
+        if (formDiff < -10) { score += 30; reasons.push("Form declining sharply"); }
+        else if (formDiff < -5) { score += 15; reasons.push("Form dipping"); }
+        if (p.formTrend === "down") { score += 10; }
+
+        if (p.injuryStatus) { score += 40; reasons.push(`Injured: ${p.injuryStatus}`); category = "urgent"; }
+        if (p.lateChange) { score += 35; reasons.push("Late change risk"); category = "urgent"; }
+        if (!p.isNamedTeam) { score += 25; reasons.push("Not named in team"); category = "urgent"; }
+
+        if (p.breakEven && p.avgScore && p.breakEven > p.avgScore * 1.15) {
+          score += 20; reasons.push("BE above avg — price will drop");
+        }
+
+        if (p.price > 800000 && p.avgScore && p.avgScore < 70) {
+          score += 15; reasons.push("Overpriced relative to output");
+        }
+
+        if (p.cashGenPotential === "elite" || p.cashGenPotential === "high") {
+          if (p.breakEven && p.avgScore && p.breakEven > p.avgScore) {
+            score += 25; reasons.push("Cash cow peaked — sell high"); category = "cash_gen";
+          }
+        }
+
+        if (isBye && p.byeRound === currentRound) {
+          score += 15; reasons.push("On bye this round");
+        }
+
+        return { score, reasons, category };
+      }
+
+      function scoreTradeIn(pIn: typeof availablePlayers[0], pOut: typeof myTeam[0], outCategory: string): TradeCandidate | null {
+        const projIn = pIn.projectedScore || pIn.avgScore || 0;
+        const projOut = pOut.projectedScore || pOut.avgScore || 0;
+        const scoreDiff = (pIn.avgScore || 0) - (pOut.avgScore || 0);
+        const priceDiff = pIn.price - pOut.price;
+        const cashImpact = -priceDiff;
+
+        if (priceDiff > remainingSalary + 50000) return null;
+
+        const volIn = pIn.volatilityScore || 5;
+        const volOut = pOut.volatilityScore || 5;
+        const cashGen = pIn.cashGenPotential === "elite" ? 40 : pIn.cashGenPotential === "high" ? 25 : pIn.cashGenPotential === "medium" ? 15 : 0;
+        const tradeEv = calcTradeEV(projIn, projOut, volIn, volOut, cashGen, w);
+
+        let category = outCategory;
+        const reasons: string[] = [];
+
+        if (pIn.isDebutant && (pIn.cashGenPotential === "elite" || pIn.cashGenPotential === "high")) {
+          category = "cash_gen";
+          reasons.push(`Cash cow: ${pIn.cashGenPotential} potential`);
+          if (pIn.breakEven && pIn.avgScore && pIn.avgScore > pIn.breakEven) {
+            reasons.push(`Scoring ${((pIn.avgScore || 0) - pIn.breakEven).toFixed(0)} above BE — rapid price rise`);
+          }
+        }
+
+        if (scoreDiff > 10) {
+          reasons.push(`+${scoreDiff.toFixed(1)} pts/game upgrade`);
+          if (category !== "urgent") category = "upgrade";
+        } else if (scoreDiff > 0) {
+          reasons.push(`+${scoreDiff.toFixed(1)} pts/game improvement`);
+        }
+
+        if (priceDiff < -100000) {
+          reasons.push(`Frees up $${Math.abs(priceDiff / 1000).toFixed(0)}K`);
+          if (scoreDiff >= -5 && category !== "urgent") category = "cash_gen";
+        }
+
+        if (pIn.formTrend === "up") reasons.push(`${pIn.name} in hot form (L3: ${pIn.last3Avg?.toFixed(1)})`);
+        if (pIn.captainProbability && pIn.captainProbability > 0.25) reasons.push(`Captain option: P(120+) ${(pIn.captainProbability * 100).toFixed(0)}%`);
+        if (pIn.dualPosition) reasons.push(`DPP flexibility: ${pIn.position}/${pIn.dualPosition}`);
+
+        if (pIn.breakEven && pIn.avgScore && pIn.breakEven < pIn.avgScore * 0.85) {
+          reasons.push("BE well below avg — price will rise");
+        }
+
+        if (pIn.consistencyRating && pIn.consistencyRating >= 7 && (pIn.avgScore || 0) >= 75) {
+          reasons.push("Elite consistency — reliable scorer");
+        }
+
+        if (pIn.ownedByPercent !== null && pIn.ownedByPercent < 10 && (pIn.avgScore || 0) > 80) {
+          reasons.push(`POD: only ${pIn.ownedByPercent.toFixed(0)}% owned`);
+        }
+
+        if (isBye && pOut.byeRound === currentRound && pIn.byeRound !== currentRound) {
+          reasons.push("Fixes bye round coverage");
+          if (category === "upgrade") category = "structure";
+        }
+
+        const formDiff = (pIn.last3Avg || 0) - (pOut.last3Avg || 0);
+        const confidence = calcTradeConfidence(
+          tradeEv, formDiff, pIn.formTrend, pOut.formTrend,
+          !!pOut.injuryStatus, !!pIn.dualPosition, w
+        );
+
+        let urgency = "low";
+        if (pOut.injuryStatus || pOut.lateChange || !pOut.isNamedTeam) urgency = "critical";
+        else if (tradeEv > 40 || scoreDiff > 15) urgency = "high";
+        else if (tradeEv > 20 || scoreDiff > 5 || category === "cash_gen") urgency = "medium";
+
+        const projectedImpact = scoreDiff;
+
+        const MIN_CONFIDENCE = 0.35;
+        const MIN_EV = -10;
+        if (confidence < MIN_CONFIDENCE && tradeEv < MIN_EV && category !== "urgent" && category !== "cash_gen") return null;
+
+        if (reasons.length === 0) return null;
+
+        return {
+          playerOut: pOut, playerIn: pIn, category, urgency,
+          tradeEv, confidence, scoreDiff, priceDiff, cashImpact,
+          projectedImpact, reasons,
+        };
+      }
+
+      const scoredTeamPlayers = myTeam
+        .filter(p => p.isOnField)
+        .map(p => ({ player: p, ...scoreTradeOut(p) }))
+        .sort((a, b) => b.score - a.score);
+
+      const benchPlayers = myTeam.filter(p => !p.isOnField);
+      const scoredBench = benchPlayers
+        .map(p => ({ player: p, ...scoreTradeOut(p) }))
+        .sort((a, b) => b.score - a.score);
+
+      const allScoredOuts = [...scoredTeamPlayers, ...scoredBench].slice(0, 8);
+
+      for (const outEntry of allScoredOuts) {
+        const pOut = outEntry.player;
+        const posMatches = availablePlayers.filter(p =>
+          p.position === pOut.position || p.dualPosition === pOut.position ||
+          (pOut.dualPosition && (p.position === pOut.dualPosition || p.dualPosition === pOut.dualPosition))
+        );
+
+        const scored = posMatches
+          .map(pIn => scoreTradeIn(pIn, pOut, outEntry.category))
+          .filter((c): c is TradeCandidate => c !== null)
+          .sort((a, b) => {
+            if (a.urgency === "critical" && b.urgency !== "critical") return -1;
+            if (b.urgency === "critical" && a.urgency !== "critical") return 1;
+            return b.tradeEv - a.tradeEv;
+          })
+          .slice(0, 2);
+
+        candidates.push(...scored);
+      }
+
+      const unique = new Map<string, TradeCandidate>();
+      for (const c of candidates) {
+        const key = `${c.playerOut.id}-${c.playerIn.id}`;
+        const existing = unique.get(key);
+        if (!existing || c.tradeEv > existing.tradeEv) {
+          unique.set(key, c);
+        }
+      }
+
+      const finalTrades = Array.from(unique.values())
+        .sort((a, b) => {
+          const urgencyOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+          const uDiff = (urgencyOrder[a.urgency] || 3) - (urgencyOrder[b.urgency] || 3);
+          if (uDiff !== 0) return uDiff;
+          return b.tradeEv - a.tradeEv;
+        })
+        .slice(0, 10);
+
+      for (const trade of finalTrades) {
+        await storage.createTradeRecommendation({
+          playerOutId: trade.playerOut.id,
+          playerInId: trade.playerIn.id,
+          reason: trade.reasons.join(". ") + ".",
+          confidence: trade.confidence,
+          priceChange: trade.priceDiff,
+          scoreDifference: trade.scoreDiff,
+          tradeEv: trade.tradeEv,
+          category: trade.category,
+          urgency: trade.urgency,
+          projectedImpact: trade.projectedImpact,
+          cashImpact: trade.cashImpact,
+          status: "pending",
+        });
       }
 
       const recs = await storage.getTradeRecommendations();
