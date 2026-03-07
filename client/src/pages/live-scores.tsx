@@ -4,9 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap, Star, Info, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Star, Info, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -298,61 +296,12 @@ function MatchCard({ match, myPlayers, expanded, onToggle, round }: {
   );
 }
 
-function QuickScoreEntry({ player, round, onClose }: { player: LivePlayerScore; round: number; onClose: () => void }) {
-  const { toast } = useToast();
-  const [score, setScore] = useState(String(player.fantasyScore || ""));
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      const numScore = parseInt(score);
-      if (isNaN(numScore)) throw new Error("Invalid score");
-      return apiRequest("POST", "/api/live-scores/bulk-update", {
-        round,
-        scores: [{ playerId: player.playerId, fantasyScore: numScore }],
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/live-scores"] });
-      toast({ title: "Score updated", description: `${player.playerName}: ${score} pts` });
-      onClose();
-    },
-    onError: (e: any) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <div className="flex items-center gap-2" data-testid={`quick-score-${player.playerId}`}>
-      <Input
-        type="number"
-        value={score}
-        onChange={(e) => setScore(e.target.value)}
-        className="w-20 h-8 text-sm"
-        placeholder="Score"
-        data-testid={`input-score-${player.playerId}`}
-        onKeyDown={(e) => { if (e.key === "Enter") updateMutation.mutate(); }}
-      />
-      <Button
-        size="sm"
-        variant="default"
-        className="h-8 text-xs"
-        onClick={() => updateMutation.mutate()}
-        disabled={updateMutation.isPending}
-        data-testid={`button-save-score-${player.playerId}`}
-      >
-        {updateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-      </Button>
-    </div>
-  );
-}
-
 function PlayerScoreRow({ player, round, expanded, onToggle }: {
   player: LivePlayerScore;
   round: number;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const teamColors = getTeamColors(player.team);
 
   return (
@@ -391,27 +340,11 @@ function PlayerScoreRow({ player, round, expanded, onToggle }: {
             )}
           </div>
 
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={(e) => { e.stopPropagation(); setEditing(!editing); }}
-            data-testid={`button-edit-score-${player.playerId}`}
-          >
-            <Edit3 className="w-3 h-3" />
-          </Button>
-
           {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
         </div>
       </div>
 
-      {editing && (
-        <div className="px-3 pb-2">
-          <QuickScoreEntry player={player} round={round} onClose={() => setEditing(false)} />
-        </div>
-      )}
-
-      {expanded && !editing && (
+      {expanded && (
         <div className="px-3 pb-2">
           {player.disposals > 0 || player.marks > 0 || player.tackles > 0 || player.hitouts > 0 ? (
             <div className="grid grid-cols-4 gap-1.5 text-[10px]">
@@ -450,86 +383,12 @@ function PlayerScoreRow({ player, round, expanded, onToggle }: {
             </div>
           ) : (
             <p className="text-[10px] text-muted-foreground text-center py-1">
-              {player.fantasyScore > 0 ? "Score entered manually — stat breakdown not available" : "No stats recorded yet"}
+              No stats recorded yet
             </p>
           )}
         </div>
       )}
     </div>
-  );
-}
-
-function BulkScoreDialog({ players, round }: { players: LivePlayerScore[]; round: number }) {
-  const { toast } = useToast();
-  const [scores, setScores] = useState<Record<number, string>>(() => {
-    const initial: Record<number, string> = {};
-    players.forEach((p) => { initial[p.playerId] = String(p.fantasyScore || ""); });
-    return initial;
-  });
-  const [open, setOpen] = useState(false);
-
-  const bulkMutation = useMutation({
-    mutationFn: async () => {
-      const scoreEntries = Object.entries(scores)
-        .filter(([, v]) => v !== "" && !isNaN(parseInt(v)))
-        .map(([id, v]) => ({ playerId: parseInt(id), fantasyScore: parseInt(v) }));
-      if (scoreEntries.length === 0) throw new Error("No scores to update");
-      return apiRequest("POST", "/api/live-scores/bulk-update", { round, scores: scoreEntries });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/live-scores"] });
-      toast({ title: "Scores updated", description: `Updated ${Object.keys(scores).length} players` });
-      setOpen(false);
-    },
-    onError: (e: any) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5 text-xs" data-testid="button-bulk-scores">
-          <Edit3 className="w-3.5 h-3.5" />
-          Enter Scores
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base">Enter Live Scores — Round {round}</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground mb-3">
-          Enter fantasy scores from the AFL Fantasy app. Leave blank to skip a player.
-        </p>
-        <div className="space-y-2">
-          {players.map((p) => (
-            <div key={p.playerId} className="flex items-center gap-2" data-testid={`bulk-row-${p.playerId}`}>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium block">{p.playerName}</span>
-                <span className="text-[10px] text-muted-foreground">{p.position} • {getTeamAbbr(p.team)}</span>
-              </div>
-              <Input
-                type="number"
-                value={scores[p.playerId] || ""}
-                onChange={(e) => setScores((prev) => ({ ...prev, [p.playerId]: e.target.value }))}
-                className="w-20 h-8 text-sm text-right"
-                placeholder="—"
-                data-testid={`input-bulk-score-${p.playerId}`}
-              />
-            </div>
-          ))}
-        </div>
-        <Button
-          className="w-full mt-3 gap-1.5"
-          onClick={() => bulkMutation.mutate()}
-          disabled={bulkMutation.isPending}
-          data-testid="button-save-bulk-scores"
-        >
-          {bulkMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-          {bulkMutation.isPending ? "Saving..." : "Save All Scores"}
-        </Button>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -654,9 +513,6 @@ export default function LiveScoresPage() {
             {fetchScoresMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">Fetch</span>
           </Button>
-          {data?.myTeamScores && data.myTeamScores.length > 0 && (
-            <BulkScoreDialog players={data.myTeamScores} round={currentRound} />
-          )}
           <Button
             size="sm"
             variant="outline"
