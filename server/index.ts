@@ -60,6 +60,37 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { pool } = await import("./db");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      email varchar UNIQUE,
+      first_name varchar,
+      last_name varchar,
+      profile_image_url varchar,
+      is_admin boolean DEFAULT false,
+      is_blocked boolean DEFAULT false,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id serial PRIMARY KEY,
+      user_id varchar NOT NULL,
+      user_email varchar,
+      user_name varchar,
+      subject text NOT NULL,
+      message text NOT NULL,
+      status text NOT NULL DEFAULT 'unread',
+      admin_response text,
+      responded_at timestamp,
+      is_archived boolean DEFAULT false,
+      created_at timestamp DEFAULT now()
+    )
+  `);
+  log("Auth tables ensured");
+
   const { setupAuth, registerAuthRoutes } = await import("./replit_integrations/auth");
   await setupAuth(app);
   registerAuthRoutes(app);
