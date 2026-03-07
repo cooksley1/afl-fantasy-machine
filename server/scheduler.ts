@@ -16,6 +16,13 @@ async function runGather() {
     lastGatherTime = new Date();
     gatherCount++;
     console.log(`[Scheduler] Gather #${gatherCount} complete: ${result.fetched} fetched, ${result.processed} processed`);
+
+    try {
+      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
+      await fetchDTLiveData();
+    } catch (e: any) {
+      console.log(`[Scheduler] DTLive sync error: ${e.message}`);
+    }
   } catch (e: any) {
     console.error("[Scheduler] Gather error:", e.message);
   } finally {

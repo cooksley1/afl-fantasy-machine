@@ -52,4 +52,5 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **AFL.com.au RSS**: Source for official AFL news.
 - **Google News RSS**: Gathers news from all 18 AFL club feeds.
 - **AFL Fantasy API**: Used for player headshot photos.
+- **DTLive (dtlive.com.au)**: Scraped for real player prices, ownership %, price changes, and per-round scores. `server/services/dtlive-scraper.ts` fetches data on startup and every 4 hours via the scheduler. Admin can manually trigger via `POST /api/admin/sync-dtlive`.
 - **PostgreSQL**: The primary database for all application data.

@@ -1355,6 +1355,20 @@ export async function registerRoutes(
     }
   });
 
+  // ============ DTLIVE DATA SYNC ============
+
+  app.post("/api/admin/sync-dtlive", isAdmin, async (_req, res) => {
+    try {
+      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
+      const result = await fetchDTLiveData();
+      const { recalculatePlayerAverages } = await import("./expand-players");
+      await recalculatePlayerAverages();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============ TAG PREDICTION TRACKING ============
 
   app.post("/api/admin/tag-predictions/save", isAdmin, async (_req, res) => {

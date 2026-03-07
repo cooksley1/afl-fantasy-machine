@@ -116,6 +116,12 @@ app.use((req, res, next) => {
   await recalculatePlayerAverages();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
+  import("./services/dtlive-scraper").then(({ fetchDTLiveData }) =>
+    fetchDTLiveData().then(() =>
+      recalculatePlayerAverages()
+    )
+  ).catch(err => console.log(`[DTLive] Background sync error: ${err.message}`));
+
   const { fetchAndStoreFixtures } = await import("./services/fixture-service");
   fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
 
