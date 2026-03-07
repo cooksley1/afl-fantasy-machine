@@ -134,9 +134,9 @@ function PerformanceCharts({ player }: { player: Player }) {
         <Card>
           <CardContent className="py-8 text-center">
             <Calendar className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm font-medium">Pre-Season — No Round Data Yet</p>
+            <p className="text-sm font-medium">Round 0 — Charts Coming Soon</p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Performance charts will populate once the 2026 AFL season begins. Stats shown below are based on 2025 baseline data and pre-season projections.
+              Performance charts will populate as round scores are recorded. Round 0 scores contribute to player averages and form even though they don't count for AFL Fantasy Classic. Stats below are based on 2025 baseline data and pre-season projections.
             </p>
           </CardContent>
         </Card>

@@ -635,9 +635,9 @@ export default function LiveScoresPage() {
           <CardContent className="p-3 flex items-start gap-2">
             <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-medium">Pre-Season — Round 0</p>
+              <p className="text-xs font-medium">Round 0 — Practice Matches</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                The season hasn't started yet, so all scores are zero. Click any match to see the full squad list for both teams. Once Round 1 begins, live fantasy scores will appear here.
+                Round 0 scores don't count for AFL Fantasy Classic, but they do contribute to player averages and form. Track scores here to get a head start on your analysis. Click any match to see the full squad list for both teams.
               </p>
             </div>
           </CardContent>
