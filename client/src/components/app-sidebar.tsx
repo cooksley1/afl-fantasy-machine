@@ -9,6 +9,7 @@ import {
   Zap,
   Brain,
   Camera,
+  Radio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Live Scores", url: "/live", icon: Radio },
   { title: "My Team", url: "/team", icon: Users },
   { title: "Players", url: "/players", icon: Trophy },
   { title: "Trade Centre", url: "/trades", icon: ArrowLeftRight },
@@ -76,6 +78,11 @@ export function AppSidebar() {
                       <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}>
                         <item.icon className="w-4 h-4" />
                         <span className="text-sm">{item.title}</span>
+                        {item.title === "Live Scores" && (
+                          <Badge variant="default" className="ml-auto text-[10px] bg-red-500 text-white">
+                            Live
+                          </Badge>
+                        )}
                         {item.title === "Intel Hub" && (
                           <Badge variant="default" className="ml-auto text-[10px] bg-accent text-accent-foreground">
                             Live

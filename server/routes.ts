@@ -13,6 +13,7 @@ import {
   buildWeightConfig,
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
+import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses } from "./services/live-scores";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
 
@@ -784,6 +785,73 @@ export async function registerRoutes(
       const allWeights = await storage.getAllModelWeights();
       buildWeightConfig(allWeights);
       res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/live-scores", async (req, res) => {
+    try {
+      const round = req.query.round ? parseInt(req.query.round as string) : undefined;
+      const data = await getLiveRoundData(round);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/live-scores/matches", async (req, res) => {
+    try {
+      const round = req.query.round ? parseInt(req.query.round as string) : undefined;
+      const matches = await fetchMatchStatuses(round);
+      res.json(matches);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/live-scores/update-player", async (req, res) => {
+    try {
+      const schema = z.object({
+        playerId: z.number(),
+        round: z.number(),
+        kicks: z.number().optional(),
+        handballs: z.number().optional(),
+        marks: z.number().optional(),
+        tackles: z.number().optional(),
+        hitouts: z.number().optional(),
+        goals: z.number().optional(),
+        behinds: z.number().optional(),
+        freesAgainst: z.number().optional(),
+        timeOnGround: z.number().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const { playerId, round, ...stats } = parsed.data;
+      const result = await updatePlayerLiveStats(playerId, round, stats);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/live-scores/bulk-update", async (req, res) => {
+    try {
+      const schema = z.object({
+        round: z.number(),
+        scores: z.array(z.object({
+          playerId: z.number(),
+          fantasyScore: z.number(),
+        })),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const result = await bulkUpdateLiveScores(parsed.data.round, parsed.data.scores);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

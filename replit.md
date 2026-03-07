@@ -27,7 +27,8 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/data-gatherer.ts` - Live data fetching from Squiggle API, AFL.com.au RSS, all 18 AFL club Google News feeds
 - `server/scheduler.ts` - Automated 4-hour intelligence gathering cycle
 - `client/src/App.tsx` - Main app with sidebar navigation, mobile header branding, and routing
-- `client/src/pages/` - Dashboard, MyTeam (dual view: Field + List), Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, Settings pages
+- `server/services/live-scores.ts` - Live score tracking: fetches match status from Squiggle API, joins myTeamPlayers with players for live scoring, supports manual score entry and bulk fantasy score updates
+- `client/src/pages/` - Dashboard, MyTeam (dual view: Field + List), Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings pages
 - `client/src/lib/afl-teams.ts` - AFL team colors (18 teams with primary/secondary/text hex + abbreviations), getTeamColors(), getTeamAbbr()
 - `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
 
@@ -92,6 +93,10 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `POST /api/analyze-screenshot` - Screenshot vision analysis
 - `POST /api/players/refresh-data` - Refresh player data
 - `POST /api/players/update-fixtures` - Update all player fixtures for a given round from AFL_2026_FIXTURES
+- `GET /api/live-scores` - Full live round data: matches from Squiggle + team player scores + totals
+- `GET /api/live-scores/matches` - Match statuses only from Squiggle API
+- `POST /api/live-scores/update-player` - Update individual player stats (kicks/HB/marks/tackles/HO) with auto fantasy score calc
+- `POST /api/live-scores/bulk-update` - Bulk update fantasy scores for multiple players
 - `GET /api/late-changes` - Late changes for current round
 - `POST /api/late-changes` - Create late change
 - `GET /api/scheduler/status` - Scheduler status

@@ -16,6 +16,7 @@ import IntelHub from "@/pages/intel-hub";
 import TeamAnalyzer from "@/pages/team-analyzer";
 import PlayerReportPage from "@/pages/player-report";
 import SettingsPage from "@/pages/settings-page";
+import LiveScoresPage from "@/pages/live-scores";
 import { Zap } from "lucide-react";
 
 function Router() {
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/intel" component={IntelHub} />
       <Route path="/analyze" component={TeamAnalyzer} />
       <Route path="/player/:id" component={PlayerReportPage} />
+      <Route path="/live" component={LiveScoresPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
