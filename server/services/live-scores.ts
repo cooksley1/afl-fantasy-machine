@@ -40,6 +40,7 @@ export interface LivePlayerScore {
   effectiveScore: number;
   timeOnGround: number | null;
   matchStatus: string;
+  aflFantasyId: number | null;
 }
 
 export interface LiveRoundData {
@@ -196,6 +197,7 @@ export async function getLiveRoundData(round?: number): Promise<LiveRoundData> {
         effectiveScore,
         timeOnGround: stats?.timeOnGroundPercent || null,
         matchStatus,
+        aflFantasyId: p.aflFantasyId || null,
       };
     });
 

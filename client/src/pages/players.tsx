@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PlayerAvatar } from "@/components/player-avatar";
 import {
   Select,
   SelectContent,
@@ -244,11 +245,12 @@ export default function Players() {
         <CardContent className="p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2.5 min-w-0 flex-1">
-              <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">
-                  {player.position.slice(0, 3)}
-                </span>
-              </div>
+              <PlayerAvatar
+                aflFantasyId={player.aflFantasyId}
+                playerName={player.name}
+                team={player.team}
+                size="sm"
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate" data-testid={`text-player-name-${player.id}`}>
                   {player.name}
@@ -354,11 +356,12 @@ export default function Players() {
         data-testid={`card-player-${player.id}`}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase">
-              {player.position.slice(0, 3)}
-            </span>
-          </div>
+          <PlayerAvatar
+            aflFantasyId={player.aflFantasyId}
+            playerName={player.name}
+            team={player.team}
+            size="sm"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium truncate">{player.name}</p>

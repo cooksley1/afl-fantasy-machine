@@ -42,6 +42,7 @@ export const players = pgTable("players", {
   injuryRiskScore: real("injury_risk_score").default(null),
   volatilityScore: real("volatility_score").default(null),
   captainProbability: real("captain_probability").default(null),
+  aflFantasyId: integer("afl_fantasy_id").default(null),
 });
 
 export const weeklyStats = pgTable("weekly_stats", {

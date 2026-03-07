@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Edit3, Zap } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
+import { PlayerAvatar } from "@/components/player-avatar";
 
 interface MatchStatus {
   id: number;
@@ -46,6 +47,7 @@ interface LivePlayerScore {
   effectiveScore: number;
   timeOnGround: number | null;
   matchStatus: string;
+  aflFantasyId: number | null;
 }
 
 interface LiveRoundData {
@@ -73,16 +75,14 @@ function MatchStatusBadge({ complete, timeStr }: { complete: number; timeStr: st
 }
 
 function MatchPlayerRow({ player }: { player: LivePlayerScore }) {
-  const teamColors = getTeamColors(player.team);
-
   return (
     <div className="flex items-center gap-2 px-3 py-1.5" data-testid={`match-player-${player.playerId}`}>
-      <div
-        className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold shrink-0"
-        style={{ backgroundColor: teamColors.primary, color: teamColors.text }}
-      >
-        {getTeamAbbr(player.team)}
-      </div>
+      <PlayerAvatar
+        aflFantasyId={player.aflFantasyId}
+        playerName={player.playerName}
+        team={player.team}
+        size="xs"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="text-xs font-medium truncate">{player.playerName}</span>

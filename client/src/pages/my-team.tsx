@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PlayerAvatar } from "@/components/player-avatar";
 import {
   Crown,
   Shield,
@@ -206,17 +207,12 @@ function FieldViewCard({
               {jerseyNum}
             </span>
             <div className="flex flex-col items-center z-10">
-              <div
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border-2"
-                style={{ borderColor: `${teamColors.text}66`, backgroundColor: `${teamColors.secondary}44` }}
-              >
-                <span
-                  className="text-sm sm:text-base font-black"
-                  style={{ color: teamColors.text }}
-                >
-                  {jerseyNum}
-                </span>
-              </div>
+              <PlayerAvatar
+                aflFantasyId={player.aflFantasyId}
+                playerName={player.name}
+                team={player.team}
+                size="md"
+              />
             </div>
           </div>
 
@@ -378,18 +374,22 @@ function ListViewRow({
       data-testid={`list-row-${player.id}`}
       onClick={() => onViewReport(player.id)}
     >
-      <div
-        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-border flex items-center justify-center shrink-0 relative"
-        style={{ backgroundColor: getTeamColors(player.team).primary }}
-      >
+      <div className="relative shrink-0">
+        <PlayerAvatar
+          aflFantasyId={player.aflFantasyId}
+          playerName={player.name}
+          team={player.team}
+          size="sm"
+        />
         {player.isCaptain && (
-          <span className="text-[10px] font-bold" style={{ color: getTeamColors(player.team).text }}>C</span>
+          <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center ring-1 ring-background">
+            <span className="text-[8px] font-bold text-white">C</span>
+          </div>
         )}
         {player.isViceCaptain && (
-          <span className="text-[10px] font-bold" style={{ color: getTeamColors(player.team).text }}>V</span>
-        )}
-        {!player.isCaptain && !player.isViceCaptain && (
-          <span className="text-[9px] font-bold" style={{ color: getTeamColors(player.team).text }}>{getTeamAbbr(player.team)}</span>
+          <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center ring-1 ring-background">
+            <span className="text-[8px] font-bold text-white">V</span>
+          </div>
         )}
       </div>
 

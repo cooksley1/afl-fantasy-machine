@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { PlayerAvatar } from "@/components/player-avatar";
 import {
   ArrowLeftRight,
   Zap,
@@ -58,12 +59,12 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
 
   return (
     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-      <div
-        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 border"
-        style={{ backgroundColor: teamColors.primary, borderColor: teamColors.secondary }}
-      >
-        <span className="text-[9px] font-bold" style={{ color: teamColors.text }}>{abbr}</span>
-      </div>
+      <PlayerAvatar
+        aflFantasyId={player.aflFantasyId}
+        playerName={player.name}
+        team={player.team}
+        size="sm"
+      />
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
           <Badge

@@ -30,11 +30,11 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/services/live-scores.ts` - Live score tracking: fetches match status from Squiggle API, joins myTeamPlayers with players for live scoring, supports manual score entry and bulk fantasy score updates
 - `client/src/pages/` - Dashboard, MyTeam (dual view: Field + List), Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings pages
 - `client/src/lib/afl-teams.ts` - AFL team colors (18 teams with primary/secondary/text hex + abbreviations), getTeamColors(), getTeamAbbr()
-- `client/src/components/` - AppSidebar, ThemeToggle, ErrorState
+- `client/src/components/` - AppSidebar, ThemeToggle, ErrorState, PlayerAvatar (headshot photos from AFL Fantasy API with team-colored fallback)
 
 ## Data Model
 ### Players Table (795 players from 18 AFL teams)
-Core fields: name, team, position, dualPosition, price, startingPrice, avgScore, last3Avg, last5Avg, seasonTotal, gamesPlayed, ownedByPercent, formTrend, injuryStatus, nextOpponent, byeRound, venue, gameTime, priceChange, breakEven, isNamedTeam, lateChange, isDebutant, debutRound, cashGenPotential, recentScores
+Core fields: name, team, position, dualPosition, price, startingPrice, avgScore, last3Avg, last5Avg, seasonTotal, gamesPlayed, ownedByPercent, formTrend, injuryStatus, nextOpponent, byeRound, venue, gameTime, priceChange, breakEven, isNamedTeam, lateChange, isDebutant, debutRound, cashGenPotential, recentScores, aflFantasyId
 Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingScore (volatility-derived), consistencyRating, scoreStdDev, volatilityScore, captainProbability (P(score>=120) via normal CDF), age, yearsExperience, durabilityScore, injuryRiskScore
 
 ### ModelWeights Table (40 configurable weights)

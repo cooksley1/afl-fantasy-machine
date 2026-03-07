@@ -61,10 +61,86 @@ const TEAM_VENUES: Record<string, string> = {
   "West Coast": "Optus Stadium", "Western Bulldogs": "Marvel Stadium",
 };
 
+interface AflFantasyPlayer {
+  id: number;
+  first_name: string;
+  last_name: string;
+  squad_id: number;
+}
+
+const AFL_FANTASY_SQUAD_MAP: Record<number, string> = {
+  10: "Adelaide", 20: "Brisbane Lions", 30: "Carlton", 40: "Collingwood",
+  50: "Essendon", 60: "Fremantle", 70: "Geelong", 1000: "Gold Coast",
+  1010: "GWS Giants", 80: "Hawthorn", 90: "Melbourne", 100: "North Melbourne",
+  110: "Port Adelaide", 120: "Richmond", 130: "St Kilda", 160: "Sydney",
+  150: "West Coast", 140: "Western Bulldogs",
+};
+
 export function loadRealPlayers(): RealPlayer[] {
   const filePath = join(process.cwd(), "server", "real-players-2026.json");
   const raw = readFileSync(filePath, "utf-8");
   return JSON.parse(raw);
+}
+
+function normalizeNameForMatch(name: string): string {
+  return name.toLowerCase().replace(/[''`\-]/g, "").replace(/\s+/g, " ").trim();
+}
+
+export async function syncAflFantasyIds(): Promise<number> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch("https://fantasy.afl.com.au/data/afl/players.json", {
+      headers: { "Accept-Encoding": "gzip, deflate" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      console.log(`[AflFantasySync] API returned ${res.status}, skipping photo sync`);
+      return 0;
+    }
+    const aflPlayers: AflFantasyPlayer[] = await res.json();
+    console.log(`[AflFantasySync] Fetched ${aflPlayers.length} players from AFL Fantasy API`);
+
+    const dbPlayers = await db.select({ id: players.id, name: players.name, team: players.team, aflFantasyId: players.aflFantasyId }).from(players);
+    const playersNeedingId = dbPlayers.filter(p => !p.aflFantasyId);
+
+    if (playersNeedingId.length === 0) {
+      console.log(`[AflFantasySync] All ${dbPlayers.length} players already have AFL Fantasy IDs`);
+      return 0;
+    }
+
+    const aflByNameTeam = new Map<string, number>();
+    const aflByName = new Map<string, number>();
+    for (const ap of aflPlayers) {
+      const fullName = `${ap.first_name} ${ap.last_name}`;
+      const normName = normalizeNameForMatch(fullName);
+      const team = AFL_FANTASY_SQUAD_MAP[ap.squad_id] || "";
+      aflByNameTeam.set(`${normName}|${team}`, ap.id);
+      if (!aflByName.has(normName)) {
+        aflByName.set(normName, ap.id);
+      }
+    }
+
+    let matched = 0;
+    for (const dbPlayer of playersNeedingId) {
+      const normName = normalizeNameForMatch(dbPlayer.name);
+      let aflId = aflByNameTeam.get(`${normName}|${dbPlayer.team}`);
+      if (!aflId) {
+        aflId = aflByName.get(normName);
+      }
+      if (aflId) {
+        await db.update(players).set({ aflFantasyId: aflId }).where(eq(players.id, dbPlayer.id));
+        matched++;
+      }
+    }
+
+    console.log(`[AflFantasySync] Matched ${matched}/${playersNeedingId.length} players with AFL Fantasy IDs`);
+    return matched;
+  } catch (err: any) {
+    console.log(`[AflFantasySync] Failed to fetch AFL Fantasy API: ${err.message}`);
+    return 0;
+  }
 }
 
 function deriveFormTrend(l5Avg: number, regAvg: number): string {
