@@ -22,6 +22,10 @@ import {
   Flame,
   Loader2,
   Activity,
+  UserCheck,
+  Eye,
+  ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
 import { ErrorState } from "@/components/error-state";
 import { useLocation } from "wouter";
@@ -91,6 +95,15 @@ export default function Dashboard() {
 
   const { data: breakoutCandidates } = useQuery<Player[]>({
     queryKey: ["/api/breakout-candidates"],
+  });
+
+  const { data: riskData } = useQuery<{
+    alerts: { playerId: number; playerName: string; team: string; position: string; fieldPosition: string; reason: string; severity: string; avgScore: number; isCaptain: boolean; isViceCaptain: boolean }[];
+    swapSuggestions: { outPlayerId: number; outPlayerName: string; outPosition: string; outAvg: number; inPlayerId: number; inPlayerName: string; inPosition: string; inAvg: number; scoreDiff: number; reason: string }[];
+    tagWarnings: { playerId: number; playerName: string; team: string; position: string; tagRisk: number; avgScore: number; estimatedImpact: number; adjustedProjection: number; isCaptain: boolean; isViceCaptain: boolean; advice: string }[];
+    taggerWarnings: { playerId: number; playerName: string; team: string; position: string; avgScore: number; advice: string }[];
+  }>({
+    queryKey: ["/api/my-team/risks"],
   });
 
   const isLoading = loadingTeam || loadingSettings || loadingTrades;
@@ -248,16 +261,67 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {(lateChangeAlerts.length > 0 || coldPlayers.length > 0 || byeAffectedPlayers.length > 0) && (
-        <Card className="border-destructive/30">
+      {(lateChangeAlerts.length > 0 || coldPlayers.length > 0 || byeAffectedPlayers.length > 0 ||
+        (riskData && (riskData.tagWarnings.length > 0 || riskData.taggerWarnings.length > 0))) && (
+        <Card className="border-destructive/30" data-testid="card-risk-assessment">
           <CardHeader className="pb-2 px-4 pt-4">
             <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 text-destructive">
-              <Zap className="w-4 h-4" />
-              Action Required This Round
+              <ShieldAlert className="w-4 h-4" />
+              Player Risks & Warnings
             </CardTitle>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Injuries, availability issues, tag threats, and bench swap advice
+            </p>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
-            {lateChangeAlerts.map((player) => (
+            {riskData && riskData.alerts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-destructive">Unavailable Players</span>
+                </div>
+                {riskData.alerts.map((alert) => (
+                  <div key={alert.playerId} className="p-2.5 rounded-md bg-destructive/5 border border-destructive/10" data-testid={`alert-unavailable-${alert.playerId}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {alert.playerName}
+                            {alert.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
+                            {alert.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate">{alert.reason}</p>
+                        </div>
+                      </div>
+                      <Badge variant={alert.severity === "critical" ? "destructive" : "secondary"} className="text-[9px] shrink-0">
+                        {alert.severity === "critical" ? "Critical" : alert.severity === "high" ? "High" : "Warning"}
+                      </Badge>
+                    </div>
+                    {riskData.swapSuggestions.find(s => s.outPlayerId === alert.playerId) && (() => {
+                      const swap = riskData.swapSuggestions.find(s => s.outPlayerId === alert.playerId)!;
+                      return (
+                        <div className="mt-2 p-2 rounded bg-emerald-500/5 border border-emerald-500/15 flex items-center gap-2" data-testid={`swap-suggestion-${alert.playerId}`}>
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-medium">
+                              Swap in: <span className="text-emerald-600 dark:text-emerald-400">{swap.inPlayerName}</span>
+                              <span className="text-muted-foreground"> ({swap.inPosition})</span>
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              Avg {swap.inAvg?.toFixed(0)} pts — gains +{Math.max(0, swap.scoreDiff).toFixed(0)} pts vs benching
+                            </p>
+                          </div>
+                          <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!riskData && lateChangeAlerts.length > 0 && lateChangeAlerts.map((player) => (
               <div key={player.id} className="flex items-center justify-between gap-2 p-2.5 rounded-md bg-destructive/5" data-testid={`alert-late-change-${player.id}`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
@@ -271,6 +335,63 @@ export default function Dashboard() {
                 <Badge variant="destructive" className="text-[9px] shrink-0">Trade Out</Badge>
               </div>
             ))}
+
+            {riskData && riskData.tagWarnings.length > 0 && (
+              <div className="p-2.5 rounded-md bg-orange-500/5 border border-orange-500/20" data-testid="section-tag-warnings">
+                <div className="flex items-center gap-2 mb-2">
+                  <Eye className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                  <span className="text-sm font-medium">Tag Threat Warnings</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  These on-field players are likely tag targets — expect reduced scoring
+                </p>
+                {riskData.tagWarnings.map((tw) => (
+                  <div key={tw.playerId} className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/30 rounded px-1" onClick={() => navigate(`/player/${tw.playerId}`)} data-testid={`tag-warning-${tw.playerId}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${tw.tagRisk >= 0.6 ? 'bg-red-500' : 'bg-orange-400'}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm truncate">
+                          {tw.playerName}
+                          {tw.isCaptain && <span className="text-[10px] ml-1 text-yellow-600 dark:text-yellow-400">(C)</span>}
+                          {tw.isViceCaptain && <span className="text-[10px] ml-1 text-emerald-600 dark:text-emerald-400">(VC)</span>}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{tw.advice}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <p className="text-xs font-mono">
+                        <span className="text-muted-foreground">{tw.avgScore?.toFixed(0)}</span>
+                        <span className="text-red-500 ml-1">-{tw.estimatedImpact.toFixed(0)}</span>
+                      </p>
+                      <Badge variant={tw.tagRisk >= 0.6 ? "destructive" : "outline"} className="text-[8px]">
+                        {Math.round(tw.tagRisk * 100)}% risk
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {riskData && riskData.taggerWarnings.length > 0 && (
+              <div className="p-2.5 rounded-md bg-purple-500/5 border border-purple-500/20" data-testid="section-tagger-warnings">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm font-medium">Tagger Role Warning</span>
+                </div>
+                {riskData.taggerWarnings.map((tw) => (
+                  <div key={tw.playerId} className="flex items-center justify-between py-1.5" data-testid={`tagger-warning-${tw.playerId}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm truncate">{tw.playerName}</span>
+                      <Badge variant="secondary" className="text-[9px]">{tw.position}</Badge>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">Avg {tw.avgScore?.toFixed(0)}</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Expected to play a tagging role — scoring output likely reduced. Consider benching if you have better options.
+                </p>
+              </div>
+            )}
 
             {byeAffectedPlayers.length > 0 && (
               <div className="p-2.5 rounded-md bg-yellow-500/5 border border-yellow-500/20">

@@ -906,6 +906,112 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/my-team/risks", async (_req, res) => {
+    try {
+      const { calcTagScoreImpact } = await import("./services/projection-engine");
+      const team = await storage.getMyTeam();
+      if (team.length === 0) {
+        return res.json({ alerts: [], swapSuggestions: [], tagWarnings: [], taggerWarnings: [] });
+      }
+
+      const onField = team.filter(p => p.isOnField);
+      const bench = team.filter(p => !p.isOnField);
+      const settings = await storage.getSettings();
+      const currentRound = settings?.currentRound || 1;
+
+      const alerts: any[] = [];
+      const swapSuggestions: any[] = [];
+      const tagWarnings: any[] = [];
+      const taggerWarnings: any[] = [];
+
+      for (const p of onField) {
+        const isUnavailable = !!p.injuryStatus || !!p.lateChange || !p.isNamedTeam;
+        const isBye = p.byeRound === currentRound;
+
+        if (isUnavailable || isBye) {
+          const reason = p.injuryStatus ? `Injury: ${p.injuryStatus}`
+            : p.lateChange ? "Late change — may score 0"
+            : !p.isNamedTeam ? "Not named in squad"
+            : `Bye round ${p.byeRound}`;
+
+          const severity = p.injuryStatus || p.lateChange ? "critical" : !p.isNamedTeam ? "high" : "medium";
+
+          alerts.push({
+            playerId: p.id,
+            playerName: p.name,
+            team: p.team,
+            position: p.position,
+            fieldPosition: p.fieldPosition,
+            reason,
+            severity,
+            avgScore: p.avgScore,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+          });
+
+          const eligibleBench = bench.filter(bp => {
+            if (bp.injuryStatus || bp.lateChange || !bp.isNamedTeam) return false;
+            if (bp.byeRound === currentRound) return false;
+            const slot = p.fieldPosition || p.position;
+            if (slot === "UTIL") return true;
+            const bpPositions = [bp.position, bp.dualPosition].filter(Boolean);
+            return bpPositions.includes(slot);
+          }).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+
+          if (eligibleBench.length > 0) {
+            const best = eligibleBench[0];
+            swapSuggestions.push({
+              outPlayerId: p.id,
+              outPlayerName: p.name,
+              outPosition: p.fieldPosition,
+              outAvg: p.avgScore,
+              inPlayerId: best.id,
+              inPlayerName: best.name,
+              inPosition: best.position,
+              inAvg: best.avgScore,
+              scoreDiff: (best.avgScore || 0) - (isUnavailable ? 0 : (p.avgScore || 0)),
+              reason: isUnavailable ? `${p.name} is unavailable — swap in ${best.name}` : `${p.name} on bye — swap in ${best.name}`,
+            });
+          }
+        }
+
+        if ((p.tagRisk || 0) >= 0.3) {
+          const impact = calcTagScoreImpact(p.avgScore || 0, p.tagRisk || 0);
+          tagWarnings.push({
+            playerId: p.id,
+            playerName: p.name,
+            team: p.team,
+            position: p.position,
+            tagRisk: p.tagRisk,
+            avgScore: p.avgScore,
+            estimatedImpact: impact,
+            adjustedProjection: Math.round(((p.avgScore || 0) - impact) * 10) / 10,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+            advice: (p.tagRisk || 0) >= 0.6
+              ? "High tag risk — consider captaincy alternatives"
+              : "Moderate tag risk — monitor pre-game reports",
+          });
+        }
+
+        if (p.isExpectedTagger) {
+          taggerWarnings.push({
+            playerId: p.id,
+            playerName: p.name,
+            team: p.team,
+            position: p.position,
+            avgScore: p.avgScore,
+            advice: "Expected tagger role — likely reduced scoring output. Consider bench if better options available.",
+          });
+        }
+      }
+
+      res.json({ alerts, swapSuggestions, tagWarnings, taggerWarnings });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/breakout-candidates", async (_req, res) => {
     try {
       const allPlayers = await storage.getAllPlayers();

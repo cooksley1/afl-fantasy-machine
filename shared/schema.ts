@@ -44,6 +44,8 @@ export const players = pgTable("players", {
   captainProbability: real("captain_probability").default(null),
   aflFantasyId: integer("afl_fantasy_id").default(null),
   breakoutScore: real("breakout_score").default(null),
+  tagRisk: real("tag_risk").default(null),
+  isExpectedTagger: boolean("is_expected_tagger").notNull().default(false),
 });
 
 export const weeklyStats = pgTable("weekly_stats", {

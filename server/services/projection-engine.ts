@@ -375,3 +375,53 @@ export function generateInjuryRiskScore(durability: number, age: number, injuryS
   risk += (Math.random() * 0.1 - 0.05);
   return Math.round(Math.max(0, Math.min(1.0, risk)) * 100) / 100;
 }
+
+export interface TagAssessmentInput {
+  avgScore: number;
+  position: string;
+  dualPosition: string | null;
+  ownedByPercent: number;
+  captainProbability: number | null;
+  price: number;
+  last3Avg: number;
+  formTrend: string;
+}
+
+export function calcTagRisk(player: TagAssessmentInput): number {
+  let risk = 0;
+
+  if (player.avgScore >= 110) risk += 0.35;
+  else if (player.avgScore >= 100) risk += 0.25;
+  else if (player.avgScore >= 90) risk += 0.12;
+  else return 0;
+
+  const isMid = player.position === "MID" || player.dualPosition === "MID";
+  if (isMid) risk += 0.15;
+
+  if ((player.captainProbability || 0) >= 0.3) risk += 0.15;
+  else if ((player.captainProbability || 0) >= 0.15) risk += 0.08;
+
+  if (player.ownedByPercent >= 25) risk += 0.1;
+  else if (player.ownedByPercent >= 15) risk += 0.05;
+
+  if (player.formTrend === "up" && player.last3Avg > player.avgScore * 1.1) risk += 0.1;
+
+  if (player.price >= 900000) risk += 0.05;
+
+  return Math.round(Math.min(1, risk) * 100) / 100;
+}
+
+export function calcIsExpectedTagger(player: TagAssessmentInput): boolean {
+  const avg = player.avgScore;
+  const isMid = player.position === "MID" || player.dualPosition === "MID";
+  if (!isMid) return false;
+  if (avg >= 85) return false;
+  if (avg < 50 && avg > 0) return true;
+  if (avg >= 50 && avg < 70 && player.price <= 500000) return true;
+  return false;
+}
+
+export function calcTagScoreImpact(avgScore: number, tagRisk: number): number {
+  const reductionPercent = tagRisk * 0.18;
+  return Math.round(avgScore * reductionPercent * 10) / 10;
+}

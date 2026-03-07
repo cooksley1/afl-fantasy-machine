@@ -261,6 +261,11 @@ function FieldViewCard({
             <AlertTriangle className="w-2.5 h-2.5 text-white" />
           </div>
         )}
+        {!player.injuryStatus && (player.tagRisk || 0) >= 0.5 && (
+          <div className="absolute -bottom-0.5 -right-1 w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center ring-1 ring-background" title="Tag risk">
+            <span className="text-[7px] font-bold text-white">T</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -398,6 +403,12 @@ function ListViewRow({
           <span className="text-sm font-semibold truncate">{getInitials(player.name)}</span>
           {player.injuryStatus && (
             <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />
+          )}
+          {!player.injuryStatus && (player.tagRisk || 0) >= 0.5 && (
+            <span className="text-[8px] font-bold text-orange-500 bg-orange-500/10 px-1 rounded shrink-0" data-testid={`tag-indicator-${player.id}`}>TAG</span>
+          )}
+          {player.isExpectedTagger && (
+            <span className="text-[8px] font-bold text-purple-500 bg-purple-500/10 px-1 rounded shrink-0" data-testid={`tagger-indicator-${player.id}`}>TAGGER</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">

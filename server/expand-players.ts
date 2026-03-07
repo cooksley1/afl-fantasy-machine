@@ -24,6 +24,8 @@ import {
   generateInjuryRiskScore,
   calcTradeEV,
   calcBreakoutScore,
+  calcTagRisk,
+  calcIsExpectedTagger,
 } from "./services/projection-engine";
 
 interface RealPlayer {
@@ -364,6 +366,29 @@ export async function populateConsistencyData(): Promise<number> {
   }
   if (breakoutUpdated > 0) {
     console.log(`[ExpandPlayers] Updated breakout scores for ${breakoutUpdated} players`);
+  }
+
+  let tagUpdated = 0;
+  for (const p of allPlayersForBreakout) {
+    const tagInput = {
+      avgScore: p.avgScore || 0,
+      position: p.position,
+      dualPosition: p.dualPosition,
+      ownedByPercent: p.ownedByPercent || 0,
+      captainProbability: p.captainProbability,
+      price: p.price,
+      last3Avg: p.last3Avg || 0,
+      formTrend: p.formTrend,
+    };
+    const tRisk = calcTagRisk(tagInput);
+    const isTagger = calcIsExpectedTagger(tagInput);
+    if (tRisk !== p.tagRisk || isTagger !== p.isExpectedTagger) {
+      await db.update(players).set({ tagRisk: tRisk, isExpectedTagger: isTagger }).where(eq(players.id, p.id));
+      tagUpdated++;
+    }
+  }
+  if (tagUpdated > 0) {
+    console.log(`[ExpandPlayers] Updated tag risk/tagger data for ${tagUpdated} players`);
   }
 
   if (needsUpdate.length === 0) {

@@ -36,7 +36,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 ## Data Model
 ### Players Table (795 players from 18 AFL teams)
 Core fields: name, team, position, dualPosition, price, startingPrice, avgScore, last3Avg, last5Avg, seasonTotal, gamesPlayed, ownedByPercent, formTrend, injuryStatus, nextOpponent, byeRound, venue, gameTime, priceChange, breakEven, isNamedTeam, lateChange, isDebutant, debutRound, cashGenPotential, recentScores, aflFantasyId
-Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingScore (volatility-derived), consistencyRating, scoreStdDev, volatilityScore, captainProbability (P(score>=120) via normal CDF), age, yearsExperience, durabilityScore, injuryRiskScore, breakoutScore (0-1 scale: CBA×0.40 + TOG×0.25 + Disposal×0.20 + Age×0.15)
+Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingScore (volatility-derived), consistencyRating, scoreStdDev, volatilityScore, captainProbability (P(score>=120) via normal CDF), age, yearsExperience, durabilityScore, injuryRiskScore, breakoutScore (0-1 scale: CBA×0.40 + TOG×0.25 + Disposal×0.20 + Age×0.15), tagRisk (0-1 tag target probability based on avg, position, ownership, captain probability), isExpectedTagger (boolean — low-avg MIDs likely assigned tagger role)
 
 ### ModelWeights Table (40 configurable weights)
 - key (unique text), value (real), description, category (projection/captain/consistency/trade/debutant)
