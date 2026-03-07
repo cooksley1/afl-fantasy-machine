@@ -10,6 +10,7 @@ import {
   Brain,
   Camera,
   Radio,
+  Calendar,
   ShieldCheck,
   LogOut,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import { FeedbackDialog } from "@/components/feedback-dialog";
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Live Scores", url: "/live", icon: Radio },
+  { title: "Schedule", url: "/schedule", icon: Calendar },
   { title: "My Team", url: "/team", icon: Users },
   { title: "Players", url: "/players", icon: Trophy },
   { title: "Trade Centre", url: "/trades", icon: ArrowLeftRight },

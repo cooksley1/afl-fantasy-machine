@@ -81,6 +81,9 @@ app.use((req, res, next) => {
   await repairPlayerData();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
+  const { fetchAndStoreFixtures } = await import("./services/fixture-service");
+  fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
+
   const { seedTagData } = await import("./services/tag-intelligence");
   await seedTagData();
 

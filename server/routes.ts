@@ -16,6 +16,7 @@ import {
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers } from "./services/live-scores";
+import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
@@ -888,6 +889,42 @@ export async function registerRoutes(
       const allWeights = await storage.getAllModelWeights();
       buildWeightConfig(allWeights);
       res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fixtures", async (req, res) => {
+    try {
+      const year = req.query.year != null ? parseInt(req.query.year as string) : 2026;
+      const all = await getAllFixtures(year);
+      const grouped: Record<number, { roundName: string; matches: typeof all }> = {};
+      for (const f of all) {
+        if (!grouped[f.round]) {
+          grouped[f.round] = { roundName: f.roundName, matches: [] };
+        }
+        grouped[f.round].matches.push(f);
+      }
+      res.json(grouped);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fixtures/:round", async (req, res) => {
+    try {
+      const round = parseInt(req.params.round);
+      const matches = await getFixturesByRound(round);
+      res.json({ round, roundName: getRoundName(round), matches });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/fixtures/refresh", isAdmin, async (req, res) => {
+    try {
+      const count = await fetchAndStoreFixtures();
+      res.json({ message: `Refreshed ${count} fixtures` });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

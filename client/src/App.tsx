@@ -20,6 +20,7 @@ import SettingsPage from "@/pages/settings-page";
 import LiveScoresPage from "@/pages/live-scores";
 import LandingPage from "@/pages/landing";
 import AdminPage from "@/pages/admin";
+import SchedulePage from "@/pages/schedule";
 import { Zap, Loader2 } from "lucide-react";
 
 function Router() {
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/player/:id" component={PlayerReportPage} />
       <Route path="/live" component={LiveScoresPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/schedule" component={SchedulePage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

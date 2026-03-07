@@ -263,6 +263,24 @@ export type TradeRecommendationWithPlayers = TradeRecommendation & {
   playerIn: Player;
 };
 
+export const fixtures = pgTable("fixtures", {
+  id: serial("id").primaryKey(),
+  round: integer("round").notNull(),
+  roundName: text("round_name").notNull(),
+  homeTeam: text("home_team").notNull(),
+  awayTeam: text("away_team").notNull(),
+  venue: text("venue").notNull(),
+  date: text("date").notNull(),
+  localTime: text("local_time").notNull(),
+  homeScore: integer("home_score").default(null),
+  awayScore: integer("away_score").default(null),
+  complete: integer("complete").notNull().default(0),
+  winner: text("winner").default(null),
+  timeStr: text("time_str").default(null),
+  year: integer("year").notNull().default(2026),
+  squiggleId: integer("squiggle_id").notNull().unique(),
+});
+
 export const modelWeights = pgTable("model_weights", {
   id: serial("id").primaryKey(),
   key: text("key").notNull().unique(),
@@ -270,6 +288,10 @@ export const modelWeights = pgTable("model_weights", {
   description: text("description").default(null),
   category: text("category").notNull().default("general"),
 });
+
+export const insertFixtureSchema = createInsertSchema(fixtures).omit({ id: true });
+export type Fixture = typeof fixtures.$inferSelect;
+export type InsertFixture = z.infer<typeof insertFixtureSchema>;
 
 export const insertModelWeightSchema = createInsertSchema(modelWeights).omit({ id: true });
 export const insertTeamTagProfileSchema = createInsertSchema(teamTagProfiles).omit({ id: true, updatedAt: true });
