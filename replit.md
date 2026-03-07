@@ -21,7 +21,7 @@ A mobile-first Fantasy AFL advisor app that helps users manage their fantasy foo
 - `server/storage.ts` - DatabaseStorage class implementing IStorage interface with full CRUD for all tables
 - `server/routes.ts` - Express API routes (all prefixed with /api), uses projection-engine service functions
 - `server/seed.ts` - Seeds database with initial 51 AFL players and a starting team
-- `server/expand-players.ts` - Loads 780 real 2026 AFL players from JSON, seeds model weights, calculates advanced metrics using projection-engine service
+- `server/expand-players.ts` - Loads 780 real 2026 AFL players from JSON, seeds model weights, calculates advanced metrics using projection-engine service. Includes reconciliation step that syncs seed player prices/stats with real-players-2026.json data on startup
 - `server/real-players-2026.json` - 780 parsed players from official DFS Australia Excel file
 - `server/intel-engine.ts` - AI-powered intelligence engine with enriched data
 - `server/data-gatherer.ts` - Live data fetching from Squiggle API, AFL.com.au RSS, all 18 AFL club Google News feeds
@@ -86,8 +86,9 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `GET /api/settings` - Get league settings
 - `PATCH /api/settings` - Update settings (auto-resets trades when round changes)
 - `GET /api/game-rules` - AFL Fantasy Classic 2026 rules
-- `GET /api/intel` - All intel reports
+- `GET /api/intel` - All intel reports (supports ?since= ISO date filter)
 - `GET /api/intel/:category` - Intel by category
+- `GET /api/data-check` - Cross-checks DB player prices against real-players-2026.json
 - `POST /api/intel/generate` - Generate AI intel
 - `POST /api/intel/gather` - Trigger live data gathering
 - `GET /api/intel/sources` - Recent gathered sources

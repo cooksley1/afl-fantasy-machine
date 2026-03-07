@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { LeagueSettings } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Player, PlayerWithTeamInfo } from "@shared/schema";
 
@@ -73,6 +74,11 @@ export default function Players() {
   const { data: myTeam } = useQuery<PlayerWithTeamInfo[]>({
     queryKey: ["/api/my-team"],
   });
+
+  const { data: settings } = useQuery<LeagueSettings>({
+    queryKey: ["/api/settings"],
+  });
+  const currentRound = settings?.currentRound ?? 1;
 
   const addMutation = useMutation({
     mutationFn: (data: { playerId: number; fieldPosition: string }) =>
@@ -448,6 +454,17 @@ export default function Players() {
           {filtered.length} players available
         </p>
       </div>
+
+      {currentRound <= 1 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-preseason-data">
+          <CardContent className="p-3 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-amber-700 dark:text-amber-400">Preseason Data</strong> — Averages, form, and projections are from the 2025 season. Prices are 2026 AFL Fantasy Classic starting prices.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-3">
         <div className="relative w-full">

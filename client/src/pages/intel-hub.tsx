@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Brain,
-  RefreshCw,
   AlertTriangle,
   Crown,
   Calendar,
@@ -28,6 +33,10 @@ import {
   Rss,
   BarChart3,
   Users,
+  ArrowUpDown,
+  Filter,
+  ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +59,11 @@ const CATEGORIES = [
   { id: "historical", label: "History", icon: History },
 ];
 
+type SortMode = "date_desc" | "date_asc" | "priority" | "category";
+type DateFilter = "all" | "24h" | "3d" | "7d" | "14d";
+
+const ITEMS_PER_PAGE = 15;
+
 function getCategoryIcon(category: string) {
   const cat = CATEGORIES.find((c) => c.id === category);
   return cat?.icon || Brain;
@@ -58,6 +72,69 @@ function getCategoryIcon(category: string) {
 function getCategoryLabel(category: string) {
   const cat = CATEGORIES.find((c) => c.id === category);
   return cat?.label || category;
+}
+
+function getReportAge(createdAt: Date | string | null): { days: number; isStale: boolean; label: string } {
+  if (!createdAt) return { days: 0, isStale: false, label: "Unknown" };
+  const now = new Date();
+  const created = new Date(createdAt);
+  if (isNaN(created.getTime())) return { days: 0, isStale: false, label: "Unknown" };
+  const diffMs = now.getTime() - created.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor(diffMs / (1000 * 60));
+
+  let label: string;
+  if (minutes < 60) label = `${minutes}m ago`;
+  else if (hours < 24) label = `${hours}h ago`;
+  else if (days === 1) label = "1 day ago";
+  else label = `${days} days ago`;
+
+  return { days, isStale: days >= 7, label };
+}
+
+function deduplicateReports(reports: IntelReport[]): IntelReport[] {
+  const seen = new Map<string, IntelReport>();
+
+  for (const report of reports) {
+    const titleNorm = report.title?.toLowerCase().replace(/\[live intel\]\s*/i, "").trim() || "";
+    const contentStart = report.content?.substring(0, 100).toLowerCase().trim() || "";
+    const dedupKey = `${report.category}::${titleNorm}`;
+    const contentKey = `${report.category}::${contentStart}`;
+
+    const existingByTitle = seen.get(dedupKey);
+    const existingByContent = seen.get(contentKey);
+
+    if (existingByTitle) {
+      const existingDate = new Date(existingByTitle.createdAt || 0).getTime();
+      const currentDate = new Date(report.createdAt || 0).getTime();
+      if (currentDate > existingDate) {
+        seen.set(dedupKey, report);
+        seen.set(contentKey, report);
+      }
+    } else if (existingByContent) {
+      const existingDate = new Date(existingByContent.createdAt || 0).getTime();
+      const currentDate = new Date(report.createdAt || 0).getTime();
+      if (currentDate > existingDate) {
+        seen.set(dedupKey, report);
+        seen.set(contentKey, report);
+      }
+    } else {
+      seen.set(dedupKey, report);
+      seen.set(contentKey, report);
+    }
+  }
+
+  const uniqueIds = new Set<number>();
+  const result: IntelReport[] = [];
+  const values = Array.from(seen.values());
+  for (const report of values) {
+    if (!uniqueIds.has(report.id)) {
+      uniqueIds.add(report.id);
+      result.push(report);
+    }
+  }
+  return result;
 }
 
 function PriorityBadge({ priority }: { priority: string }) {
@@ -79,6 +156,24 @@ function PriorityBadge({ priority }: { priority: string }) {
     <Badge variant="secondary" className="text-[10px]">
       Low
     </Badge>
+  );
+}
+
+function StalenessBadge({ createdAt }: { createdAt: Date | string | null }) {
+  const { isStale, label } = getReportAge(createdAt);
+  if (isStale) {
+    return (
+      <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 dark:text-orange-400">
+        <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
+        Stale ({label})
+      </Badge>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+      <Clock className="w-3 h-3" />
+      {label}
+    </span>
   );
 }
 
@@ -106,9 +201,10 @@ function SourceBadge({ source }: { source: string | null }) {
 function IntelCard({ report }: { report: IntelReport }) {
   const Icon = getCategoryIcon(report.category);
   const isLiveIntel = report.title?.startsWith("[Live Intel]");
+  const { isStale } = getReportAge(report.createdAt);
 
   return (
-    <Card data-testid={`card-intel-${report.id}`} className={isLiveIntel ? "border-primary/30" : ""}>
+    <Card data-testid={`card-intel-${report.id}`} className={`${isLiveIntel ? "border-primary/30" : ""} ${isStale ? "opacity-60" : ""}`}>
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <div className={`p-2 rounded-md shrink-0 mt-0.5 ${isLiveIntel ? 'bg-primary/20' : 'bg-primary/10'}`}>
@@ -147,12 +243,7 @@ function IntelCard({ report }: { report: IntelReport }) {
                 {getCategoryLabel(report.category)}
               </span>
               <SourceBadge source={report.source} />
-              {report.createdAt && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {new Date(report.createdAt).toLocaleString()}
-                </span>
-              )}
+              <StalenessBadge createdAt={report.createdAt} />
             </div>
           </div>
         </div>
@@ -253,9 +344,28 @@ export default function IntelHub() {
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState("all");
   const [preGameAdvice, setPreGameAdvice] = useState<PreGameAdvice | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("date_desc");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+
+  const sinceDate = useMemo(() => {
+    if (dateFilter === "all") return undefined;
+    const now = new Date();
+    const daysMap: Record<string, number> = { "24h": 1, "3d": 3, "7d": 7, "14d": 14 };
+    const days = daysMap[dateFilter] || 7;
+    return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  }, [dateFilter]);
+
+  const queryKey = sinceDate ? ["/api/intel", { since: sinceDate }] : ["/api/intel"];
 
   const { data: reports, isLoading, isError, refetch } = useQuery<IntelReport[]>({
-    queryKey: ["/api/intel"],
+    queryKey,
+    queryFn: async () => {
+      const url = sinceDate ? `/api/intel?since=${encodeURIComponent(sinceDate)}` : "/api/intel";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch intel");
+      return res.json();
+    },
   });
 
   const { data: sourceStats } = useQuery<SourceStats>({
@@ -308,14 +418,57 @@ export default function IntelHub() {
     },
   });
 
-  const filtered =
-    activeCategory === "all"
-      ? reports || []
-      : (reports || []).filter((r) => r.category === activeCategory);
+  const processedReports = useMemo(() => {
+    if (!reports) return [];
 
-  const highPriority = filtered.filter((r) => r.priority === "high");
-  const actionable = filtered.filter((r) => r.actionable);
-  const liveIntel = (reports || []).filter(r => r.source && r.source !== "ai_analysis");
+    const deduped = deduplicateReports(reports);
+
+    const categoryFiltered =
+      activeCategory === "all"
+        ? deduped
+        : deduped.filter((r) => r.category === activeCategory);
+
+    const sorted = [...categoryFiltered].sort((a, b) => {
+      switch (sortMode) {
+        case "date_desc": {
+          const aDate = new Date(a.createdAt || 0).getTime();
+          const bDate = new Date(b.createdAt || 0).getTime();
+          return bDate - aDate;
+        }
+        case "date_asc": {
+          const aDate = new Date(a.createdAt || 0).getTime();
+          const bDate = new Date(b.createdAt || 0).getTime();
+          return aDate - bDate;
+        }
+        case "priority": {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          const aPrio = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 1;
+          const bPrio = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 1;
+          if (aPrio !== bPrio) return aPrio - bPrio;
+          if (a.actionable !== b.actionable) return a.actionable ? -1 : 1;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        }
+        case "category": {
+          const catCompare = a.category.localeCompare(b.category);
+          if (catCompare !== 0) return catCompare;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [reports, activeCategory, sortMode]);
+
+  const visibleReports = processedReports.slice(0, displayCount);
+  const hasMore = displayCount < processedReports.length;
+
+  const allDeduped = useMemo(() => (reports ? deduplicateReports(reports) : []), [reports]);
+  const highPriority = allDeduped.filter((r) => r.priority === "high");
+  const actionable = allDeduped.filter((r) => r.actionable);
+  const liveIntel = allDeduped.filter(r => r.source && r.source !== "ai_analysis");
+  const staleCount = allDeduped.filter(r => getReportAge(r.createdAt).isStale).length;
 
   if (isLoading) {
     return (
@@ -402,7 +555,7 @@ export default function IntelHub() {
               <AlertTriangle className="w-4 h-4 text-destructive" />
             </div>
             <div>
-              <p className="text-lg font-bold">{highPriority.length}</p>
+              <p className="text-lg font-bold" data-testid="text-high-priority-count">{highPriority.length}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">High Priority</p>
             </div>
           </CardContent>
@@ -413,7 +566,7 @@ export default function IntelHub() {
               <ArrowRight className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <p className="text-lg font-bold">{actionable.length}</p>
+              <p className="text-lg font-bold" data-testid="text-actionable-count">{actionable.length}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">Actionable</p>
             </div>
           </CardContent>
@@ -424,7 +577,7 @@ export default function IntelHub() {
               <Satellite className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-lg font-bold">{sourceStats?.totalSources || 0}</p>
+              <p className="text-lg font-bold" data-testid="text-sources-count">{sourceStats?.totalSources || 0}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">Sources</p>
             </div>
           </CardContent>
@@ -435,7 +588,7 @@ export default function IntelHub() {
               <Rss className="w-4 h-4 text-green-500" />
             </div>
             <div>
-              <p className="text-lg font-bold">{liveIntel.length}</p>
+              <p className="text-lg font-bold" data-testid="text-live-intel-count">{liveIntel.length}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">Live Intel</p>
             </div>
           </CardContent>
@@ -491,20 +644,64 @@ export default function IntelHub() {
         </Card>
       )}
 
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v as DateFilter); setDisplayCount(ITEMS_PER_PAGE); }}>
+            <SelectTrigger className="w-[130px]" data-testid="select-date-filter">
+              <SelectValue placeholder="Time range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="24h">Last 24 hours</SelectItem>
+              <SelectItem value="3d">Last 3 days</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="14d">Last 14 days</SelectItem>
+              <SelectItem value="all">All time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+          <Select value={sortMode} onValueChange={(v) => { setSortMode(v as SortMode); setDisplayCount(ITEMS_PER_PAGE); }}>
+            <SelectTrigger className="w-[150px]" data-testid="select-sort-mode">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date_desc">Newest first</SelectItem>
+              <SelectItem value="date_asc">Oldest first</SelectItem>
+              <SelectItem value="priority">Priority</SelectItem>
+              <SelectItem value="category">Category</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {staleCount > 0 && dateFilter === "all" && (
+          <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 dark:text-orange-400" data-testid="badge-stale-count">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            {staleCount} stale report{staleCount !== 1 ? "s" : ""}
+          </Badge>
+        )}
+        <span className="text-xs text-muted-foreground ml-auto" data-testid="text-report-count">
+          {processedReports.length} report{processedReports.length !== 1 ? "s" : ""}
+          {reports && allDeduped.length < reports.length && (
+            <span> ({reports.length - allDeduped.length} duplicates hidden)</span>
+          )}
+        </span>
+      </div>
+
       <ScrollArea className="w-full">
         <div className="flex gap-1.5 sm:gap-2 pb-2">
           {CATEGORIES.map((cat) => {
             const count =
               cat.id === "all"
-                ? (reports || []).length
-                : (reports || []).filter((r) => r.category === cat.id).length;
+                ? allDeduped.length
+                : allDeduped.filter((r) => r.category === cat.id).length;
             const isActive = activeCategory === cat.id;
             return (
               <Button
                 key={cat.id}
                 variant={isActive ? "default" : "secondary"}
                 size="sm"
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => { setActiveCategory(cat.id); setDisplayCount(ITEMS_PER_PAGE); }}
                 className="whitespace-nowrap text-xs sm:text-sm"
                 data-testid={`button-category-${cat.id}`}
               >
@@ -519,16 +716,27 @@ export default function IntelHub() {
         </div>
       </ScrollArea>
 
-      {filtered.length === 0 && (
+      {processedReports.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">
             <Brain className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <h3 className="font-semibold text-lg mb-1">No intelligence reports yet</h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-              Gather live data from all 18 AFL club feeds, AFL.com.au, Squiggle, and fantasy news,
-              then generate AI analysis for captain picks, cash cows, bye strategy, POD plays, and more.
+              {dateFilter !== "all"
+                ? `No reports found in the selected time range. Try expanding to "All time" or gather new data.`
+                : "Gather live data from all 18 AFL club feeds, AFL.com.au, Squiggle, and fantasy news, then generate AI analysis for captain picks, cash cows, bye strategy, POD plays, and more."}
             </p>
             <div className="flex items-center justify-center gap-2">
+              {dateFilter !== "all" && (
+                <Button
+                  onClick={() => setDateFilter("all")}
+                  variant="outline"
+                  data-testid="button-show-all-time"
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  Show All Time
+                </Button>
+              )}
               <Button
                 onClick={() => gatherMutation.mutate()}
                 disabled={gatherMutation.isPending}
@@ -552,19 +760,23 @@ export default function IntelHub() {
       )}
 
       <div className="space-y-3">
-        {filtered
-          .sort((a, b) => {
-            const priorityOrder = { high: 0, medium: 1, low: 2 };
-            const aPrio = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 1;
-            const bPrio = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 1;
-            if (aPrio !== bPrio) return aPrio - bPrio;
-            if (a.actionable !== b.actionable) return a.actionable ? -1 : 1;
-            return 0;
-          })
-          .map((report) => (
-            <IntelCard key={report.id} report={report} />
-          ))}
+        {visibleReports.map((report) => (
+          <IntelCard key={report.id} report={report} />
+        ))}
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={() => setDisplayCount((prev) => prev + ITEMS_PER_PAGE)}
+            data-testid="button-show-more"
+          >
+            <ChevronDown className="w-4 h-4 mr-1.5" />
+            Show more ({processedReports.length - displayCount} remaining)
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

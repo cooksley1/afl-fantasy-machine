@@ -132,6 +132,21 @@ export default function Dashboard() {
         )}
       </div>
 
+      {currentRound <= 1 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-preseason-notice">
+          <CardContent className="p-3 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Preseason Data</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Round {currentRound} — Player averages, form trends, and projections are based on <strong>2025 season data</strong>, not 2026 form.
+                Break-evens are initial values. Use preseason match scores as a guide only — full data builds from Round 2.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">

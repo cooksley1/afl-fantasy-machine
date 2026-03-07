@@ -61,7 +61,7 @@ const TEAM_VENUES: Record<string, string> = {
   "West Coast": "Optus Stadium", "Western Bulldogs": "Marvel Stadium",
 };
 
-function loadRealPlayers(): RealPlayer[] {
+export function loadRealPlayers(): RealPlayer[] {
   const filePath = join(process.cwd(), "server", "real-players-2026.json");
   const raw = readFileSync(filePath, "utf-8");
   return JSON.parse(raw);
@@ -90,11 +90,52 @@ export async function expandPlayerDatabase(): Promise<number> {
   const existingNames = new Set(existingPlayers.map(p => p.name));
 
   const realPlayers = loadRealPlayers();
+  const realPlayerMap = new Map(realPlayers.map(rp => [rp.name, rp]));
+
+  let reconciled = 0;
+  for (const existing of existingPlayers) {
+    const real = realPlayerMap.get(existing.name);
+    if (!real) continue;
+    if (existing.price !== real.salary || existing.avgScore !== real.avgPoints || existing.startingPrice !== real.salary) {
+      const l3Avg = deriveLast3Avg(real.avgPoints, real.l5Avg);
+      const formTrend = deriveFormTrend(real.l5Avg, real.regAvg);
+      const breakEven = deriveBreakEven(real.salary, real.avgPoints);
+      const byeRound = BYE_ROUNDS[real.team] || 12;
+      await db.update(players)
+        .set({
+          price: real.salary,
+          startingPrice: real.salary,
+          avgScore: real.avgPoints,
+          last3Avg: l3Avg,
+          last5Avg: real.l5Avg,
+          seasonTotal: Math.round(real.avgPoints * real.games),
+          gamesPlayed: real.games,
+          ownedByPercent: real.owned,
+          formTrend,
+          projectedScore: real.regAvg,
+          breakEven,
+          ceilingScore: Math.round(real.maxScore),
+          byeRound,
+          position: real.position,
+          dualPosition: real.dualPosition || null,
+          team: real.team,
+        })
+        .where(eq(players.id, existing.id));
+      reconciled++;
+    }
+  }
+  if (reconciled > 0) {
+    console.log(`[ExpandPlayers] Reconciled ${reconciled} players with real-players-2026.json data`);
+  }
+
   const newPlayers = realPlayers.filter(p => !existingNames.has(p.name));
 
-  if (newPlayers.length === 0) {
+  if (newPlayers.length === 0 && reconciled === 0) {
     console.log(`[ExpandPlayers] All ${realPlayers.length} real players already in database (${existingPlayers.length} total)`);
     return 0;
+  }
+  if (newPlayers.length === 0) {
+    return reconciled;
   }
 
   let added = 0;

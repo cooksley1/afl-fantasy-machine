@@ -27,9 +27,11 @@ export const AFL_TEAM_COLORS: Record<string, AFLTeamColors> = {
 };
 
 export function getTeamColors(team: string): AFLTeamColors {
+  if (!team) return { primary: "#6B7280", secondary: "#374151", text: "#FFFFFF", abbr: "???" };
   return AFL_TEAM_COLORS[team] || { primary: "#6B7280", secondary: "#374151", text: "#FFFFFF", abbr: team.slice(0, 3).toUpperCase() };
 }
 
 export function getTeamAbbr(team: string): string {
+  if (!team) return "???";
   return AFL_TEAM_COLORS[team]?.abbr || team.slice(0, 3).toUpperCase();
 }

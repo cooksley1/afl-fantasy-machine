@@ -131,10 +131,24 @@ LATE CHANGES / TEAM SELECTION:
 - If your captain/VC is a late change, you need an emergency plan
 - Always have bench cover for late withdrawals
 
-Be specific with player names from the data provided. Every report should contain actionable advice.`;
+Be specific with player names from the data provided. Every report should contain actionable advice.
+CRITICAL: All player prices MUST come from the provided data. Do NOT use your own training data for player prices — AFL Fantasy Classic 2026 prices differ from SuperCoach and from previous seasons. Only reference prices exactly as shown in the data below.`;
+
+  const isPreseason = settings.currentRound <= 1;
+  const preseasonContext = isPreseason ? `
+IMPORTANT CONTEXT - PRESEASON / ROUND 0:
+We are currently in Round ${settings.currentRound} (${settings.currentRound === 0 ? 'Opening Round / Round 0' : 'Round 1'}). This is VERY EARLY in the season.
+- Player averages, L3, L5 are based on 2025 SEASON DATA, NOT 2026 form
+- Break-even values are INITIAL break-evens calculated from starting price, not yet meaningful
+- Do NOT recommend trades based on "form" this early — use 2025 season averages and preseason performance as a guide
+- Prices shown are 2026 STARTING PRICES from AFL Fantasy Classic — DO NOT reference SuperCoach prices
+- Focus analysis on: initial squad structure, value picks, cash cow generation potential, avoiding injury-prone players
+- Do NOT flag players as "underperforming" based on preseason/R0 scores — data is too limited
+- All prices MUST come from the data provided below — never use your own knowledge of player prices as they may differ from AFL Fantasy Classic 2026 pricing
+` : '';
 
   const userPrompt = `Analyze the following AFL Fantasy data and generate strategic intelligence reports.
-
+${preseasonContext}
 CURRENT ROUND: ${settings.currentRound}
 TRADES REMAINING: ${settings.tradesRemaining}
 SALARY CAP: $${(settings.salaryCap / 1000).toFixed(0)}K
@@ -239,8 +253,15 @@ export async function generateAITradeRecommendations(): Promise<void> {
   const availableData = buildPlayerSummary(availablePlayers);
   const byeBreakdown = getByeRoundBreakdown(myTeam);
 
-  const prompt = `You are an expert AFL Fantasy trade advisor combining statistical optimization with strategic game theory.
+  const isPreseason = settings.currentRound <= 1;
+  const tradePreseasonCtx = isPreseason ? `
+IMPORTANT: We are in Round ${settings.currentRound} — PRESEASON. Player averages are from 2025, not current 2026 form.
+Trades do not start until Round 2. Focus recommendations on squad structure assessment, not active trades.
+All prices are 2026 AFL Fantasy Classic starting prices — do NOT reference SuperCoach prices or your training data prices.
+` : '';
 
+  const prompt = `You are an expert AFL Fantasy trade advisor combining statistical optimization with strategic game theory.
+${tradePreseasonCtx}
 CURRENT ROUND: ${settings.currentRound}
 TRADES REMAINING: ${settings.tradesRemaining}
 SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K

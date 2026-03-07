@@ -1,4 +1,4 @@
-import { eq, desc, asc, and } from "drizzle-orm";
+import { eq, desc, asc, and, gte } from "drizzle-orm";
 import { db } from "./db";
 import {
   players,
@@ -60,6 +60,7 @@ export interface IStorage {
   updateSettings(settings: Partial<InsertLeagueSettings>): Promise<LeagueSettings>;
 
   getIntelReports(): Promise<IntelReport[]>;
+  getIntelReportsSince(since: Date): Promise<IntelReport[]>;
   getIntelReportsByCategory(category: string): Promise<IntelReport[]>;
   createIntelReport(report: InsertIntelReport): Promise<IntelReport>;
   clearIntelReports(): Promise<void>;
@@ -253,6 +254,12 @@ export class DatabaseStorage implements IStorage {
 
   async getIntelReports(): Promise<IntelReport[]> {
     return db.select().from(intelReports).orderBy(desc(intelReports.createdAt));
+  }
+
+  async getIntelReportsSince(since: Date): Promise<IntelReport[]> {
+    return db.select().from(intelReports)
+      .where(gte(intelReports.createdAt, since))
+      .orderBy(desc(intelReports.createdAt));
   }
 
   async getIntelReportsByCategory(category: string): Promise<IntelReport[]> {

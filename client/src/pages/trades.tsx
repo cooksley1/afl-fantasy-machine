@@ -165,6 +165,8 @@ export default function Trades() {
 
   const categoryOrder = ["urgent", "upgrade", "cash_gen", "structure"];
 
+  const currentRound = settings?.currentRound ?? 1;
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-trades">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -204,6 +206,17 @@ export default function Trades() {
           </Button>
         </div>
       </div>
+
+      {currentRound <= 1 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-preseason-trades">
+          <CardContent className="p-3 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-amber-700 dark:text-amber-400">Preseason</strong> — Trades open from Round 2. Recommendations below are based on 2025 averages and squad structure assessment only.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-5">

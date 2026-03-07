@@ -72,18 +72,71 @@ function MatchStatusBadge({ complete, timeStr }: { complete: number; timeStr: st
   return <Badge variant="outline" className="text-[10px]" data-testid="badge-match-upcoming">Upcoming</Badge>;
 }
 
-function MatchCard({ match }: { match: MatchStatus }) {
+function MatchPlayerRow({ player }: { player: LivePlayerScore }) {
+  const teamColors = getTeamColors(player.team);
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5" data-testid={`match-player-${player.playerId}`}>
+      <div
+        className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold shrink-0"
+        style={{ backgroundColor: teamColors.primary, color: teamColors.text }}
+      >
+        {getTeamAbbr(player.team)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium truncate">{player.playerName}</span>
+          {player.isCaptain && <Badge className="text-[7px] px-0.5 py-0 bg-accent text-accent-foreground">C</Badge>}
+          {player.isViceCaptain && <Badge variant="outline" className="text-[7px] px-0.5 py-0">VC</Badge>}
+        </div>
+        <span className="text-[9px] text-muted-foreground">{player.position}</span>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-xs font-bold" data-testid={`match-player-score-${player.playerId}`}>
+          {player.fantasyScore}
+        </div>
+        {player.isCaptain && player.fantasyScore > 0 && (
+          <div className="text-[9px] text-accent font-semibold">{player.effectiveScore} eff</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({ match, myPlayers, expanded, onToggle }: {
+  match: MatchStatus;
+  myPlayers: LivePlayerScore[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const homeColors = getTeamColors(match.homeTeam);
   const awayColors = getTeamColors(match.awayTeam);
   const isLive = match.complete > 0 && match.complete < 100;
   const isComplete = match.complete === 100;
 
+  const matchPlayers = myPlayers.filter(
+    (p) => p.team === match.homeTeam || p.team === match.awayTeam
+  );
+  const hasPlayers = matchPlayers.length > 0;
+  const matchPlayerTotal = matchPlayers.reduce((sum, p) => sum + p.effectiveScore, 0);
+
   return (
-    <Card className={`overflow-hidden ${isLive ? "ring-1 ring-red-500/50" : ""}`} data-testid={`card-match-${match.id}`}>
+    <Card
+      className={`overflow-visible ${isLive ? "ring-1 ring-red-500/50" : ""} ${hasPlayers ? "cursor-pointer hover-elevate" : ""}`}
+      data-testid={`card-match-${match.id}`}
+      onClick={hasPlayers ? onToggle : undefined}
+    >
       <CardContent className="p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] text-muted-foreground">{match.venue}</span>
-          <MatchStatusBadge complete={match.complete} timeStr={match.timeStr} />
+          <div className="flex items-center gap-1.5">
+            {hasPlayers && (
+              <Badge variant="outline" className="text-[9px]" data-testid={`badge-player-count-${match.id}`}>
+                {matchPlayers.length} player{matchPlayers.length !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            <MatchStatusBadge complete={match.complete} timeStr={match.timeStr} />
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -130,7 +183,32 @@ function MatchCard({ match }: { match: MatchStatus }) {
             </div>
           </div>
         </div>
+
+        {hasPlayers && (
+          <div className="flex items-center justify-end mt-1.5 gap-1">
+            <span className="text-[10px] text-muted-foreground">
+              {expanded ? "Hide" : "Show"} my players
+            </span>
+            {expanded ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+          </div>
+        )}
       </CardContent>
+
+      {expanded && hasPlayers && (
+        <div className="border-t" data-testid={`match-players-${match.id}`}>
+          <div className="py-1">
+            {matchPlayers
+              .sort((a, b) => b.effectiveScore - a.effectiveScore)
+              .map((p) => (
+                <MatchPlayerRow key={p.playerId} player={p} />
+              ))}
+          </div>
+          <div className="flex items-center justify-between px-3 py-1.5 border-t bg-muted/30">
+            <span className="text-[10px] font-medium text-muted-foreground">Match Total</span>
+            <span className="text-xs font-bold" data-testid={`text-match-total-${match.id}`}>{matchPlayerTotal}</span>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -372,6 +450,7 @@ function BulkScoreDialog({ players, round }: { players: LivePlayerScore[]; round
 
 export default function LiveScoresPage() {
   const [expandedPlayer, setExpandedPlayer] = useState<number | null>(null);
+  const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
 
   const { data, isLoading, isFetching } = useQuery<LiveRoundData>({
     queryKey: ["/api/live-scores"],
@@ -475,19 +554,43 @@ export default function LiveScoresPage() {
 
           {liveMatches.length > 0 && (
             <div className="space-y-2">
-              {liveMatches.map((m) => <MatchCard key={m.id} match={m} />)}
+              {liveMatches.map((m) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  myPlayers={data?.myTeamScores || []}
+                  expanded={expandedMatch === m.id}
+                  onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                />
+              ))}
             </div>
           )}
 
           {upcomingMatches.length > 0 && (
             <div className="space-y-2">
-              {upcomingMatches.map((m) => <MatchCard key={m.id} match={m} />)}
+              {upcomingMatches.map((m) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  myPlayers={data?.myTeamScores || []}
+                  expanded={expandedMatch === m.id}
+                  onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                />
+              ))}
             </div>
           )}
 
           {completedMatches.length > 0 && (
             <div className="space-y-2">
-              {completedMatches.map((m) => <MatchCard key={m.id} match={m} />)}
+              {completedMatches.map((m) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  myPlayers={data?.myTeamScores || []}
+                  expanded={expandedMatch === m.id}
+                  onToggle={() => setExpandedMatch(expandedMatch === m.id ? null : m.id)}
+                />
+              ))}
             </div>
           )}
         </div>

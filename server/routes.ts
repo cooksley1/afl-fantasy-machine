@@ -371,9 +371,19 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/intel", async (_req, res) => {
+  app.get("/api/intel", async (req, res) => {
     try {
-      const reports = await storage.getIntelReports();
+      const sinceParam = req.query.since as string | undefined;
+      let reports;
+      if (sinceParam) {
+        const sinceDate = new Date(sinceParam);
+        if (isNaN(sinceDate.getTime())) {
+          return res.status(400).json({ message: "Invalid 'since' date parameter" });
+        }
+        reports = await storage.getIntelReportsSince(sinceDate);
+      } else {
+        reports = await storage.getIntelReports();
+      }
       res.json(reports);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -542,6 +552,36 @@ export async function registerRoutes(
       const added = await expandPlayerDatabase();
       const allPlayers = await storage.getAllPlayers();
       res.json({ message: `Added ${added} new players. Total: ${allPlayers.length}`, count: allPlayers.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/data-check", async (_req, res) => {
+    try {
+      const allPlayers = await storage.getAllPlayers();
+      const { loadRealPlayers } = await import("./expand-players");
+      const realPlayers = loadRealPlayers();
+      const realMap = new Map(realPlayers.map((rp: any) => [rp.name, rp]));
+
+      const mismatches: { name: string; field: string; dbValue: any; realValue: any }[] = [];
+      for (const p of allPlayers) {
+        const real = realMap.get(p.name);
+        if (!real) continue;
+        if (p.price !== real.salary) {
+          mismatches.push({ name: p.name, field: "price", dbValue: p.price, realValue: real.salary });
+        }
+        if (Math.abs((p.avgScore || 0) - real.avgPoints) > 0.1) {
+          mismatches.push({ name: p.name, field: "avgScore", dbValue: p.avgScore, realValue: real.avgPoints });
+        }
+      }
+
+      res.json({
+        totalPlayers: allPlayers.length,
+        realPlayersCount: realPlayers.length,
+        mismatches,
+        isClean: mismatches.length === 0,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
