@@ -1,0 +1,271 @@
+You are a senior sports analytics engineer building a production-grade AFL Fantasy analytics platform.
+
+Your goal is to build a web application that gives a competitive edge in AFL Fantasy by using statistical modelling, projections, trade optimisation and simulation.
+
+Build the system using a modular architecture so future AI models can be added easily.
+
+TECH STACK
+
+Frontend
+React + TypeScript
+Tailwind CSS
+Recharts for visualisations
+
+Backend
+Python
+FastAPI
+
+Database
+PostgreSQL
+
+Analytics
+Pandas
+NumPy
+Scikit-learn
+
+Simulation
+Monte Carlo simulation engine using NumPy
+
+The system must be designed so that it can run locally in Replit.
+
+---
+
+CORE FEATURES
+
+1. Player Analytics Dashboard
+
+Display:
+
+Player name
+Team
+Position
+Price
+Breakeven
+Ownership %
+
+Performance metrics:
+
+Season average
+Last 5 average
+Consistency index (standard deviation)
+Ceiling score (95th percentile)
+
+Advanced metrics:
+
+Points per disposal
+Points per minute
+Centre bounce attendance %
+Time on ground %
+
+Charts:
+
+Score history chart
+Rolling average chart
+Price movement chart
+
+---
+
+2. Projection Engine
+
+Build a projection model using the following formula:
+
+ProjectedScore =
+(BaseStatProjection)
+× RoleMultiplier
+× MatchupMultiplier
+× FormMultiplier
+× TOGMultiplier
+
+Role multipliers
+
+InsideMid = 1.20
+Wing = 1.05
+HalfBack = 1.10
+Forward = 0.85
+KeyForward = 0.75
+
+Matchup multiplier
+
+OpponentPointsAllowedToPosition ÷ LeagueAverage
+
+Form multiplier
+
+Last5Average ÷ SeasonAverage
+
+TOG multiplier
+
+PlayerTOG ÷ LeagueAvgTOG
+
+Store results in a player_projections table.
+
+---
+
+3. Breakout Detection Engine
+
+Implement breakout scoring.
+
+BreakoutScore =
+
+(CBAIncrease × 0.40)
++
+(TOGIncrease × 0.25)
++
+(DisposalIncrease × 0.20)
++
+(AgeFactor × 0.15)
+
+AgeFactor:
+
+22–25 years old = 1
+Otherwise = 0.6
+
+Flag players with breakout score above 0.65.
+
+---
+
+4. Fantasy Price Engine
+
+Implement price movement model.
+
+RollingAverage = (Last3Scores) ÷ 3
+
+NewPrice = RollingAverage × MagicNumber
+
+MagicNumber ≈ 5500
+
+Breakeven =
+
+((CurrentPrice / MagicNumber) × 3)
+− Score1
+− Score2
+
+Display price projections for next 3 rounds.
+
+---
+
+5. Trade Optimiser
+
+Create an algorithm that evaluates trades.
+
+TradeGain =
+
+(NewPlayerProjectedAvg − OldPlayerProjectedAvg)
+× RemainingRounds
+
+Rank all possible trades by projected points gained.
+
+Allow user to input:
+
+Current team
+Available trades
+Salary cap
+
+Return:
+
+Best two trades for the round.
+
+---
+
+6. Captain Optimiser
+
+CaptainScore =
+
+ProjectedScore
++
+(CeilingProbability × CeilingScore)
+
+CeilingProbability
+
+Number of 130+ scores ÷ games played.
+
+Return top 5 captain choices.
+
+---
+
+7. Monte Carlo Simulation Engine
+
+Simulate each round 10,000 times.
+
+Use normal distribution.
+
+Mean = ProjectedScore
+StdDev = PlayerVolatility
+
+Calculate:
+
+Expected team score
+Score variance
+Rank probability distribution.
+
+---
+
+DATABASE SCHEMA
+
+Create tables:
+
+teams
+players
+fixtures
+matches
+player_match_stats
+fantasy_prices
+player_roles
+team_fantasy_allowance
+player_projections
+player_injuries
+trade_simulations
+simulation_results
+
+Include proper foreign key relationships.
+
+---
+
+DATA INGESTION
+
+Create scripts to import:
+
+AFL match stats
+Fantasy prices
+Fixtures
+
+The system must allow CSV imports.
+
+---
+
+UI PAGES
+
+Home dashboard
+
+Player explorer
+
+Breakout candidates
+
+Trade optimiser
+
+Captain optimiser
+
+Simulation results
+
+---
+
+DESIGN
+
+Clean sports analytics interface.
+
+Dark theme option.
+
+Responsive layout.
+
+---
+
+FINAL GOAL
+
+The application should function as a full AFL Fantasy analytics assistant capable of:
+
+Projecting player scores
+Identifying breakout players
+Optimising trades
+Selecting captains
+Simulating season outcomes
+
+Write clean, well-commented code and keep the architecture modular.
