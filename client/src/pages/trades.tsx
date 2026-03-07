@@ -343,10 +343,27 @@ function TradeCard({
           </div>
         </div>
 
-        <div className="mt-3 pt-3 border-t">
-          <p className="text-xs text-muted-foreground leading-relaxed" data-testid={`text-trade-reason-${trade.id}`}>
-            {trade.reason}
-          </p>
+        <div className="mt-3 pt-3 border-t space-y-1" data-testid={`text-trade-reason-${trade.id}`}>
+          {trade.reason?.split(/(?<=\.) (?=[A-Z])/).filter(Boolean).map((line, i) => {
+            const trimmed = line.trim();
+            const isHeader = trimmed.startsWith("OUT:") || trimmed.startsWith("IN:");
+            const isPlan = trimmed.startsWith("PRICE PLAN:") || trimmed.startsWith("LONG-TERM:") || trimmed.startsWith("SEASON PLAN:") || trimmed.startsWith("SELL URGENCY:");
+            const isHold = trimmed.startsWith("HOLD:") || trimmed.startsWith("CAUTION:");
+            return (
+              <p
+                key={i}
+                className={`text-xs leading-relaxed ${
+                  isHeader ? "font-semibold text-foreground" :
+                  isPlan ? "font-medium text-blue-600 dark:text-blue-400" :
+                  isHold ? "font-medium text-amber-600 dark:text-amber-400" :
+                  "text-muted-foreground"
+                }`}
+                data-testid={`text-reason-line-${trade.id}-${i}`}
+              >
+                {trimmed}
+              </p>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

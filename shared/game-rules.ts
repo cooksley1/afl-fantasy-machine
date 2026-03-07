@@ -76,6 +76,33 @@ export function isByeRound(round: number): boolean {
   return AFL_FANTASY_CLASSIC_2026.byeRounds.includes(round);
 }
 
+export const AFL_2026_FIXTURES: Record<number, Record<string, { opponent: string; venue: string; time: string }>> = {
+  1: {
+    "Richmond": { opponent: "Adelaide", venue: "MCG", time: "Thu 7:25pm" },
+    "Adelaide": { opponent: "Richmond", venue: "MCG", time: "Thu 7:25pm" },
+    "Western Bulldogs": { opponent: "Carlton", venue: "Marvel Stadium", time: "Fri 7:40pm" },
+    "Carlton": { opponent: "Western Bulldogs", venue: "Marvel Stadium", time: "Fri 7:40pm" },
+    "Hawthorn": { opponent: "GWS Giants", venue: "MCG", time: "Sat 1:45pm" },
+    "GWS Giants": { opponent: "Hawthorn", venue: "MCG", time: "Sat 1:45pm" },
+    "Gold Coast": { opponent: "Essendon", venue: "People First Stadium", time: "Sat 4:35pm" },
+    "Essendon": { opponent: "Gold Coast", venue: "People First Stadium", time: "Sat 4:35pm" },
+    "Brisbane Lions": { opponent: "Melbourne", venue: "Gabba", time: "Sat 7:25pm" },
+    "Melbourne": { opponent: "Brisbane Lions", venue: "Gabba", time: "Sat 7:25pm" },
+    "St Kilda": { opponent: "Collingwood", venue: "Marvel Stadium", time: "Sat 7:25pm" },
+    "Collingwood": { opponent: "St Kilda", venue: "Marvel Stadium", time: "Sat 7:25pm" },
+    "Fremantle": { opponent: "North Melbourne", venue: "Optus Stadium", time: "Sat 8:10pm" },
+    "North Melbourne": { opponent: "Fremantle", venue: "Optus Stadium", time: "Sat 8:10pm" },
+    "Sydney": { opponent: "West Coast", venue: "SCG", time: "Sun 1:10pm" },
+    "West Coast": { opponent: "Sydney", venue: "SCG", time: "Sun 1:10pm" },
+    "Port Adelaide": { opponent: "Geelong", venue: "Adelaide Oval", time: "Sun 3:20pm" },
+    "Geelong": { opponent: "Port Adelaide", venue: "Adelaide Oval", time: "Sun 3:20pm" },
+  },
+};
+
+export function getFixtureForTeam(team: string, round: number): { opponent: string; venue: string; time: string } | null {
+  return AFL_2026_FIXTURES[round]?.[team] || null;
+}
+
 export function getScoringBreakdown(): Array<{ action: string; points: number }> {
   const s = AFL_FANTASY_CLASSIC_2026.scoring;
   return [

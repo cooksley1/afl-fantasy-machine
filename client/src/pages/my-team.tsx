@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Crown,
   Shield,
@@ -21,12 +23,26 @@ import {
   LayoutGrid,
   List,
   MoreVertical,
+  SlidersHorizontal,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, LeagueSettings } from "@shared/schema";
+
+type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price";
+
+const STAT_OPTIONS: { key: StatKey; label: string; shortLabel: string }[] = [
+  { key: "price", label: "Price", shortLabel: "PRC" },
+  { key: "avg", label: "Season Average", shortLabel: "AVG" },
+  { key: "l3", label: "Last 3 Average", shortLabel: "L3" },
+  { key: "be", label: "Breakeven", shortLabel: "BE" },
+  { key: "proj", label: "Projected Score", shortLabel: "PROJ" },
+  { key: "priceChange", label: "Price Change", shortLabel: "+/-" },
+];
+
+const DEFAULT_VISIBLE_STATS: StatKey[] = ["price", "avg", "be"];
 
 interface PlayerAdvice {
   name: string;
@@ -122,19 +138,54 @@ function CaptaincyBadge({ captaincy }: { captaincy: string }) {
   return null;
 }
 
+function getStatValue(player: PlayerWithTeamInfo, key: StatKey): string {
+  switch (key) {
+    case "price": return formatPrice(player.price);
+    case "avg": return player.avgScore?.toFixed(1) || "0.0";
+    case "l3": return player.last3Avg ? Math.round(player.last3Avg).toString() : "0";
+    case "be": return player.breakEven?.toString() || "-";
+    case "proj": return player.projectedScore ? Math.round(player.projectedScore).toString() : "-";
+    case "priceChange": {
+      const val = player.priceChange || 0;
+      if (val > 0) return `+${(val / 1000).toFixed(0)}k`;
+      if (val < 0) return `${(val / 1000).toFixed(0)}k`;
+      return "0";
+    }
+    default: return "-";
+  }
+}
+
+function getStatColor(player: PlayerWithTeamInfo, key: StatKey): string {
+  if (key === "priceChange") {
+    const val = player.priceChange || 0;
+    if (val > 0) return "text-green-600 dark:text-green-400";
+    if (val < 0) return "text-red-500 dark:text-red-400";
+  }
+  if (key === "be") {
+    const be = player.breakEven;
+    const avg = player.avgScore || 0;
+    if (be !== null && be !== undefined && avg > 0) {
+      if (be < avg * 0.8) return "text-green-600 dark:text-green-400";
+      if (be > avg * 1.2) return "text-red-500 dark:text-red-400";
+    }
+  }
+  return "";
+}
+
 function FieldViewCard({
   player,
   onViewReport,
+  visibleStats,
 }: {
   player: PlayerWithTeamInfo;
   onViewReport: (id: number) => void;
+  visibleStats: StatKey[];
 }) {
   const teamColors = getTeamColors(player.team);
   const teamAbbr = getTeamAbbr(player.team);
   const nameParts = player.name.split(" ");
-  const initials = nameParts.length >= 2
-    ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
-    : player.name.slice(0, 2).toUpperCase();
+  const lastName = nameParts.length >= 2 ? nameParts[nameParts.length - 1] : player.name;
+  const jerseyNum = player.id % 45 + 1;
 
   return (
     <div
@@ -144,26 +195,61 @@ function FieldViewCard({
     >
       <div className="relative">
         <div
-          className="w-[60px] h-[68px] sm:w-[68px] sm:h-[76px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
+          className="w-[76px] sm:w-[88px] rounded-lg border border-border/60 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col"
           style={{ background: `linear-gradient(135deg, ${teamColors.primary} 0%, ${teamColors.primary}dd 100%)` }}
         >
-          <div className="flex-1 flex items-center justify-center">
+          <div className="relative h-[52px] sm:h-[58px] flex items-center justify-center overflow-hidden">
             <span
-              className="text-lg sm:text-xl font-black opacity-90"
+              className="text-[40px] sm:text-[48px] font-black opacity-[0.12] absolute select-none"
               style={{ color: teamColors.text }}
             >
-              {initials}
+              {jerseyNum}
             </span>
+            <div className="flex flex-col items-center z-10">
+              <div
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border-2"
+                style={{ borderColor: `${teamColors.text}66`, backgroundColor: `${teamColors.secondary}44` }}
+              >
+                <span
+                  className="text-sm sm:text-base font-black"
+                  style={{ color: teamColors.text }}
+                >
+                  {jerseyNum}
+                </span>
+              </div>
+            </div>
           </div>
+
           <div
             className="px-1 py-0.5 text-center"
             style={{ backgroundColor: teamColors.secondary, borderTop: `1px solid ${teamColors.text}33` }}
           >
-            <span className="text-[8px] sm:text-[9px] font-bold tracking-wider" style={{ color: teamColors.text }}>
-              {teamAbbr}
-            </span>
+            <p className="text-[8px] sm:text-[9px] font-bold truncate leading-tight" style={{ color: teamColors.text }}>
+              {lastName.toUpperCase()}
+            </p>
+            <p className="text-[7px] sm:text-[8px] font-medium opacity-70" style={{ color: teamColors.text }}>
+              {teamAbbr} {getPositionDisplay(player)}
+            </p>
           </div>
+
+          {visibleStats.length > 0 && (
+            <div className="bg-background/95 dark:bg-background/90 px-1 py-0.5 space-y-px">
+              {visibleStats.map((statKey) => {
+                const opt = STAT_OPTIONS.find(s => s.key === statKey);
+                if (!opt) return null;
+                return (
+                  <div key={statKey} className="flex items-center justify-between gap-1" data-testid={`stat-${statKey}-${player.id}`}>
+                    <span className="text-[7px] sm:text-[8px] font-semibold text-muted-foreground uppercase">{opt.shortLabel}</span>
+                    <span className={`text-[8px] sm:text-[9px] font-mono font-bold ${getStatColor(player, statKey)}`}>
+                      {getStatValue(player, statKey)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+
         {player.isCaptain && (
           <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-background" data-testid={`field-captain-${player.id}`}>
             <span className="text-[9px] font-bold text-white">C</span>
@@ -180,10 +266,6 @@ function FieldViewCard({
           </div>
         )}
       </div>
-      <div className="mt-1 text-center max-w-[68px] sm:max-w-[76px]">
-        <p className="text-[10px] sm:text-xs font-semibold truncate leading-tight">{getInitials(player.name)}</p>
-        <p className="text-[9px] sm:text-[10px] font-mono font-bold" style={{ color: teamColors.primary }}>{formatPrice(player.price)}</p>
-      </div>
     </div>
   );
 }
@@ -191,9 +273,11 @@ function FieldViewCard({
 function FieldView({
   teamPlayers,
   onViewReport,
+  visibleStats,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   onViewReport: (id: number) => void;
+  visibleStats: StatKey[];
 }) {
   const onFieldByPos = (pos: string) =>
     teamPlayers.filter((p) => p.fieldPosition === pos && p.isOnField);
@@ -226,22 +310,22 @@ function FieldView({
               <div className="flex-1 py-3">
                 <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
                   {topRow.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} />
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
                   ))}
                 </div>
                 {bottomRow.length > 0 && (
                   <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mt-3">
                     {bottomRow.map((p) => (
-                      <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} />
+                      <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
                     ))}
                   </div>
                 )}
               </div>
 
               {bench.length > 0 && (
-                <div className="w-[72px] sm:w-[90px] shrink-0 border-l border-border/50 flex flex-col items-center justify-center gap-2 py-2 bg-muted/20 rounded-r-lg">
+                <div className="w-[86px] sm:w-[100px] shrink-0 border-l border-border/50 flex flex-col items-center justify-center gap-2 py-2 bg-muted/20 rounded-r-lg">
                   {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} />
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
                   ))}
                 </div>
               )}
@@ -261,7 +345,7 @@ function FieldView({
             <div className="flex-1 py-3">
               <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
                 {utilPlayers.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} />
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
                 ))}
               </div>
             </div>
@@ -547,6 +631,13 @@ export default function MyTeam() {
   const [, navigate] = useLocation();
   const [analysis, setAnalysis] = useState<TeamAnalysisResult | null>(null);
   const [viewMode, setViewMode] = useState<"field" | "list">("field");
+  const [visibleStats, setVisibleStats] = useState<StatKey[]>(DEFAULT_VISIBLE_STATS);
+
+  const toggleStat = (key: StatKey) => {
+    setVisibleStats(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
 
   const { data: teamPlayers, isLoading } = useQuery<PlayerWithTeamInfo[]>({
     queryKey: ["/api/my-team"],
@@ -636,27 +727,60 @@ export default function MyTeam() {
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          <Button
-            size="sm"
-            variant={viewMode === "field" ? "default" : "ghost"}
-            className="h-8 px-3 gap-1.5 text-xs"
-            onClick={() => setViewMode("field")}
-            data-testid="button-field-view"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            Field
-          </Button>
-          <Button
-            size="sm"
-            variant={viewMode === "list" ? "default" : "ghost"}
-            className="h-8 px-3 gap-1.5 text-xs"
-            onClick={() => setViewMode("list")}
-            data-testid="button-list-view"
-          >
-            <List className="w-3.5 h-3.5" />
-            List
-          </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <Button
+              size="sm"
+              variant={viewMode === "field" ? "default" : "ghost"}
+              className="gap-1.5 text-xs"
+              onClick={() => setViewMode("field")}
+              data-testid="button-field-view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Field
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "list" ? "default" : "ghost"}
+              className="gap-1.5 text-xs"
+              onClick={() => setViewMode("list")}
+              data-testid="button-list-view"
+            >
+              <List className="w-3.5 h-3.5" />
+              List
+            </Button>
+          </div>
+
+          {viewMode === "field" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" data-testid="button-stats-config">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  Stats
+                  <Badge variant="secondary" className="text-[9px] ml-0.5">{visibleStats.length}</Badge>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-3" align="start">
+                <p className="text-xs font-semibold mb-2">Visible Card Stats</p>
+                <div className="space-y-2">
+                  {STAT_OPTIONS.map(opt => (
+                    <label
+                      key={opt.key}
+                      className="flex items-center gap-2 cursor-pointer"
+                      data-testid={`toggle-stat-${opt.key}`}
+                    >
+                      <Checkbox
+                        checked={visibleStats.includes(opt.key)}
+                        onCheckedChange={() => toggleStat(opt.key)}
+                        data-testid={`checkbox-stat-${opt.key}`}
+                      />
+                      <span className="text-sm">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
 
         <Button
@@ -698,6 +822,7 @@ export default function MyTeam() {
               <FieldView
                 teamPlayers={teamPlayers}
                 onViewReport={(id) => navigate(`/player/${id}`)}
+                visibleStats={visibleStats}
               />
             </CardContent>
           </>

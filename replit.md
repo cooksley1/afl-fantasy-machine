@@ -59,7 +59,9 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
    - **scoreTradeIn**: negative breakeven (guaranteed cash), DPP position upgrade value (MID>RUC>DEF>FWD scoring tiers), cash cow potential, price trajectory estimation, underpriced bounce-backs, set-and-forget quality, captain probability, POD value, consistency rating, bye coverage fixes, recent score trends, durability advantage, round 0 named rookies
    - **Diversification**: Max 2 appearances per playerIn/playerOut, up to 15 recommendations
    - **Categories**: urgent/upgrade/cash_gen/structure with urgency critical/high/medium/low
-   - **Round 0 support**: Preseason trade evaluation with early-season specific logic
+   - **Round 0 support**: Preseason trade evaluation with early-season specific logic, preseason hold protection for premium-priced players
+   - **Strategic Hold System**: assessPlayerRole() determines keeper/hold_for_value/stepping_stone/monitor verdicts with sell-price targets and upgrade paths
+   - **Detailed Reasoning**: buildDetailedReason() generates comprehensive OUT/IN summaries with avg, BE, proj, fixture info, price trajectory, long-term plans, DPP value
 
 ## API Endpoints
 - `GET /api/players` - All players with advanced metrics
@@ -89,6 +91,7 @@ Advanced metrics: projectedScore (Bayesian-adjusted), projectedFloor, ceilingSco
 - `GET /api/captain-advice` - Captain loophole analysis with P(120+)
 - `POST /api/analyze-screenshot` - Screenshot vision analysis
 - `POST /api/players/refresh-data` - Refresh player data
+- `POST /api/players/update-fixtures` - Update all player fixtures for a given round from AFL_2026_FIXTURES
 - `GET /api/late-changes` - Late changes for current round
 - `POST /api/late-changes` - Create late change
 - `GET /api/scheduler/status` - Scheduler status

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertMyTeamPlayerSchema } from "@shared/schema";
-import { AFL_FANTASY_CLASSIC_2026, getTradesForRound } from "@shared/game-rules";
+import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
 import {
@@ -784,6 +784,28 @@ export async function registerRoutes(
       const allWeights = await storage.getAllModelWeights();
       buildWeightConfig(allWeights);
       res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/players/update-fixtures", async (req, res) => {
+    try {
+      const round = req.body.round || 1;
+      const allPlayers = await storage.getAllPlayers();
+      let updated = 0;
+      for (const player of allPlayers) {
+        const fixture = getFixtureForTeam(player.team, round);
+        if (fixture) {
+          await storage.updatePlayer(player.id, {
+            nextOpponent: fixture.opponent,
+            venue: fixture.venue,
+            gameTime: fixture.time,
+          });
+          updated++;
+        }
+      }
+      res.json({ updated, round });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
