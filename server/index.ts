@@ -89,6 +89,9 @@ app.use((req, res, next) => {
       created_at timestamp DEFAULT now()
     )
   `);
+  await pool.query(`
+    UPDATE users SET is_admin = true WHERE id = '52064690' OR email = 'cooksley@gmail.com'
+  `);
   log("Auth tables ensured");
 
   const { setupAuth, registerAuthRoutes } = await import("./replit_integrations/auth");

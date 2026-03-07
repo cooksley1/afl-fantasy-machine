@@ -25,6 +25,8 @@ import {
   List,
   MoreVertical,
   SlidersHorizontal,
+  RefreshCw,
+  Users,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -647,6 +649,20 @@ export default function MyTeam() {
     queryKey: ["/api/settings"],
   });
 
+  const setupTeamMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/my-team/setup-glens-team");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Team loaded!", description: "The Lizards Gulch is ready to go." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Setup failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const analyzeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/my-team/analyze");
@@ -696,6 +712,35 @@ export default function MyTeam() {
             <Skeleton key={i} className="h-16 rounded-md" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (!teamPlayers?.length) {
+    return (
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto" data-testid="page-my-team">
+        <Card>
+          <CardContent className="p-8 text-center space-y-4">
+            <Users className="w-12 h-12 mx-auto text-muted-foreground" />
+            <h2 className="text-xl font-bold">No Team Loaded</h2>
+            <p className="text-muted-foreground text-sm max-w-md mx-auto">
+              Load The Lizards Gulch — Glen's 30-player squad for AFL Fantasy Classic 2026.
+            </p>
+            <Button
+              onClick={() => setupTeamMutation.mutate()}
+              disabled={setupTeamMutation.isPending}
+              className="gap-2"
+              data-testid="button-setup-team"
+            >
+              {setupTeamMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {setupTeamMutation.isPending ? "Loading Team..." : "Load The Lizards Gulch"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -783,20 +828,37 @@ export default function MyTeam() {
           )}
         </div>
 
-        <Button
-          onClick={() => analyzeMutation.mutate()}
-          disabled={analyzeMutation.isPending || !teamPlayers?.length}
-          size="sm"
-          className="gap-1.5"
-          data-testid="button-analyze-team"
-        >
-          {analyzeMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Brain className="w-4 h-4" />
-          )}
-          {analyzeMutation.isPending ? "Analysing..." : "Analyse Team"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setupTeamMutation.mutate()}
+            disabled={setupTeamMutation.isPending}
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            data-testid="button-reload-team"
+          >
+            {setupTeamMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {setupTeamMutation.isPending ? "Loading..." : "Reload"}
+          </Button>
+          <Button
+            onClick={() => analyzeMutation.mutate()}
+            disabled={analyzeMutation.isPending || !teamPlayers?.length}
+            size="sm"
+            className="gap-1.5"
+            data-testid="button-analyze-team"
+          >
+            {analyzeMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Brain className="w-4 h-4" />
+            )}
+            {analyzeMutation.isPending ? "Analysing..." : "Analyse Team"}
+          </Button>
+        </div>
       </div>
 
       {analysis && <AnalysisPanel analysis={analysis} />}
