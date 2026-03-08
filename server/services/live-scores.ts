@@ -553,12 +553,18 @@ interface FootywirePlayerStat {
 }
 
 function parseFootywireMatchPage(html: string): { round: number; team1: string; team2: string; players: FootywirePlayerStat[] } | null {
-  const titleMatch = html.match(/<TITLE>[^:]*:\s*(.+?)\s+(?:defeats|drew with)\s+(.+?)\s+at\s+.+?Round\s+(\d+)/i);
-  if (!titleMatch) return null;
+  let titleMatch = html.match(/<TITLE>[^:]*:\s*(.+?)\s+(?:defeats|drew with)\s+(.+?)\s+at\s+.+?Round\s+(\d+)/i);
+  let round: number;
+  if (titleMatch) {
+    round = parseInt(titleMatch[3]);
+  } else {
+    titleMatch = html.match(/<TITLE>[^:]*:\s*(.+?)\s+(?:defeats|drew with)\s+(.+?)\s+at\s+.+?Opening\s+Round/i);
+    if (!titleMatch) return null;
+    round = 0;
+  }
 
   const team1Name = titleMatch[1].trim();
   const team2Name = titleMatch[2].trim();
-  const round = parseInt(titleMatch[3]);
 
   const t1idx = html.indexOf('<a name=t1>');
   const t2idx = html.indexOf('<a name=t2>');
@@ -831,15 +837,15 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
       }
     }
 
-    if (fetched === 0) {
-      console.log(`[LiveScores] Footywire returned no stats for round ${round}, trying Squiggle fallback...`);
-      const squiggleResult = await fetchFromSquigglePlayerStats(round);
-      fetched = squiggleResult.fetched;
-      updated = squiggleResult.updated;
-      errors.push(...squiggleResult.errors);
-    } else {
+    if (fetched > 0) {
       console.log(`[LiveScores] Footywire: Fetched ${fetched} player stats, updated ${updated} in DB for round ${round}`);
     }
+
+    console.log(`[LiveScores] Trying Squiggle player stats for round ${round} to fill gaps...`);
+    const squiggleResult = await fetchFromSquigglePlayerStats(round);
+    fetched += squiggleResult.fetched;
+    updated += squiggleResult.updated;
+    errors.push(...squiggleResult.errors);
 
     if (fetched === 0 && errors.length === 0) {
       errors.push(`No player stats available for round ${round} from any source. The round may not have started yet.`);
@@ -850,6 +856,61 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
   }
 
   return { fetched, updated, errors };
+}
+
+export async function fetchScoresForCompletedRounds(): Promise<{ totalFetched: number; totalUpdated: number; roundsProcessed: number }> {
+  let totalFetched = 0;
+  let totalUpdated = 0;
+  let roundsProcessed = 0;
+
+  try {
+    const matches = await fetchMatchStatuses();
+    const completedRounds = new Set<number>();
+    for (const m of matches) {
+      if (m.complete === 100) {
+        const roundNum = parseInt(m.roundName.replace(/\D/g, ""), 10);
+        if (!isNaN(roundNum)) completedRounds.add(roundNum);
+        else if (m.roundName.toLowerCase().includes("opening")) completedRounds.add(0);
+      }
+    }
+
+    if (completedRounds.size === 0) {
+      console.log("[LiveScores] No completed rounds found to fetch scores for");
+      return { totalFetched: 0, totalUpdated: 0, roundsProcessed: 0 };
+    }
+
+    const existingStatRounds = await db.selectDistinct({ round: weeklyStats.round }).from(weeklyStats);
+    const roundsWithStats = new Map<number, number>();
+    for (const r of existingStatRounds) {
+      const count = await db.select({ count: weeklyStats.id }).from(weeklyStats).where(eq(weeklyStats.round, r.round));
+      roundsWithStats.set(r.round, count.length);
+    }
+
+    for (const round of completedRounds) {
+      const existingCount = roundsWithStats.get(round) || 0;
+      if (existingCount >= 200) {
+        continue;
+      }
+
+      console.log(`[LiveScores] Auto-fetching scores for completed round ${round} (${existingCount} existing stats)`);
+      const result = await fetchAndStorePlayerScores(round);
+      totalFetched += result.fetched;
+      totalUpdated += result.updated;
+      roundsProcessed++;
+
+      if (result.errors.length > 0) {
+        console.log(`[LiveScores] Round ${round} fetch errors: ${result.errors.join("; ")}`);
+      }
+    }
+
+    if (roundsProcessed > 0) {
+      console.log(`[LiveScores] Auto-fetched scores for ${roundsProcessed} rounds: ${totalFetched} fetched, ${totalUpdated} updated`);
+    }
+  } catch (e: any) {
+    console.error("[LiveScores] fetchScoresForCompletedRounds error:", e.message);
+  }
+
+  return { totalFetched, totalUpdated, roundsProcessed };
 }
 
 export async function bulkUpdateLiveScores(

@@ -220,37 +220,47 @@ export async function expandPlayerDatabase(): Promise<number> {
   const realPlayers = loadRealPlayers();
   const realPlayerMap = new Map(realPlayers.map(rp => [rp.name, rp]));
 
+  const allWeeklyStats = await db.select({ playerId: weeklyStats.playerId }).from(weeklyStats);
+  const playersWithStats = new Set(allWeeklyStats.map(s => s.playerId));
+
   let reconciled = 0;
   for (const existing of existingPlayers) {
     const real = realPlayerMap.get(existing.name);
     if (!real) continue;
-    if (existing.price !== real.salary || existing.avgScore !== real.avgPoints || existing.startingPrice !== real.salary) {
-      const l3Avg = deriveLast3Avg(real.avgPoints, real.l5Avg);
-      const formTrend = deriveFormTrend(real.l5Avg, real.regAvg);
-      const breakEven = deriveBreakEven(real.salary, real.avgPoints, real.games, real.salary);
+    const needsPriceUpdate = existing.price !== real.salary || existing.startingPrice !== real.salary;
+    const hasLiveStats = playersWithStats.has(existing.id);
+    const needsScoreUpdate = !hasLiveStats && existing.avgScore !== real.avgPoints;
+
+    if (needsPriceUpdate || needsScoreUpdate) {
       const byeRound = BYE_ROUNDS[real.team] || 12;
-      await db.update(players)
-        .set({
-          price: real.salary,
-          startingPrice: real.salary,
-          avgScore: real.avgPoints,
-          last3Avg: l3Avg,
-          last5Avg: real.l5Avg,
-          seasonTotal: Math.round(real.avgPoints * real.games),
-          gamesPlayed: real.games,
-          ownedByPercent: real.owned,
-          formTrend,
-          projectedScore: real.regAvg,
-          breakEven,
-          ceilingScore: Math.round(real.maxScore),
-          byeRound,
-          position: real.position,
-          dualPosition: real.dualPosition || null,
-          team: real.team,
-          seasonCba: real.cbaPercent || null,
-          ppm: real.ppm || null,
-        })
-        .where(eq(players.id, existing.id));
+      const updates: Record<string, any> = {
+        price: real.salary,
+        startingPrice: real.salary,
+        ownedByPercent: real.owned,
+        projectedScore: real.regAvg,
+        ceilingScore: Math.round(real.maxScore),
+        byeRound,
+        position: real.position,
+        dualPosition: real.dualPosition || null,
+        team: real.team,
+        seasonCba: real.cbaPercent || null,
+        ppm: real.ppm || null,
+      };
+
+      if (!hasLiveStats) {
+        const l3Avg = deriveLast3Avg(real.avgPoints, real.l5Avg);
+        const formTrend = deriveFormTrend(real.l5Avg, real.regAvg);
+        const breakEven = deriveBreakEven(real.salary, real.avgPoints, real.games, real.salary);
+        updates.avgScore = real.avgPoints;
+        updates.last3Avg = l3Avg;
+        updates.last5Avg = real.l5Avg;
+        updates.seasonTotal = Math.round(real.avgPoints * real.games);
+        updates.gamesPlayed = real.games;
+        updates.formTrend = formTrend;
+        updates.breakEven = breakEven;
+      }
+
+      await db.update(players).set(updates).where(eq(players.id, existing.id));
       reconciled++;
     }
   }

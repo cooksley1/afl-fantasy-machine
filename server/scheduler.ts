@@ -23,6 +23,18 @@ async function runGather() {
     } catch (e: any) {
       console.log(`[Scheduler] DTLive sync error: ${e.message}`);
     }
+
+    try {
+      const { fetchScoresForCompletedRounds } = await import("./services/live-scores");
+      const scoreResult = await fetchScoresForCompletedRounds();
+      if (scoreResult.roundsProcessed > 0) {
+        const { recalculatePlayerAverages } = await import("./expand-players");
+        await recalculatePlayerAverages();
+        console.log(`[Scheduler] Updated scores for ${scoreResult.roundsProcessed} rounds`);
+      }
+    } catch (e: any) {
+      console.log(`[Scheduler] Score fetch error: ${e.message}`);
+    }
   } catch (e: any) {
     console.error("[Scheduler] Gather error:", e.message);
   } finally {

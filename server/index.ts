@@ -122,6 +122,14 @@ app.use((req, res, next) => {
     )
   ).catch(err => console.log(`[DTLive] Background sync error: ${err.message}`));
 
+  import("./services/live-scores").then(({ fetchScoresForCompletedRounds }) =>
+    fetchScoresForCompletedRounds().then(result => {
+      if (result.roundsProcessed > 0) {
+        return recalculatePlayerAverages();
+      }
+    })
+  ).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
+
   const { fetchAndStoreFixtures } = await import("./services/fixture-service");
   fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
 
