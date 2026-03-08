@@ -746,6 +746,121 @@ async function fetchFromSquigglePlayerStats(round: number): Promise<{ fetched: n
   return { fetched, updated, errors };
 }
 
+async function fetchFromDTLive(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let fetched = 0;
+  let updated = 0;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch("https://dtlive.com.au/afl/dataview.php", {
+      headers: { "User-Agent": UA },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      errors.push(`DTLive returned ${res.status}`);
+      return { fetched, updated, errors };
+    }
+
+    const html = await res.text();
+    const rowRegex = /<tr><td>[\s\S]*?<\/tr>/g;
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/g;
+
+    const TEAM_MAP: Record<string, string> = {
+      "ADE": "Adelaide", "BRL": "Brisbane Lions", "CAR": "Carlton",
+      "COL": "Collingwood", "ESS": "Essendon", "FRE": "Fremantle",
+      "GEE": "Geelong", "GCS": "Gold Coast", "GWS": "GWS Giants",
+      "HAW": "Hawthorn", "MEL": "Melbourne", "NTH": "North Melbourne",
+      "PTA": "Port Adelaide", "RIC": "Richmond", "STK": "St Kilda",
+      "SYD": "Sydney", "WCE": "West Coast", "WBD": "Western Bulldogs",
+    };
+
+    const allDbPlayers = await db.select().from(players);
+    const nameMap = new Map(allDbPlayers.map(p => [p.name.toLowerCase(), p]));
+    const lastNameTeamMap = new Map<string, typeof allDbPlayers[0][]>();
+    for (const p of allDbPlayers) {
+      const parts = p.name.split(" ");
+      const key = `${parts[parts.length - 1].toLowerCase()}|${p.team}`;
+      if (!lastNameTeamMap.has(key)) lastNameTeamMap.set(key, []);
+      lastNameTeamMap.get(key)!.push(p);
+    }
+
+    const existingStats = await db.select({ playerId: weeklyStats.playerId })
+      .from(weeklyStats).where(eq(weeklyStats.round, round));
+    const alreadyHasStats = new Set(existingStats.map(s => s.playerId));
+
+    const roundCellIndex = 14 + round;
+
+    let rowMatch;
+    while ((rowMatch = rowRegex.exec(html))) {
+      const cells: string[] = [];
+      let tdMatch;
+      const localTdRegex = /<td[^>]*>([\s\S]*?)<\/td>/g;
+      while ((tdMatch = localTdRegex.exec(rowMatch[0]))) {
+        cells.push(tdMatch[1].replace(/<[^>]+>/g, "").trim());
+      }
+
+      if (cells.length <= roundCellIndex) continue;
+      const scoreStr = cells[roundCellIndex];
+      if (!scoreStr || scoreStr === "-" || scoreStr === "") continue;
+      const score = parseInt(scoreStr);
+      if (isNaN(score)) continue;
+
+      const teamMatch = rowMatch[0].match(/images\/(\w+)\.png/);
+      const teamCode = teamMatch?.[1] || "";
+      const team = TEAM_MAP[teamCode] || teamCode;
+      const shortName = cells[1] || "";
+      if (!shortName) continue;
+
+      const nameParts = shortName.split(" ");
+      const surname = nameParts[nameParts.length - 1].toLowerCase();
+      const initial = nameParts[0]?.replace(".", "") || "";
+
+      let dbPlayer: typeof allDbPlayers[0] | undefined;
+
+      const teamCandidates = lastNameTeamMap.get(`${surname}|${team}`) || [];
+      if (teamCandidates.length === 1) {
+        dbPlayer = teamCandidates[0];
+      } else if (teamCandidates.length > 1) {
+        dbPlayer = teamCandidates.find(c => c.name.split(" ")[0].toLowerCase().startsWith(initial.toLowerCase()));
+      }
+
+      if (!dbPlayer) continue;
+      if (alreadyHasStats.has(dbPlayer.id)) continue;
+
+      await db.insert(weeklyStats).values({
+        playerId: dbPlayer.id,
+        round,
+        opponent: null,
+        fantasyScore: score,
+        kickCount: 0,
+        handballCount: 0,
+        markCount: 0,
+        tackleCount: 0,
+        hitouts: 0,
+        goalsKicked: 0,
+        behindsKicked: 0,
+        freesAgainst: 0,
+      });
+
+      alreadyHasStats.add(dbPlayer.id);
+      fetched++;
+      updated++;
+    }
+
+    if (updated > 0) {
+      console.log(`[LiveScores] DTLive: Filled ${updated} player scores for round ${round}`);
+    }
+  } catch (e: any) {
+    errors.push(`DTLive fetch error: ${e.message}`);
+    console.error("[LiveScores] DTLive score fetch error:", e.message);
+  }
+
+  return { fetched, updated, errors };
+}
+
 export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
   const errors: string[] = [];
   let fetched = 0;
@@ -847,6 +962,11 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
     updated += squiggleResult.updated;
     errors.push(...squiggleResult.errors);
 
+    console.log(`[LiveScores] Trying DTLive scores for round ${round} to fill gaps...`);
+    const dtliveResult = await fetchFromDTLive(round);
+    fetched += dtliveResult.fetched;
+    updated += dtliveResult.updated;
+
     if (fetched === 0 && errors.length === 0) {
       errors.push(`No player stats available for round ${round} from any source. The round may not have started yet.`);
     }
@@ -864,14 +984,25 @@ export async function fetchScoresForCompletedRounds(): Promise<{ totalFetched: n
   let roundsProcessed = 0;
 
   try {
-    const matches = await fetchMatchStatuses();
     const completedRounds = new Set<number>();
-    for (const m of matches) {
-      if (m.complete === 100) {
-        const roundNum = parseInt(m.roundName.replace(/\D/g, ""), 10);
-        if (!isNaN(roundNum)) completedRounds.add(roundNum);
-        else if (m.roundName.toLowerCase().includes("opening")) completedRounds.add(0);
+
+    const settings = await db.select().from(leagueSettings).limit(1);
+    const currentRound = settings[0]?.currentRound ?? 0;
+    console.log(`[LiveScores] Current round is ${currentRound}, marking rounds 0-${currentRound - 1} as completed`);
+    for (let r = 0; r < currentRound; r++) {
+      completedRounds.add(r);
+    }
+
+    try {
+      const matches = await fetchMatchStatuses();
+      for (const m of matches) {
+        if (m.complete === 100) {
+          const roundNum = parseInt(m.roundName.replace(/\D/g, ""), 10);
+          if (!isNaN(roundNum)) completedRounds.add(roundNum);
+          else if (m.roundName.toLowerCase().includes("opening")) completedRounds.add(0);
+        }
       }
+    } catch {
     }
 
     if (completedRounds.size === 0) {

@@ -45,7 +45,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Trade Engine**: Offers comprehensive trade recommendations based on various factors and phase-specific strategies.
 - **Tag Intelligence System**: Provides evidence-based tag warnings by analyzing team tag profiles and historical matchup data.
 - **Data Gathering**: Automates fetching live data from Squiggle API, AFL.com.au, and AFL club news feeds.
-- **Live Scores**: Tracks live match statuses and fantasy scores, with automated data fetching from Footywire and Squiggle API (fallback). Scores are fetched from Footywire first; if no stats found, falls back to Squiggle player stats endpoint.
+- **Live Scores**: Tracks live match statuses and fantasy scores. Three-source pipeline: Footywire (detailed stats), Squiggle (supplemental), then DTLive (fantasy scores only, fills gaps). Completed round detection uses league settings (currentRound) as primary + Squiggle as supplemental. Historical round data is fetched once and stored — not re-fetched on restarts.
 - **Season Schedule**: Fetches and displays the full AFL season fixture. Completed/live matches are clickable — tapping opens an AI-generated fantasy synopsis dialog showing top performers, key observations (role changes, injuries, tagging, breakouts, busts), and a link to match highlights.
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
 - **Team Upload & Analyser**: Allows users to upload team screenshots for AI analysis and saving identified players.
