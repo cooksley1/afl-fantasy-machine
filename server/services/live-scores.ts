@@ -880,19 +880,14 @@ export async function fetchScoresForCompletedRounds(): Promise<{ totalFetched: n
     }
 
     const existingStatRounds = await db.selectDistinct({ round: weeklyStats.round }).from(weeklyStats);
-    const roundsWithStats = new Map<number, number>();
-    for (const r of existingStatRounds) {
-      const count = await db.select({ count: weeklyStats.id }).from(weeklyStats).where(eq(weeklyStats.round, r.round));
-      roundsWithStats.set(r.round, count.length);
-    }
+    const roundsAlreadyFetched = new Set(existingStatRounds.map(r => r.round));
 
     for (const round of completedRounds) {
-      const existingCount = roundsWithStats.get(round) || 0;
-      if (existingCount >= 200) {
+      if (roundsAlreadyFetched.has(round)) {
         continue;
       }
 
-      console.log(`[LiveScores] Auto-fetching scores for completed round ${round} (${existingCount} existing stats)`);
+      console.log(`[LiveScores] Auto-fetching scores for completed round ${round} (first fetch)`);
       const result = await fetchAndStorePlayerScores(round);
       totalFetched += result.fetched;
       totalUpdated += result.updated;
