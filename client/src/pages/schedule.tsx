@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Calendar,
   MapPin,
   Clock,
@@ -13,6 +19,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Radio,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Eye,
+  Zap,
+  Shield,
+  ExternalLink,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { Fixture } from "@shared/schema";
@@ -24,6 +39,25 @@ interface FixtureGroup {
 
 type GroupedFixtures = Record<string, FixtureGroup>;
 
+interface MatchSynopsis {
+  synopsis: string;
+  topPerformers: {
+    name: string;
+    team: string;
+    position: string;
+    score: number;
+    scoreDiff: number | null;
+    subFlag: boolean;
+  }[];
+  keyObservations: {
+    player: string;
+    team: string;
+    type: string;
+    observation: string;
+  }[];
+  highlightsUrl: string | null;
+}
+
 function getRoundLabel(round: number, roundName: string): string {
   if (round === 0) return "OR";
   if (round >= 25) {
@@ -33,11 +67,230 @@ function getRoundLabel(round: number, roundName: string): string {
   return `R${round}`;
 }
 
-function MatchCard({ match }: { match: Fixture }) {
+function getObservationIcon(type: string) {
+  switch (type) {
+    case "breakout": return <TrendingUp className="w-3.5 h-3.5 text-green-500" />;
+    case "bust": return <TrendingDown className="w-3.5 h-3.5 text-red-500" />;
+    case "injury":
+    case "sub": return <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />;
+    case "tag": return <Shield className="w-3.5 h-3.5 text-orange-500" />;
+    case "role_change": return <Zap className="w-3.5 h-3.5 text-blue-500" />;
+    case "watch": return <Eye className="w-3.5 h-3.5 text-purple-500" />;
+    default: return <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />;
+  }
+}
+
+function getObservationLabel(type: string) {
+  switch (type) {
+    case "breakout": return "Breakout";
+    case "bust": return "Bust";
+    case "injury": return "Injury";
+    case "sub": return "Subbed";
+    case "tag": return "Tagged";
+    case "role_change": return "Role Change";
+    case "watch": return "Watch";
+    default: return "Note";
+  }
+}
+
+function getObservationBadgeColor(type: string) {
+  switch (type) {
+    case "breakout": return "bg-green-500/10 text-green-600 dark:text-green-400";
+    case "bust": return "bg-red-500/10 text-red-600 dark:text-red-400";
+    case "injury":
+    case "sub": return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    case "tag": return "bg-orange-500/10 text-orange-600 dark:text-orange-400";
+    case "role_change": return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+    case "watch": return "bg-purple-500/10 text-purple-600 dark:text-purple-400";
+    default: return "bg-muted text-muted-foreground";
+  }
+}
+
+function MatchSynopsisDialog({
+  match,
+  open,
+  onOpenChange,
+}: {
+  match: Fixture;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data, isLoading } = useQuery<MatchSynopsis>({
+    queryKey: [`/api/fixtures/${match.round}/match-synopsis?home=${encodeURIComponent(match.homeTeam)}&away=${encodeURIComponent(match.awayTeam)}`],
+    enabled: open,
+  });
+
+  const homeColors = getTeamColors(match.homeTeam);
+  const awayColors = getTeamColors(match.awayTeam);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto p-0" data-testid="dialog-match-synopsis">
+        <div
+          className="p-4 pb-3 border-b"
+          style={{
+            background: `linear-gradient(135deg, ${homeColors.primary}15, ${awayColors.primary}15)`,
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold" data-testid="text-synopsis-title">
+              Fantasy Synopsis
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-9 h-9 rounded-md flex items-center justify-center text-[11px] font-bold"
+                style={{ backgroundColor: homeColors.primary, color: homeColors.text }}
+              >
+                {getTeamAbbr(match.homeTeam)}
+              </div>
+              <span className="text-sm font-medium">{match.homeTeam}</span>
+            </div>
+            <div className="text-center px-2">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-lg font-bold ${match.winner === match.homeTeam ? "text-foreground" : "text-muted-foreground"}`}>
+                  {match.homeScore}
+                </span>
+                <span className="text-muted-foreground text-xs">-</span>
+                <span className={`text-lg font-bold ${match.winner === match.awayTeam ? "text-foreground" : "text-muted-foreground"}`}>
+                  {match.awayScore}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-right">{match.awayTeam}</span>
+              <div
+                className="w-9 h-9 rounded-md flex items-center justify-center text-[11px] font-bold"
+                style={{ backgroundColor: awayColors.primary, color: awayColors.text }}
+              >
+                {getTeamAbbr(match.awayTeam)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {isLoading ? (
+            <div className="space-y-3" data-testid="skeleton-synopsis">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Generating fantasy analysis...</span>
+              </div>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : data ? (
+            <>
+              <div data-testid="text-synopsis-body">
+                <p className="text-sm leading-relaxed text-foreground">{data.synopsis}</p>
+              </div>
+
+              {data.topPerformers.length > 0 && (
+                <div data-testid="section-top-performers">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                    Top Fantasy Performers
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {data.topPerformers.map((p, i) => {
+                      const teamColors = getTeamColors(p.team);
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                          data-testid={`performer-${i}`}
+                        >
+                          <div
+                            className="w-6 h-6 rounded flex items-center justify-center text-[8px] font-bold shrink-0"
+                            style={{ backgroundColor: teamColors.primary, color: teamColors.text }}
+                          >
+                            {getTeamAbbr(p.team)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{p.name}</p>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-bold">{p.score}</span>
+                              {p.scoreDiff !== null && (
+                                <span className={`text-[10px] ${p.scoreDiff >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                  {p.scoreDiff >= 0 ? "+" : ""}{p.scoreDiff}
+                                </span>
+                              )}
+                              {p.subFlag && (
+                                <AlertTriangle className="w-3 h-3 text-amber-500" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {data.keyObservations.length > 0 && (
+                <div data-testid="section-key-observations">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5" />
+                    Key Observations
+                  </h3>
+                  <div className="space-y-2">
+                    {data.keyObservations.map((obs, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2 p-2 rounded-md bg-muted/50"
+                        data-testid={`observation-${i}`}
+                      >
+                        <div className="shrink-0 mt-0.5">
+                          {getObservationIcon(obs.type)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-xs font-semibold">{obs.player}</span>
+                            <Badge className={`text-[9px] px-1 py-0 h-4 ${getObservationBadgeColor(obs.type)}`}>
+                              {getObservationLabel(obs.type)}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-snug">{obs.observation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {data.highlightsUrl && (
+                <a
+                  href={data.highlightsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full p-2.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+                  data-testid="link-highlights"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Watch Match Highlights
+                </a>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No synopsis available for this match.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MatchCard({ match, onClick }: { match: Fixture; onClick?: () => void }) {
   const homeColors = getTeamColors(match.homeTeam);
   const awayColors = getTeamColors(match.awayTeam);
   const isComplete = match.complete === 100;
   const isLive = match.complete > 0 && match.complete < 100;
+  const isClickable = isComplete || isLive;
 
   const dateStr = (() => {
     try {
@@ -68,7 +321,8 @@ function MatchCard({ match }: { match: Fixture }) {
 
   return (
     <Card
-      className={`overflow-hidden ${isLive ? "ring-1 ring-red-500/50" : ""}`}
+      className={`overflow-hidden ${isLive ? "ring-1 ring-red-500/50" : ""} ${isClickable ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`}
+      onClick={isClickable ? onClick : undefined}
       data-testid={`fixture-${match.id}`}
     >
       <CardContent className="p-3">
@@ -77,22 +331,30 @@ function MatchCard({ match }: { match: Fixture }) {
             <MapPin className="w-3 h-3" />
             <span>{match.venue}</span>
           </div>
-          {isLive && (
-            <Badge className="bg-red-500 text-white text-[9px] animate-pulse" data-testid="badge-live">
-              <Radio className="w-2.5 h-2.5 mr-1" />
-              {match.timeStr || "Live"}
-            </Badge>
-          )}
-          {isComplete && (
-            <Badge className="bg-muted text-muted-foreground text-[9px]" data-testid="badge-complete">
-              Full Time
-            </Badge>
-          )}
-          {!isLive && !isComplete && (
-            <Badge variant="outline" className="text-[9px]" data-testid="badge-upcoming">
-              Upcoming
-            </Badge>
-          )}
+          <div className="flex items-center gap-1.5">
+            {isClickable && (
+              <Badge variant="outline" className="text-[9px] gap-1" data-testid="badge-tap-synopsis">
+                <Sparkles className="w-2.5 h-2.5" />
+                Synopsis
+              </Badge>
+            )}
+            {isLive && (
+              <Badge className="bg-red-500 text-white text-[9px] animate-pulse" data-testid="badge-live">
+                <Radio className="w-2.5 h-2.5 mr-1" />
+                {match.timeStr || "Live"}
+              </Badge>
+            )}
+            {isComplete && (
+              <Badge className="bg-muted text-muted-foreground text-[9px]" data-testid="badge-complete">
+                Full Time
+              </Badge>
+            )}
+            {!isLive && !isComplete && (
+              <Badge variant="outline" className="text-[9px]" data-testid="badge-upcoming">
+                Upcoming
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -177,6 +439,7 @@ export default function SchedulePage() {
   }, [rounds]);
 
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
+  const [synopsisMatch, setSynopsisMatch] = useState<Fixture | null>(null);
 
   const activeRound = selectedRound ?? (rounds.length > 0 ? rounds[0] : 0);
   const activeGroup = data?.[String(activeRound)];
@@ -325,7 +588,11 @@ export default function SchedulePage() {
       {activeGroup ? (
         <div className="space-y-3">
           {activeGroup.matches.map((match) => (
-            <MatchCard key={match.id} match={match} />
+            <MatchCard
+              key={match.id}
+              match={match}
+              onClick={() => setSynopsisMatch(match)}
+            />
           ))}
         </div>
       ) : (
@@ -347,6 +614,16 @@ export default function SchedulePage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {synopsisMatch && (
+        <MatchSynopsisDialog
+          match={synopsisMatch}
+          open={!!synopsisMatch}
+          onOpenChange={(open) => {
+            if (!open) setSynopsisMatch(null);
+          }}
+        />
       )}
     </div>
   );

@@ -2,11 +2,11 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertMyTeamPlayerSchema, users, feedback } from "@shared/schema";
+import { insertMyTeamPlayerSchema, users, feedback, players, weeklyStats } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import {
   calcTradeEV,
   calcTradeRankingScore,
@@ -1196,6 +1196,151 @@ export async function registerRoutes(
       const matches = await getFixturesByRound(round);
       res.json({ round, roundName: getRoundName(round), matches });
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fixtures/:round/match-synopsis", async (req, res) => {
+    try {
+      const round = parseInt(req.params.round);
+      const homeTeam = req.query.home as string;
+      const awayTeam = req.query.away as string;
+      if (!homeTeam || !awayTeam) {
+        return res.status(400).json({ message: "home and away query params are required" });
+      }
+
+      const matchPlayers = await db
+        .select()
+        .from(players)
+        .where(inArray(players.team, [homeTeam, awayTeam]));
+
+      const playerIds = matchPlayers.map(p => p.id);
+      let stats: any[] = [];
+      if (playerIds.length > 0) {
+        stats = await db
+          .select()
+          .from(weeklyStats)
+          .where(and(inArray(weeklyStats.playerId, playerIds), eq(weeklyStats.round, round)));
+      }
+
+      if (stats.length === 0) {
+        return res.json({
+          synopsis: "No stats available yet for this match. Check back once the game has been played.",
+          topPerformers: [],
+          keyObservations: [],
+          highlightsUrl: null,
+        });
+      }
+
+      const statsMap = new Map(stats.map(s => [s.playerId, s]));
+      const playerStats = matchPlayers
+        .filter(p => statsMap.has(p.id))
+        .map(p => {
+          const s = statsMap.get(p.id)!;
+          return {
+            name: p.name,
+            team: p.team,
+            position: p.position,
+            dualPosition: p.dualPosition,
+            avgScore: p.avgScore,
+            fantasyScore: s.fantasyScore,
+            kicks: s.kickCount ?? 0,
+            handballs: s.handballCount ?? 0,
+            marks: s.markCount ?? 0,
+            tackles: s.tackleCount ?? 0,
+            hitouts: s.hitouts ?? 0,
+            goals: s.goalsKicked ?? 0,
+            behinds: s.behindsKicked ?? 0,
+            tog: s.timeOnGroundPercent,
+            cba: s.centreBounceAttendancePercent,
+            i50: s.inside50s ?? 0,
+            r50: s.rebound50s ?? 0,
+            contestedPoss: s.contestedPossessions ?? 0,
+            uncontestedPoss: s.uncontestedPossessions ?? 0,
+            freesAgainst: s.freesAgainst ?? 0,
+            subFlag: s.subFlag,
+            scoreDiff: p.avgScore ? Math.round(s.fantasyScore - p.avgScore) : null,
+          };
+        })
+        .sort((a, b) => b.fantasyScore - a.fantasyScore);
+
+      const homeStats = playerStats.filter(p => p.team === homeTeam);
+      const awayStats = playerStats.filter(p => p.team === awayTeam);
+
+      const topPerformers = playerStats.slice(0, 6).map(p => ({
+        name: p.name,
+        team: p.team,
+        position: p.position,
+        score: p.fantasyScore,
+        scoreDiff: p.scoreDiff,
+        subFlag: p.subFlag,
+      }));
+
+      const prompt = `You are an expert AFL Fantasy analyst. Analyse this match from a FANTASY FOOTBALL perspective.
+
+Match: ${homeTeam} vs ${awayTeam} (Round ${round})
+
+HOME TEAM (${homeTeam}) player stats:
+${homeStats.map(p => `${p.name} (${p.position}${p.dualPosition ? '/' + p.dualPosition : ''}): ${p.fantasyScore}pts (avg ${p.avgScore?.toFixed(0) ?? '?'}, diff ${p.scoreDiff ? (p.scoreDiff >= 0 ? '+' : '') + p.scoreDiff : '?'}) | K${p.kicks} H${p.handballs} M${p.marks} T${p.tackles} G${p.goals}.${p.behinds} | TOG:${p.tog ? p.tog.toFixed(0) + '%' : '?'} CBA:${p.cba ? p.cba.toFixed(0) + '%' : '?'} | CP:${p.contestedPoss} UP:${p.uncontestedPoss}${p.hitouts ? ' HO:' + p.hitouts : ''}${p.subFlag ? ' [SUBBED/INJURED]' : ''}`).join('\n')}
+
+AWAY TEAM (${awayTeam}) player stats:
+${awayStats.map(p => `${p.name} (${p.position}${p.dualPosition ? '/' + p.dualPosition : ''}): ${p.fantasyScore}pts (avg ${p.avgScore?.toFixed(0) ?? '?'}, diff ${p.scoreDiff ? (p.scoreDiff >= 0 ? '+' : '') + p.scoreDiff : '?'}) | K${p.kicks} H${p.handballs} M${p.marks} T${p.tackles} G${p.goals}.${p.behinds} | TOG:${p.tog ? p.tog.toFixed(0) + '%' : '?'} CBA:${p.cba ? p.cba.toFixed(0) + '%' : '?'} | CP:${p.contestedPoss} UP:${p.uncontestedPoss}${p.hitouts ? ' HO:' + p.hitouts : ''}${p.subFlag ? ' [SUBBED/INJURED]' : ''}`).join('\n')}
+
+Respond with a JSON object (no markdown) with these fields:
+{
+  "synopsis": "A 3-4 sentence summary of the match from a fantasy perspective — who dominated, key storylines, overall scoring environment",
+  "keyObservations": [
+    {
+      "player": "Player Name",
+      "team": "Team Name",
+      "type": "role_change|injury|tag|breakout|bust|sub|watch",
+      "observation": "One sentence describing the fantasy-relevant observation"
+    }
+  ]
+}
+
+Focus on:
+- Players who scored WAY above or below average (breakout/bust)
+- Players with sub flags (injured/subbed out) — flag these as needing monitoring
+- Role changes: significant CBA% changes, position shifts, increased/decreased TOG
+- Tagging: players with unusually low scores who may have been tagged
+- Emerging cheapies or rookies who scored well
+- Players with high frees-against (discipline issues)
+
+Return 5-10 key observations, prioritised by fantasy relevance.`;
+
+      const OpenAI = (await import("openai")).default;
+      const aiClient = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await aiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.4,
+        max_tokens: 1200,
+      });
+
+      const raw = completion.choices[0]?.message?.content || "";
+      let parsed: any;
+      try {
+        const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        parsed = { synopsis: raw, keyObservations: [] };
+      }
+
+      const highlightsUrl = `https://www.afl.com.au/video?tags=highlights&rounds=CD_R0260140${String(round).padStart(2, '0')}`;
+
+      res.json({
+        synopsis: parsed.synopsis || "",
+        topPerformers,
+        keyObservations: parsed.keyObservations || [],
+        highlightsUrl,
+      });
+    } catch (error: any) {
+      console.error("[MatchSynopsis] Error:", error.message);
       res.status(500).json({ message: error.message });
     }
   });

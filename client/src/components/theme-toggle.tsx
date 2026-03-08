@@ -10,6 +10,7 @@ export function ThemeToggle() {
       size="icon"
       variant="ghost"
       onClick={toggleTheme}
+      className="text-sidebar-foreground hover:text-sidebar-primary hover:bg-sidebar-accent"
       data-testid="button-theme-toggle"
     >
       {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

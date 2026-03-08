@@ -86,12 +86,12 @@ function AuthenticatedApp() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between gap-2 px-3 py-2 border-b h-12 shrink-0 sticky top-0 z-50 bg-background">
+          <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-sidebar-border h-12 shrink-0 sticky top-0 z-50 bg-sidebar text-sidebar-foreground">
             <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9" />
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9 text-sidebar-foreground hover:text-sidebar-primary" />
               <div className="flex items-center gap-1.5 sm:hidden">
                 <img src={logoImg} alt="AFL Fantasy Machine" className="w-8 h-8 object-contain" data-testid="img-mobile-header-logo" />
-                <span className="text-sm font-semibold tracking-tight">AFL Fantasy Machine</span>
+                <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">AFL Fantasy Machine</span>
               </div>
             </div>
             <ThemeToggle />
