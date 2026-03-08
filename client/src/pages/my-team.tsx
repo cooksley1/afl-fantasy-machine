@@ -351,9 +351,10 @@ function FieldView({
         const bench = benchByPos(pos);
         if (onField.length === 0 && bench.length === 0) return null;
 
-        const half = Math.ceil(onField.length / 2);
-        const topRow = pos === "RUC" ? onField : onField.slice(0, half);
-        const bottomRow = pos === "RUC" ? [] : onField.slice(half);
+        const allPlayers = [...onField, ...bench];
+        const half = Math.ceil(allPlayers.length / 2);
+        const topRow = pos === "RUC" ? allPlayers : allPlayers.slice(0, half);
+        const bottomRow = pos === "RUC" ? [] : allPlayers.slice(half);
 
         return (
           <div key={pos} className="relative" data-testid={`field-group-${pos.toLowerCase()}`}>
@@ -362,38 +363,17 @@ function FieldView({
                 {positionLabel(pos)}
               </span>
               <div className="flex-1 h-px bg-border/40" />
-              {bench.length > 0 && (
-                <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide px-2">
-                  Bench ({bench.length})
-                </span>
-              )}
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
               {topRow.map((p) => (
-                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
+                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} />
               ))}
             </div>
             {bottomRow.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
                 {bottomRow.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} />
                 ))}
-              </div>
-            )}
-            {bench.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-dashed border-border/40">
-                <div className="flex items-center justify-center gap-2 mb-1.5" data-testid={`label-bench-${pos.toLowerCase()}`}>
-                  <div className="h-px flex-1 bg-border/30" />
-                  <span className="text-[9px] font-bold text-muted-foreground/70 uppercase tracking-widest px-2 bg-muted/50 rounded-full py-0.5">
-                    Bench
-                  </span>
-                  <div className="h-px flex-1 bg-border/30" />
-                </div>
-                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
-                  {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench hasPlayed={playedTeams.has(p.team)} />
-                  ))}
-                </div>
               </div>
             )}
           </div>
