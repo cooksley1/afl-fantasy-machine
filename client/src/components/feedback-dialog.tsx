@@ -45,7 +45,7 @@ export function FeedbackDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2" data-testid="button-open-feedback">
+        <Button variant="outline" size="sm" className="w-full justify-start gap-2" data-testid="button-open-feedback">
           <MessageSquare className="w-4 h-4" />
           <span className="text-sm">Send Feedback</span>
         </Button>

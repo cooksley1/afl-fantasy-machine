@@ -818,13 +818,83 @@ export async function registerRoutes(
 
       const resolvedPlayers: { match: typeof allPlayers[0]; fieldPos: string; ip: typeof identifiedPlayers[0] }[] = [];
 
-      for (const ip of identifiedPlayers) {
-        const normalName = ip.name.trim().toLowerCase();
-        const match = allPlayers.find(p => p.name.toLowerCase() === normalName) ||
-          allPlayers.find(p => {
-            const parts = p.name.toLowerCase().split(" ");
-            return parts[parts.length - 1] === normalName.split(" ").pop();
+      const levenshtein = (a: string, b: string): number => {
+        const m = a.length, n = b.length;
+        const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 0; i <= m; i++) dp[i][0] = i;
+        for (let j = 0; j <= n; j++) dp[0][j] = j;
+        for (let i = 1; i <= m; i++) {
+          for (let j = 1; j <= n; j++) {
+            dp[i][j] = a[i - 1] === b[j - 1]
+              ? dp[i - 1][j - 1]
+              : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+          }
+        }
+        return dp[m][n];
+      };
+
+      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers) => {
+        const normalName = inputName.trim().toLowerCase();
+        const exact = players.find(p => p.name.toLowerCase() === normalName);
+        if (exact) return exact;
+
+        const inputParts = normalName.split(/\s+/);
+        const inputSurname = inputParts[inputParts.length - 1];
+
+        const surnameMatch = players.find(p => {
+          const parts = p.name.toLowerCase().split(" ");
+          return parts[parts.length - 1] === inputSurname;
+        });
+        if (surnameMatch) return surnameMatch;
+
+        const containsMatch = players.find(p => {
+          const pLower = p.name.toLowerCase();
+          return pLower.includes(normalName) || normalName.includes(pLower);
+        });
+        if (containsMatch) return containsMatch;
+
+        if (inputParts.length >= 2) {
+          const partialMatch = players.find(p => {
+            const pLower = p.name.toLowerCase();
+            const pParts = pLower.split(/\s+/);
+            const pSurname = pParts[pParts.length - 1];
+            const pFirst = pParts[0];
+            return (pSurname === inputSurname && pFirst.startsWith(inputParts[0].substring(0, 3))) ||
+              (inputParts[0].length >= 3 && pFirst === inputParts[0] && levenshtein(pSurname, inputSurname) <= 2);
           });
+          if (partialMatch) return partialMatch;
+        }
+
+        const surnameMatches = players.filter(p => {
+          const pSurname = p.name.toLowerCase().split(/\s+/).pop() || "";
+          return levenshtein(pSurname, inputSurname) <= 2;
+        });
+        if (surnameMatches.length === 1) return surnameMatches[0];
+        if (surnameMatches.length > 1) {
+          const bestFullMatch = surnameMatches.reduce((best, p) => {
+            const dist = levenshtein(p.name.toLowerCase(), normalName);
+            return dist < best.dist ? { player: p, dist } : best;
+          }, { player: surnameMatches[0], dist: levenshtein(surnameMatches[0].name.toLowerCase(), normalName) });
+          if (bestFullMatch.dist <= 4) return bestFullMatch.player;
+        }
+
+        let bestMatch: typeof allPlayers[0] | null = null;
+        let bestDist = Infinity;
+        for (const p of players) {
+          const dist = levenshtein(p.name.toLowerCase(), normalName);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestMatch = p;
+          }
+        }
+        const maxAllowedDist = Math.max(3, Math.floor(normalName.length * 0.35));
+        if (bestMatch && bestDist <= maxAllowedDist) return bestMatch;
+
+        return null;
+      };
+
+      for (const ip of identifiedPlayers) {
+        const match = fuzzyMatchPlayer(ip.name, allPlayers);
 
         if (!match) {
           notFound.push(ip.name);

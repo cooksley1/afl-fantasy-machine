@@ -1,10 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -335,6 +334,82 @@ function PreGamePanel({ advice }: { advice: PreGameAdvice }) {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function CategoryFilterBar({
+  categories,
+  activeCategory,
+  allDeduped,
+  onCategoryChange,
+}: {
+  categories: typeof CATEGORIES;
+  activeCategory: string;
+  allDeduped: IntelReport[];
+  onCategoryChange: (id: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      ro.disconnect();
+    };
+  }, [updateScrollState]);
+
+  return (
+    <div className="relative" data-testid="filter-categories">
+      {canScrollLeft && (
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+      )}
+      {canScrollRight && (
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+      )}
+      <div
+        ref={scrollRef}
+        className="flex gap-1.5 sm:gap-2 pb-2 overflow-x-auto scrollbar-thin"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        {categories.map((cat) => {
+          const count =
+            cat.id === "all"
+              ? allDeduped.length
+              : allDeduped.filter((r) => r.category === cat.id).length;
+          const isActive = activeCategory === cat.id;
+          return (
+            <Button
+              key={cat.id}
+              variant={isActive ? "default" : "secondary"}
+              size="sm"
+              onClick={() => onCategoryChange(cat.id)}
+              className="whitespace-nowrap text-xs sm:text-sm shrink-0"
+              data-testid={`button-category-${cat.id}`}
+            >
+              <cat.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5" />
+              {cat.label}
+              {count > 0 && (
+                <span className="ml-1 sm:ml-1.5 text-[10px] opacity-70">({count})</span>
+              )}
+            </Button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -739,33 +814,12 @@ export default function IntelHub() {
         </span>
       </div>
 
-      <ScrollArea className="w-full">
-        <div className="flex gap-1.5 sm:gap-2 pb-2">
-          {CATEGORIES.map((cat) => {
-            const count =
-              cat.id === "all"
-                ? allDeduped.length
-                : allDeduped.filter((r) => r.category === cat.id).length;
-            const isActive = activeCategory === cat.id;
-            return (
-              <Button
-                key={cat.id}
-                variant={isActive ? "default" : "secondary"}
-                size="sm"
-                onClick={() => { setActiveCategory(cat.id); setDisplayCount(ITEMS_PER_PAGE); }}
-                className="whitespace-nowrap text-xs sm:text-sm"
-                data-testid={`button-category-${cat.id}`}
-              >
-                <cat.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5" />
-                {cat.label}
-                {count > 0 && (
-                  <span className="ml-1 sm:ml-1.5 text-[10px] opacity-70">({count})</span>
-                )}
-              </Button>
-            );
-          })}
-        </div>
-      </ScrollArea>
+      <CategoryFilterBar
+        categories={CATEGORIES}
+        activeCategory={activeCategory}
+        allDeduped={allDeduped}
+        onCategoryChange={(id) => { setActiveCategory(id); setDisplayCount(ITEMS_PER_PAGE); }}
+      />
 
       {processedReports.length === 0 && (
         <Card>

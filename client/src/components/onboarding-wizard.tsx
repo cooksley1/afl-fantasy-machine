@@ -16,10 +16,10 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
-import { Camera, Users, ArrowRight, Loader2, Smartphone, Share2, Download, Upload, DollarSign, Sparkles, Brain } from "lucide-react";
+import { Camera, Users, ArrowRight, Loader2, Smartphone, Share2, Download, Upload, DollarSign, Sparkles, Brain, SkipForward } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { LeagueSettings } from "@shared/schema";
+import type { LeagueSettings, Player } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026 } from "@shared/game-rules";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import teamScreenshotImg from "@assets/my_team_null_2026-03-03_21-58-17_1772535572033.png";
@@ -70,6 +70,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const { data: settings } = useQuery<LeagueSettings>({
     queryKey: ["/api/settings"],
   });
+
+  const { data: myTeamData } = useQuery<{ players: Player[] }>({
+    queryKey: ["/api/my-team"],
+  });
+
+  const hasExistingTeam = (myTeamData?.players?.length ?? 0) > 0;
 
   const form = useForm<SettingsForm>({
     resolver: zodResolver(settingsFormSchema),
@@ -195,6 +201,19 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 Let's Get Started
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
+              {hasExistingTeam && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    completeOnboarding();
+                    navigate("/team");
+                  }}
+                  data-testid="button-skip-existing-team"
+                >
+                  <SkipForward className="w-4 h-4 mr-2" />
+                  Skip — I already have a team
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
@@ -322,6 +341,30 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   Choose how you'd like to set up your squad
                 </p>
               </div>
+
+              {hasExistingTeam && (
+                <Card
+                  className="hover-elevate cursor-pointer border-primary/50"
+                  onClick={() => {
+                    completeOnboarding();
+                    navigate("/team");
+                  }}
+                  data-testid="card-go-to-my-team"
+                >
+                  <CardContent className="flex items-center gap-3 py-4">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Users className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm" data-testid="text-go-to-team-title">Go to My Team</p>
+                      <p className="text-xs text-muted-foreground">
+                        You already have {myTeamData?.players?.length} players — skip setup
+                      </p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                  </CardContent>
+                </Card>
+              )}
 
               <Card
                 className={`hover-elevate cursor-pointer border-primary/30 ${buildTeamMutation.isPending ? "pointer-events-none opacity-80" : ""}`}

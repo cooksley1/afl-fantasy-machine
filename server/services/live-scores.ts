@@ -646,6 +646,100 @@ function inferPosition(stats: FootywirePlayerStat): string {
   return "MID";
 }
 
+async function fetchFromSquigglePlayerStats(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let fetched = 0;
+  let updated = 0;
+
+  try {
+    const year = new Date().getFullYear();
+    const url = `https://api.squiggle.com.au/?q=players;year=${year};round=${round}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      errors.push(`Squiggle player stats API returned ${res.status}`);
+      return { fetched: 0, updated: 0, errors };
+    }
+
+    const data = await res.json();
+    const squigglePlayers = data.players || [];
+    if (squigglePlayers.length === 0) {
+      errors.push(`No player stats available from Squiggle for round ${round}`);
+      return { fetched: 0, updated: 0, errors };
+    }
+
+    const allDbPlayers = await db.select().from(players);
+    const nameMap = new Map(allDbPlayers.map(p => [p.name.toLowerCase(), p]));
+    const lastNameMap = new Map<string, typeof allDbPlayers[0][]>();
+    for (const p of allDbPlayers) {
+      const parts = p.name.split(" ");
+      const ln = parts[parts.length - 1].toLowerCase();
+      if (!lastNameMap.has(ln)) lastNameMap.set(ln, []);
+      lastNameMap.get(ln)!.push(p);
+    }
+
+    for (const sp of squigglePlayers) {
+      const playerName = `${sp.firstname || ""} ${sp.surname || ""}`.trim();
+      if (!playerName) continue;
+
+      let dbPlayer = nameMap.get(playerName.toLowerCase());
+      if (!dbPlayer) {
+        const surname = (sp.surname || "").toLowerCase();
+        const candidates = lastNameMap.get(surname) || [];
+        if (candidates.length === 1) dbPlayer = candidates[0];
+        else if (candidates.length > 1) {
+          const firstName = (sp.firstname || "").toLowerCase();
+          dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstName));
+        }
+      }
+
+      if (!dbPlayer) continue;
+
+      const kicks = sp.kicks || 0;
+      const handballs = sp.handballs || 0;
+      const marks = sp.marks || 0;
+      const tackles = sp.tackles || 0;
+      const hitouts = sp.hitouts || 0;
+      const goals = sp.goals || 0;
+      const behinds = sp.behinds || 0;
+      const freesAgainst = sp.freesagainst || 0;
+
+      const fantasyScore = sp.supercoach || calcFantasyScore({
+        kicks, handballs, marks, tackles, hitouts, goals, behinds, freesAgainst,
+      });
+
+      const fpStat: FootywirePlayerStat = {
+        name: playerName,
+        team: sp.team || dbPlayer.team,
+        kicks, handballs, marks, goals, behinds, tackles, hitouts,
+        freesAgainst,
+        fantasyScore,
+        inside50s: sp.inside50s || 0,
+        rebound50s: sp.rebound50s || 0,
+      };
+
+      await upsertPlayerStats(dbPlayer, round, fpStat, null);
+      updated++;
+      fetched++;
+    }
+
+    if (updated > 0) {
+      console.log(`[LiveScores] Squiggle: Fetched ${fetched} player stats, updated ${updated} for round ${round}`);
+    }
+  } catch (e: any) {
+    errors.push(`Squiggle fetch error: ${e.message}`);
+    console.error("[LiveScores] Squiggle player stats error:", e.message);
+  }
+
+  return { fetched, updated, errors };
+}
+
 export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
   const errors: string[] = [];
   let fetched = 0;
@@ -654,11 +748,6 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
   try {
     const year = new Date().getFullYear();
     const matchIds = await fetchFootywireMatchIds(year);
-
-    if (matchIds.length === 0) {
-      errors.push("No matches found on Footywire for this season");
-      return { fetched: 0, updated: 0, errors };
-    }
 
     const allDbPlayers = await db.select().from(players);
     const nameMap = new Map(allDbPlayers.map(p => [p.name.toLowerCase(), p]));
@@ -670,80 +759,90 @@ export async function fetchAndStorePlayerScores(round: number): Promise<{ fetche
       lastNameMap.get(lastName)!.push(p);
     }
 
-    for (const mid of matchIds) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`https://www.footywire.com/afl/footy/ft_match_statistics?mid=${mid}`, {
-          headers: { "User-Agent": UA },
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        if (!res.ok) continue;
+    if (matchIds.length > 0) {
+      for (const mid of matchIds) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const res = await fetch(`https://www.footywire.com/afl/footy/ft_match_statistics?mid=${mid}`, {
+            headers: { "User-Agent": UA },
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          if (!res.ok) continue;
 
-        const html = await res.text();
-        const parsed = parseFootywireMatchPage(html);
-        if (!parsed) continue;
-        if (parsed.round !== round) continue;
+          const html = await res.text();
+          const parsed = parseFootywireMatchPage(html);
+          if (!parsed) continue;
+          if (parsed.round !== round) continue;
 
-        fetched += parsed.players.length;
+          fetched += parsed.players.length;
 
-        for (const fp of parsed.players) {
-          let dbPlayer = nameMap.get(fp.name.toLowerCase());
+          for (const fp of parsed.players) {
+            let dbPlayer = nameMap.get(fp.name.toLowerCase());
 
-          if (!dbPlayer) {
-            const parts = fp.name.split(" ");
-            const lastName = parts[parts.length - 1].toLowerCase();
-            const candidates = lastNameMap.get(lastName) || [];
-            if (candidates.length === 1) {
-              dbPlayer = candidates[0];
-            } else if (candidates.length > 1) {
-              const firstName = parts[0].toLowerCase();
-              dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstName));
+            if (!dbPlayer) {
+              const parts = fp.name.split(" ");
+              const lastName = parts[parts.length - 1].toLowerCase();
+              const candidates = lastNameMap.get(lastName) || [];
+              if (candidates.length === 1) {
+                dbPlayer = candidates[0];
+              } else if (candidates.length > 1) {
+                const firstName = parts[0].toLowerCase();
+                dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstName));
+              }
             }
-          }
 
-          if (!dbPlayer) {
-            const inferredPosition = inferPosition(fp);
-            try {
-              const [newPlayer] = await db.insert(players).values({
-                name: fp.name,
-                team: fp.team,
-                position: inferredPosition,
-                price: 200000,
-                avgScore: fp.fantasyScore,
-                last3Avg: fp.fantasyScore,
-                last5Avg: fp.fantasyScore,
-                gamesPlayed: 0,
-                isDebutant: true,
-                isNamedTeam: true,
-              }).returning();
-              dbPlayer = newPlayer;
-              nameMap.set(fp.name.toLowerCase(), newPlayer);
-              const lnParts = fp.name.split(" ");
-              const ln = lnParts[lnParts.length - 1].toLowerCase();
-              if (!lastNameMap.has(ln)) lastNameMap.set(ln, []);
-              lastNameMap.get(ln)!.push(newPlayer);
-              console.log(`[LiveScores] Auto-added missing player: ${fp.name} (${fp.team}, ${inferredPosition})`);
-            } catch (insertErr: any) {
-              console.error(`[LiveScores] Failed to auto-add player ${fp.name}:`, insertErr.message);
-              continue;
+            if (!dbPlayer) {
+              const inferredPosition = inferPosition(fp);
+              try {
+                const [newPlayer] = await db.insert(players).values({
+                  name: fp.name,
+                  team: fp.team,
+                  position: inferredPosition,
+                  price: 200000,
+                  avgScore: fp.fantasyScore,
+                  last3Avg: fp.fantasyScore,
+                  last5Avg: fp.fantasyScore,
+                  gamesPlayed: 0,
+                  isDebutant: true,
+                  isNamedTeam: true,
+                }).returning();
+                dbPlayer = newPlayer;
+                nameMap.set(fp.name.toLowerCase(), newPlayer);
+                const lnParts = fp.name.split(" ");
+                const ln = lnParts[lnParts.length - 1].toLowerCase();
+                if (!lastNameMap.has(ln)) lastNameMap.set(ln, []);
+                lastNameMap.get(ln)!.push(newPlayer);
+                console.log(`[LiveScores] Auto-added missing player: ${fp.name} (${fp.team}, ${inferredPosition})`);
+              } catch (insertErr: any) {
+                console.error(`[LiveScores] Failed to auto-add player ${fp.name}:`, insertErr.message);
+                continue;
+              }
             }
-          }
 
-          const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
-          await upsertPlayerStats(dbPlayer, round, fp, opponent);
-          updated++;
+            const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
+            await upsertPlayerStats(dbPlayer, round, fp, opponent);
+            updated++;
+          }
+        } catch (matchErr: any) {
+          console.error(`[LiveScores] Error fetching match ${mid}:`, matchErr.message);
         }
-      } catch (matchErr: any) {
-        console.error(`[LiveScores] Error fetching match ${mid}:`, matchErr.message);
       }
     }
 
     if (fetched === 0) {
-      errors.push(`No completed matches found on Footywire for round ${round}. Stats may not be available yet.`);
+      console.log(`[LiveScores] Footywire returned no stats for round ${round}, trying Squiggle fallback...`);
+      const squiggleResult = await fetchFromSquigglePlayerStats(round);
+      fetched = squiggleResult.fetched;
+      updated = squiggleResult.updated;
+      errors.push(...squiggleResult.errors);
     } else {
       console.log(`[LiveScores] Footywire: Fetched ${fetched} player stats, updated ${updated} in DB for round ${round}`);
+    }
+
+    if (fetched === 0 && errors.length === 0) {
+      errors.push(`No player stats available for round ${round} from any source. The round may not have started yet.`);
     }
   } catch (e: any) {
     errors.push(`Fetch error: ${e.message}`);

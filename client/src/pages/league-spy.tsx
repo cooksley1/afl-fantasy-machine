@@ -6,10 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Eye, Plus, Trash2, Pencil, Upload, Target, Users, TrendingUp, TrendingDown, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp, X, Check, ImageUp } from "lucide-react";
+import { Loader2, Eye, Plus, Trash2, Pencil, Upload, Target, Users, TrendingUp, TrendingDown, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp, X, Check, ImageUp, Trophy, ArrowUpDown, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { LeagueOpponent } from "@shared/schema";
+import type { LeagueOpponent, LeagueSettings } from "@shared/schema";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface MatchupData {
   opponentName: string;
@@ -596,9 +604,137 @@ function ImportLeagueDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   );
 }
 
+interface LadderEntry {
+  name: string;
+  totalScore: number | null;
+  lastRoundScore: number | null;
+  isUser: boolean;
+  opponentId?: number;
+}
+
+type SortField = "position" | "totalScore" | "lastRoundScore";
+type SortDirection = "asc" | "desc";
+
+function LeagueLadder({ opponents, leagueName }: { opponents: LeagueOpponent[]; leagueName: string }) {
+  const [sortField, setSortField] = useState<SortField>("totalScore");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const { data: settings } = useQuery<LeagueSettings>({
+    queryKey: ["/api/settings"],
+  });
+
+  const leagueOpponents = opponents.filter(o => o.leagueName === leagueName);
+
+  const entries: LadderEntry[] = [
+    ...leagueOpponents.map(o => ({
+      name: o.opponentName,
+      totalScore: o.totalScore,
+      lastRoundScore: o.lastRoundScore,
+      isUser: false,
+      opponentId: o.id,
+    })),
+    {
+      name: settings?.teamName || "My Team",
+      totalScore: null,
+      lastRoundScore: null,
+      isUser: true,
+    },
+  ];
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "desc" ? "asc" : "desc");
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+  };
+
+  const sorted = [...entries].sort((a, b) => {
+    const valA = sortField === "totalScore" ? (a.totalScore ?? -1) : (a.lastRoundScore ?? -1);
+    const valB = sortField === "totalScore" ? (b.totalScore ?? -1) : (b.lastRoundScore ?? -1);
+    return sortDirection === "desc" ? valB - valA : valA - valB;
+  });
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 text-muted-foreground/50" />;
+    return sortDirection === "desc"
+      ? <ChevronDown className="w-3 h-3 ml-1" />
+      : <ChevronUp className="w-3 h-3 ml-1" />;
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Trophy className="w-4 h-4 text-amber-500" />
+          <CardTitle className="text-sm" data-testid="text-ladder-title">{leagueName} Ladder</CardTitle>
+        </div>
+        <Badge variant="outline" className="text-[10px]" data-testid="badge-ladder-count">{sorted.length} teams</Badge>
+      </CardHeader>
+      <CardContent className="p-0 pb-2">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10 text-center">#</TableHead>
+              <TableHead>Team</TableHead>
+              <TableHead className="text-right">
+                <button
+                  className="inline-flex items-center text-xs font-medium"
+                  onClick={() => handleSort("totalScore")}
+                  data-testid="button-sort-total"
+                >
+                  Total
+                  <SortIcon field="totalScore" />
+                </button>
+              </TableHead>
+              <TableHead className="text-right">
+                <button
+                  className="inline-flex items-center text-xs font-medium"
+                  onClick={() => handleSort("lastRoundScore")}
+                  data-testid="button-sort-last-round"
+                >
+                  Last Rd
+                  <SortIcon field="lastRoundScore" />
+                </button>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.map((entry, idx) => (
+              <TableRow
+                key={entry.isUser ? "user" : entry.opponentId}
+                className={entry.isUser ? "bg-accent/10 font-medium" : ""}
+                data-testid={`row-ladder-${entry.isUser ? "user" : entry.opponentId}`}
+              >
+                <TableCell className="text-center text-xs text-muted-foreground" data-testid={`text-ladder-pos-${idx}`}>
+                  {idx + 1}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm" data-testid={`text-ladder-name-${idx}`}>{entry.name}</span>
+                    {entry.isUser && <Badge variant="secondary" className="text-[8px]">You</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-sm" data-testid={`text-ladder-total-${idx}`}>
+                  {entry.totalScore != null ? entry.totalScore.toLocaleString() : <Minus className="w-3 h-3 inline text-muted-foreground/40" />}
+                </TableCell>
+                <TableCell className="text-right text-sm" data-testid={`text-ladder-lastrd-${idx}`}>
+                  {entry.lastRoundScore != null ? entry.lastRoundScore.toLocaleString() : <Minus className="w-3 h-3 inline text-muted-foreground/40" />}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function LeagueSpy() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [activeView, setActiveView] = useState<"opponents" | "ladder">("opponents");
 
   const { data: opponents, isLoading } = useQuery<LeagueOpponent[]>({
     queryKey: ["/api/league/opponents"],
@@ -622,34 +758,57 @@ export default function LeagueSpy() {
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={activeView === "opponents" ? "default" : "outline"}
+            onClick={() => setActiveView("opponents")}
+            data-testid="button-view-opponents"
+          >
+            <Users className="w-3 h-3 mr-1.5" />
+            Opponents
+          </Button>
+          <Button
+            size="sm"
+            variant={activeView === "ladder" ? "default" : "outline"}
+            onClick={() => setActiveView("ladder")}
+            data-testid="button-view-ladder"
+          >
+            <Trophy className="w-3 h-3 mr-1.5" />
+            Ladder
+          </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowImportDialog(true)}
+            data-testid="button-import-league"
+          >
+            <ImageUp className="w-3 h-3 mr-1.5" />
+            Import League
+          </Button>
+          <Button
+            size="sm"
+            variant={showAddForm ? "default" : "outline"}
+            onClick={() => setShowAddForm(!showAddForm)}
+            data-testid="button-toggle-add-form"
+          >
+            {showAddForm ? <X className="w-3 h-3 mr-1.5" /> : <Plus className="w-3 h-3 mr-1.5" />}
+            {showAddForm ? "Cancel" : "New Opponent"}
+          </Button>
+        </div>
+      </div>
+
+      {showAddForm && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
             <h2 className="text-sm font-semibold" data-testid="text-add-section-title">Add Opponent</h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowImportDialog(true)}
-                data-testid="button-import-league"
-              >
-                <ImageUp className="w-3 h-3 mr-1.5" />
-                Import League
-              </Button>
-              <Button
-                size="sm"
-                variant={showAddForm ? "default" : "outline"}
-                onClick={() => setShowAddForm(!showAddForm)}
-                data-testid="button-toggle-add-form"
-              >
-                {showAddForm ? <X className="w-3 h-3 mr-1.5" /> : <Plus className="w-3 h-3 mr-1.5" />}
-                {showAddForm ? "Cancel" : "New Opponent"}
-              </Button>
-            </div>
-          </div>
-          {showAddForm && <AddOpponentForm onSuccess={() => setShowAddForm(false)} />}
-        </CardContent>
-      </Card>
+            <AddOpponentForm onSuccess={() => setShowAddForm(false)} />
+          </CardContent>
+        </Card>
+      )}
 
       <ImportLeagueDialog open={showImportDialog} onOpenChange={setShowImportDialog} />
 
@@ -666,6 +825,12 @@ export default function LeagueSpy() {
             </p>
           </CardContent>
         </Card>
+      ) : activeView === "ladder" ? (
+        <div className="space-y-4">
+          {leagues.map((league) => (
+            <LeagueLadder key={league} opponents={opponents} leagueName={league} />
+          ))}
+        </div>
       ) : leagues.length === 1 ? (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide" data-testid="text-league-title">

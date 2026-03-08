@@ -544,12 +544,35 @@ export async function buildOptimalTeam(options?: { excludePlayerIds?: Set<number
     }
   }
 
-  while (selected.length < 30 && viable.some(p => !usedIds.has(p.id))) {
+  while (selected.length < 30) {
     const remaining = viable.filter(p => !usedIds.has(p.id)).sort((a, b) => (a.price || 0) - (b.price || 0));
     if (remaining.length === 0) break;
     const p = remaining[0];
     const pos = getPlayerPrimaryPosition(p);
-    addPlayer(p, pos, false, "Extra fill to reach 30 players");
+    if (!addPlayer(p, pos, false, "Extra fill to reach 30 players")) {
+      break;
+    }
+  }
+
+  if (totalCost > SALARY_CAP) {
+    const benchByPrice = [...selected]
+      .filter(p => !p.isOnField)
+      .sort((a, b) => b.price - a.price);
+    for (const expensive of benchByPrice) {
+      if (totalCost <= SALARY_CAP) break;
+      const idx = selected.indexOf(expensive);
+      if (idx !== -1) {
+        totalCost -= expensive.price;
+        usedIds.delete(expensive.id);
+        selected.splice(idx, 1);
+      }
+    }
+    const cheapFills = viable.filter(p => !usedIds.has(p.id)).sort((a, b) => (a.price || 0) - (b.price || 0));
+    for (const p of cheapFills) {
+      if (selected.length >= 30) break;
+      const pos = getPlayerPrimaryPosition(p);
+      addPlayer(p, pos, false, "Budget-safe bench fill");
+    }
   }
 
   const byeCoverage = { r12: 0, r13: 0, r14: 0 };

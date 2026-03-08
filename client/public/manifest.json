@@ -1,0 +1,24 @@
+{
+  "name": "AFL Fantasy Machine",
+  "short_name": "AFL Fantasy",
+  "description": "AI-powered Fantasy AFL advisor covering player form, injuries, DPP value, captain loophole strategy, and more.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
