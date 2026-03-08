@@ -285,7 +285,7 @@ export default function Players() {
             </div>
           </div>
 
-          <div className="grid grid-cols-6 gap-1 mt-3 pt-2.5 border-t border-border/50">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mt-3 pt-2.5 border-t border-border/50">
             <div className="text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
               <p className="text-sm font-mono font-medium" data-testid={`text-avg-${player.id}`}>

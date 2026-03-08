@@ -213,33 +213,27 @@ function WinnerTracker({ comparison }: { comparison: WinnerComparison }) {
           <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">Behind Pace</Badge>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-1">
-            <span className={`text-sm font-bold ${comparison.scoreDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              {comparison.yourScore.toLocaleString()}
-            </span>
-            <span className="text-[10px] text-muted-foreground">/ {comparison.winnerAvgScore.toLocaleString()}</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Score ({scorePct}%)</p>
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        <div className="text-center space-y-0.5">
+          <span className={`text-xs sm:text-sm font-bold block ${comparison.scoreDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+            {comparison.yourScore.toLocaleString()}
+          </span>
+          <span className="text-[9px] sm:text-[10px] text-muted-foreground block">/ {comparison.winnerAvgScore.toLocaleString()}</span>
+          <p className="text-[9px] sm:text-[10px] text-muted-foreground">Score ({scorePct}%)</p>
         </div>
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-1">
-            <span className={`text-sm font-bold ${comparison.valueDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              ${(comparison.yourTeamValue / 1000000).toFixed(1)}M
-            </span>
-            <span className="text-[10px] text-muted-foreground">/ ${(comparison.winnerTeamValue / 1000000).toFixed(1)}M</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Team Value</p>
+        <div className="text-center space-y-0.5">
+          <span className={`text-xs sm:text-sm font-bold block ${comparison.valueDiff >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+            ${(comparison.yourTeamValue / 1000000).toFixed(1)}M
+          </span>
+          <span className="text-[9px] sm:text-[10px] text-muted-foreground block">/ ${(comparison.winnerTeamValue / 1000000).toFixed(1)}M</span>
+          <p className="text-[9px] sm:text-[10px] text-muted-foreground">Team Value</p>
         </div>
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-1">
-            <span className={`text-sm font-bold ${comparison.yourPremiums >= comparison.winnerPremiums ? "text-emerald-600" : "text-red-600"}`}>
-              {comparison.yourPremiums}
-            </span>
-            <span className="text-[10px] text-muted-foreground">/ {comparison.winnerPremiums}</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Premiums</p>
+        <div className="text-center space-y-0.5">
+          <span className={`text-xs sm:text-sm font-bold block ${comparison.yourPremiums >= comparison.winnerPremiums ? "text-emerald-600" : "text-red-600"}`}>
+            {comparison.yourPremiums}
+          </span>
+          <span className="text-[9px] sm:text-[10px] text-muted-foreground block">/ {comparison.winnerPremiums}</span>
+          <p className="text-[9px] sm:text-[10px] text-muted-foreground">Premiums</p>
         </div>
       </div>
     </div>
@@ -288,34 +282,48 @@ function SquadRoster({ squad, title }: { squad: SquadPlayer[]; title: string }) 
               <div className="grid grid-cols-1 gap-1">
                 {(grouped[pos] || []).sort((a, b) => b.avgScore - a.avgScore).map(p => (
                   <div key={p.id} data-testid={`roster-player-${p.id}`}>
-                    <div className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${p.isOnField ? "bg-muted/30" : "bg-muted/10 opacity-70"}`}>
-                      <span className="font-medium flex-1">{p.name}</span>
-                      <span className="text-muted-foreground text-[10px] shrink-0">{p.team}</span>
-                      <span className="font-semibold shrink-0">{p.avgScore}</span>
-                      <Badge variant="outline" className={`text-[8px] px-1 py-0 ${roleColors[p.role] || ""}`}>
-                        {p.role}
-                      </Badge>
-                      <span className="text-muted-foreground text-[10px] shrink-0">${(p.price / 1000).toFixed(0)}k</span>
-                      {p.peakRound && (
-                        <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20">
-                          Peak R{p.peakRound}
+                    <div className={`rounded px-2 py-1.5 text-xs ${p.isOnField ? "bg-muted/30" : "bg-muted/10 opacity-70"}`}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-medium truncate">{p.name}</span>
+                        <span className="text-muted-foreground text-[10px] shrink-0">{p.team}</span>
+                        <span className="font-semibold shrink-0">{p.avgScore}</span>
+                        <Badge variant="outline" className={`text-[8px] px-1 py-0 shrink-0 ${roleColors[p.role] || ""}`}>
+                          {p.role}
                         </Badge>
-                      )}
-                      {p.ceilingScore && (
-                        <span className="text-[10px] text-muted-foreground/60 shrink-0">ceil {p.ceilingScore}</span>
-                      )}
-                      {p.narrative && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 w-5 p-0 shrink-0"
-                          onClick={() => toggleNarrative(p.id)}
-                          data-testid={`button-narrative-${p.id}`}
-                        >
-                          {expandedNarratives.has(p.id)
-                            ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
-                            : <BookOpen className="w-3 h-3 text-muted-foreground" />}
-                        </Button>
+                        <span className="text-muted-foreground text-[10px] shrink-0">${(p.price / 1000).toFixed(0)}k</span>
+                        {p.peakRound && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20 shrink-0 hidden sm:inline-flex">
+                            Peak R{p.peakRound}
+                          </Badge>
+                        )}
+                        {p.ceilingScore && (
+                          <span className="text-[10px] text-muted-foreground/60 shrink-0 hidden sm:inline">ceil {p.ceilingScore}</span>
+                        )}
+                        {p.narrative && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 shrink-0"
+                            onClick={() => toggleNarrative(p.id)}
+                            data-testid={`button-narrative-${p.id}`}
+                          >
+                            {expandedNarratives.has(p.id)
+                              ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
+                              : <BookOpen className="w-3 h-3 text-muted-foreground" />}
+                          </Button>
+                        )}
+                      </div>
+                      {(p.peakRound || p.ceilingScore) && (
+                        <div className="flex items-center gap-1.5 mt-0.5 sm:hidden">
+                          {p.peakRound && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20">
+                              Peak R{p.peakRound}
+                            </Badge>
+                          )}
+                          {p.ceilingScore && (
+                            <span className="text-[10px] text-muted-foreground/60">ceil {p.ceilingScore}</span>
+                          )}
+                        </div>
                       )}
                     </div>
                     {p.narrative && expandedNarratives.has(p.id) && (
@@ -390,47 +398,51 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
       data-testid={`card-round-${plan.round}`}
     >
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer select-none"
+        className="flex items-start gap-2 sm:gap-3 p-3 sm:p-4 cursor-pointer select-none"
         onClick={() => setOpen(!open)}
         data-testid={`button-toggle-round-${plan.round}`}
       >
-        {open ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-          <span className="font-bold text-sm" data-testid={`text-round-number-${plan.round}`}>
-            R{plan.round}
-          </span>
-          <Badge variant="outline" className={`text-[10px] ${phaseColors[plan.phase] || ""}`} data-testid={`badge-phase-${plan.round}`}>
-            {plan.phaseName}
-          </Badge>
-          {isCurrentRound && (
-            <Badge className="bg-primary text-primary-foreground text-[10px]" data-testid="badge-current-round">
-              Current
-            </Badge>
-          )}
-          {plan.flags.some(f => f.includes("BYE")) && (
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]" data-testid={`badge-bye-${plan.round}`}>
-              BYE
-            </Badge>
-          )}
-          {plan.flags.some(f => f.includes("LOOPHOLE")) && (
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
-              Loophole
-            </Badge>
-          )}
+        {open ? <ChevronDown className="w-4 h-4 shrink-0 mt-0.5" /> : <ChevronRight className="w-4 h-4 shrink-0 mt-0.5" />}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <span className="font-bold text-sm" data-testid={`text-round-number-${plan.round}`}>
+                R{plan.round}
+              </span>
+              <Badge variant="outline" className={`text-[10px] ${phaseColors[plan.phase] || ""}`} data-testid={`badge-phase-${plan.round}`}>
+                {plan.phaseName}
+              </Badge>
+              {isCurrentRound && (
+                <Badge className="bg-primary text-primary-foreground text-[10px]" data-testid="badge-current-round">
+                  Current
+                </Badge>
+              )}
+              {plan.flags.some(f => f.includes("BYE")) && (
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]" data-testid={`badge-bye-${plan.round}`}>
+                  BYE
+                </Badge>
+              )}
+              {plan.flags.some(f => f.includes("LOOPHOLE")) && (
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
+                  Loophole
+                </Badge>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-sm font-semibold" data-testid={`text-projected-score-${plan.round}`}>
+                {plan.projectedTeamScore.toLocaleString()} pts
+              </p>
+              <p className="text-[10px] text-muted-foreground">{plan.keyMetrics.projectedRank}</p>
+            </div>
+          </div>
           {plan.winnerComparison && (
             <Badge
               variant="outline"
-              className={`text-[10px] ${plan.winnerComparison.onTrack ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}
+              className={`text-[10px] mt-1 ${plan.winnerComparison.onTrack ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}
             >
               {plan.winnerComparison.scoreDiff >= 0 ? "+" : ""}{Math.round(plan.winnerComparison.scoreDiff)} vs winners
             </Badge>
           )}
-        </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-semibold" data-testid={`text-projected-score-${plan.round}`}>
-            {plan.projectedTeamScore.toLocaleString()} pts
-          </p>
-          <p className="text-[10px] text-muted-foreground">{plan.keyMetrics.projectedRank}</p>
         </div>
       </div>
 
@@ -529,26 +541,26 @@ function RoundCard({ plan, isCurrentRound, defaultOpen, myTeam }: { plan: Weekly
                   className="rounded-md border p-3 space-y-2"
                   data-testid={`trade-${plan.round}-${i}`}
                 >
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">OUT</Badge>
-                      <span className="text-sm font-medium">{trade.playerOut.name}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {trade.playerOut.team} · {trade.playerOut.position} · avg {trade.playerOut.avgScore} · ${(trade.playerOut.price / 1000).toFixed(0)}k
-                        {trade.playerOut.breakEven != null ? ` · BE ${trade.playerOut.breakEven}` : ""}
-                      </span>
+                      <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] shrink-0">OUT</Badge>
+                      <span className="text-xs sm:text-sm font-medium truncate">{trade.playerOut.name}</span>
                     </div>
+                    <p className="text-[10px] text-muted-foreground pl-9 sm:pl-10">
+                      {trade.playerOut.team} · avg {trade.playerOut.avgScore} · ${(trade.playerOut.price / 1000).toFixed(0)}k
+                      {trade.playerOut.breakEven != null ? ` · BE ${trade.playerOut.breakEven}` : ""}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">IN</Badge>
-                      <span className="text-sm font-medium">{trade.playerIn.name}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {trade.playerIn.team} · {trade.playerIn.position} · avg {trade.playerIn.avgScore} · ${(trade.playerIn.price / 1000).toFixed(0)}k
-                        {trade.playerIn.ppm != null ? ` · ${trade.playerIn.ppm} PPM` : ""}
-                        {trade.playerIn.owned < 15 ? ` · ${trade.playerIn.owned}% owned (POD)` : ""}
-                      </span>
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] shrink-0">IN</Badge>
+                      <span className="text-xs sm:text-sm font-medium truncate">{trade.playerIn.name}</span>
                     </div>
+                    <p className="text-[10px] text-muted-foreground pl-9 sm:pl-10">
+                      {trade.playerIn.team} · avg {trade.playerIn.avgScore} · ${(trade.playerIn.price / 1000).toFixed(0)}k
+                      {trade.playerIn.ppm != null ? ` · ${trade.playerIn.ppm} PPM` : ""}
+                      {trade.playerIn.owned < 15 ? ` · ${trade.playerIn.owned}% owned` : ""}
+                    </p>
                   </div>
                   <div className="flex items-center gap-3 text-[11px]">
                     <span className={`font-semibold ${trade.pointsGain >= 0 ? "text-emerald-600" : "text-red-600"}`}>

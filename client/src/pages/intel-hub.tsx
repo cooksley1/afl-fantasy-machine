@@ -504,47 +504,53 @@ export default function IntelHub() {
             Live data from all 18 AFL clubs, AFL.com.au, Squiggle + AI analysis
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <Button
             onClick={() => gatherMutation.mutate()}
             disabled={gatherMutation.isPending}
             variant="outline"
             size="sm"
+            className="text-xs sm:text-sm"
             data-testid="button-gather-intel"
           >
             {gatherMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
             ) : (
-              <Satellite className="w-4 h-4 mr-1.5" />
+              <Satellite className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
             )}
-            {gatherMutation.isPending ? "Gathering..." : "Gather Data"}
+            <span className="hidden sm:inline">{gatherMutation.isPending ? "Gathering..." : "Gather Data"}</span>
+            <span className="sm:hidden">{gatherMutation.isPending ? "..." : "Gather"}</span>
           </Button>
           <Button
             onClick={() => preGameMutation.mutate()}
             disabled={preGameMutation.isPending}
             variant="outline"
             size="sm"
+            className="text-xs sm:text-sm"
             data-testid="button-pregame"
           >
             {preGameMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
             ) : (
-              <Siren className="w-4 h-4 mr-1.5" />
+              <Siren className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
             )}
-            {preGameMutation.isPending ? "Loading..." : "Pre-Game"}
+            <span className="hidden sm:inline">{preGameMutation.isPending ? "Loading..." : "Pre-Game"}</span>
+            <span className="sm:hidden">{preGameMutation.isPending ? "..." : "Pre-G"}</span>
           </Button>
           <Button
             onClick={() => generateMutation.mutate()}
             disabled={generateMutation.isPending}
             size="sm"
+            className="text-xs sm:text-sm"
             data-testid="button-generate-intel"
           >
             {generateMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
             ) : (
-              <Brain className="w-4 h-4 mr-1.5" />
+              <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
             )}
-            {generateMutation.isPending ? "Analysing..." : "AI Analysis"}
+            <span className="hidden sm:inline">{generateMutation.isPending ? "Analysing..." : "AI Analysis"}</span>
+            <span className="sm:hidden">{generateMutation.isPending ? "..." : "AI"}</span>
           </Button>
         </div>
       </div>

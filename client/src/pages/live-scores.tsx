@@ -353,7 +353,7 @@ function PlayerScoreRow({ player, round, expanded, onToggle }: {
       {expanded && (
         <div className="px-3 pb-2">
           {player.disposals > 0 || player.marks > 0 || player.tackles > 0 || player.hitouts > 0 ? (
-            <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+            <div className="grid grid-cols-4 sm:grid-cols-4 gap-1 sm:gap-1.5 text-[10px]">
               <div className="bg-muted/50 rounded px-2 py-1 text-center">
                 <div className="font-bold">{player.kicks}</div>
                 <div className="text-muted-foreground">Kicks</div>
