@@ -446,15 +446,13 @@ export default function LiveScoresPage() {
       const result = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/live-scores", selectedRound] });
       if (result.updated > 0) {
-        toast({ title: "Scores fetched", description: `Updated ${result.updated} player scores from Squiggle` });
-      } else if (result.errors?.length > 0) {
-        toast({ title: "No scores available", description: result.errors[0], variant: "destructive" });
+        toast({ title: "Scores fetched", description: `Updated ${result.updated} player scores` });
       } else {
         toast({ title: "No new scores", description: "No player stats found for this round yet" });
       }
     },
-    onError: (e: any) => {
-      toast({ title: "Fetch failed", description: e.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: "No new scores", description: "Could not fetch scores right now — try again later" });
     },
   });
 
