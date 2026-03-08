@@ -49,22 +49,22 @@ export interface IStorage {
   getPlayer(id: number): Promise<Player | undefined>;
   createPlayer(player: InsertPlayer): Promise<Player>;
 
-  getMyTeam(): Promise<PlayerWithTeamInfo[]>;
-  addToMyTeam(entry: InsertMyTeamPlayer): Promise<MyTeamPlayer>;
-  removeFromMyTeam(id: number): Promise<void>;
-  clearMyTeam(): Promise<void>;
-  setCaptain(id: number): Promise<void>;
-  setViceCaptain(id: number): Promise<void>;
-  updateMyTeamPlayer(id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void>;
+  getMyTeam(userId: string): Promise<PlayerWithTeamInfo[]>;
+  addToMyTeam(userId: string, entry: InsertMyTeamPlayer): Promise<MyTeamPlayer>;
+  removeFromMyTeam(userId: string, id: number): Promise<void>;
+  clearMyTeam(userId: string): Promise<void>;
+  setCaptain(userId: string, id: number): Promise<void>;
+  setViceCaptain(userId: string, id: number): Promise<void>;
+  updateMyTeamPlayer(userId: string, id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void>;
 
-  getTradeRecommendations(): Promise<TradeRecommendationWithPlayers[]>;
-  createTradeRecommendation(rec: InsertTradeRec): Promise<TradeRecommendation>;
-  clearTradeRecommendations(): Promise<void>;
-  getTradeRecommendation(id: number): Promise<TradeRecommendation | undefined>;
-  deleteTradeRecommendation(id: number): Promise<void>;
+  getTradeRecommendations(userId: string): Promise<TradeRecommendationWithPlayers[]>;
+  createTradeRecommendation(userId: string, rec: InsertTradeRec): Promise<TradeRecommendation>;
+  clearTradeRecommendations(userId: string): Promise<void>;
+  getTradeRecommendation(userId: string, id: number): Promise<TradeRecommendation | undefined>;
+  deleteTradeRecommendation(userId: string, id: number): Promise<void>;
 
-  getSettings(): Promise<LeagueSettings>;
-  updateSettings(settings: Partial<InsertLeagueSettings>): Promise<LeagueSettings>;
+  getSettings(userId: string): Promise<LeagueSettings>;
+  updateSettings(userId: string, settings: Partial<InsertLeagueSettings>): Promise<LeagueSettings>;
 
   getIntelReports(): Promise<IntelReport[]>;
   getIntelReportsSince(since: Date): Promise<IntelReport[]>;
@@ -104,19 +104,19 @@ export interface IStorage {
   upsertModelWeight(weight: InsertModelWeight): Promise<ModelWeight>;
   deleteModelWeight(key: string): Promise<void>;
 
-  getSavedTeams(): Promise<SavedTeam[]>;
-  getSavedTeam(id: number): Promise<SavedTeam | undefined>;
-  createSavedTeam(data: InsertSavedTeam): Promise<SavedTeam>;
-  updateSavedTeam(id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam>;
-  deleteSavedTeam(id: number): Promise<void>;
-  activateSavedTeam(id: number): Promise<void>;
-  saveCurrentTeamAsVariant(name: string, description: string | null, source: string): Promise<SavedTeam>;
+  getSavedTeams(userId: string): Promise<SavedTeam[]>;
+  getSavedTeam(userId: string, id: number): Promise<SavedTeam | undefined>;
+  createSavedTeam(userId: string, data: InsertSavedTeam): Promise<SavedTeam>;
+  updateSavedTeam(userId: string, id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam>;
+  deleteSavedTeam(userId: string, id: number): Promise<void>;
+  activateSavedTeam(userId: string, id: number): Promise<void>;
+  saveCurrentTeamAsVariant(userId: string, name: string, description: string | null, source: string): Promise<SavedTeam>;
 
-  getLeagueOpponents(leagueName?: string): Promise<LeagueOpponent[]>;
-  getLeagueOpponent(id: number): Promise<LeagueOpponent | undefined>;
-  createLeagueOpponent(data: InsertLeagueOpponent): Promise<LeagueOpponent>;
-  updateLeagueOpponent(id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent>;
-  deleteLeagueOpponent(id: number): Promise<void>;
+  getLeagueOpponents(userId: string, leagueName?: string): Promise<LeagueOpponent[]>;
+  getLeagueOpponent(userId: string, id: number): Promise<LeagueOpponent | undefined>;
+  createLeagueOpponent(userId: string, data: InsertLeagueOpponent): Promise<LeagueOpponent>;
+  updateLeagueOpponent(userId: string, id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent>;
+  deleteLeagueOpponent(userId: string, id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -134,8 +134,8 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getMyTeam(): Promise<PlayerWithTeamInfo[]> {
-    const teamEntries = await db.select().from(myTeamPlayers);
+  async getMyTeam(userId: string): Promise<PlayerWithTeamInfo[]> {
+    const teamEntries = await db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
     const result: PlayerWithTeamInfo[] = [];
 
     const playerIds = teamEntries.map(e => e.playerId);
@@ -184,49 +184,50 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async addToMyTeam(entry: InsertMyTeamPlayer): Promise<MyTeamPlayer> {
-    const [created] = await db.insert(myTeamPlayers).values(entry).returning();
+  async addToMyTeam(userId: string, entry: InsertMyTeamPlayer): Promise<MyTeamPlayer> {
+    const [created] = await db.insert(myTeamPlayers).values({ ...entry, userId }).returning();
     return created;
   }
 
-  async removeFromMyTeam(id: number): Promise<void> {
-    await db.delete(myTeamPlayers).where(eq(myTeamPlayers.id, id));
+  async removeFromMyTeam(userId: string, id: number): Promise<void> {
+    await db.delete(myTeamPlayers).where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
   }
 
-  async updateMyTeamPlayer(id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void> {
-    await db.update(myTeamPlayers).set(data).where(eq(myTeamPlayers.id, id));
+  async updateMyTeamPlayer(userId: string, id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void> {
+    await db.update(myTeamPlayers).set(data).where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
   }
 
-  async clearMyTeam(): Promise<void> {
-    await db.delete(myTeamPlayers);
+  async clearMyTeam(userId: string): Promise<void> {
+    await db.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
   }
 
-  async setCaptain(id: number): Promise<void> {
+  async setCaptain(userId: string, id: number): Promise<void> {
     await db
       .update(myTeamPlayers)
       .set({ isCaptain: false })
-      .where(eq(myTeamPlayers.isCaptain, true));
+      .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isCaptain, true)));
     await db
       .update(myTeamPlayers)
       .set({ isCaptain: true, isViceCaptain: false })
-      .where(eq(myTeamPlayers.id, id));
+      .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
   }
 
-  async setViceCaptain(id: number): Promise<void> {
+  async setViceCaptain(userId: string, id: number): Promise<void> {
     await db
       .update(myTeamPlayers)
       .set({ isViceCaptain: false })
-      .where(eq(myTeamPlayers.isViceCaptain, true));
+      .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isViceCaptain, true)));
     await db
       .update(myTeamPlayers)
       .set({ isViceCaptain: true, isCaptain: false })
-      .where(eq(myTeamPlayers.id, id));
+      .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
   }
 
-  async getTradeRecommendations(): Promise<TradeRecommendationWithPlayers[]> {
+  async getTradeRecommendations(userId: string): Promise<TradeRecommendationWithPlayers[]> {
     const recs = await db
       .select()
       .from(tradeRecommendations)
+      .where(eq(tradeRecommendations.userId, userId))
       .orderBy(desc(tradeRecommendations.confidence));
     const result: TradeRecommendationWithPlayers[] = [];
 
@@ -247,40 +248,42 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async createTradeRecommendation(rec: InsertTradeRec): Promise<TradeRecommendation> {
+  async createTradeRecommendation(userId: string, rec: InsertTradeRec): Promise<TradeRecommendation> {
     const [created] = await db
       .insert(tradeRecommendations)
-      .values(rec)
+      .values({ ...rec, userId })
       .returning();
     return created;
   }
 
-  async clearTradeRecommendations(): Promise<void> {
-    await db.delete(tradeRecommendations);
+  async clearTradeRecommendations(userId: string): Promise<void> {
+    await db.delete(tradeRecommendations).where(eq(tradeRecommendations.userId, userId));
   }
 
   async getTradeRecommendation(
+    userId: string,
     id: number
   ): Promise<TradeRecommendation | undefined> {
     const [rec] = await db
       .select()
       .from(tradeRecommendations)
-      .where(eq(tradeRecommendations.id, id));
+      .where(and(eq(tradeRecommendations.id, id), eq(tradeRecommendations.userId, userId)));
     return rec;
   }
 
-  async deleteTradeRecommendation(id: number): Promise<void> {
+  async deleteTradeRecommendation(userId: string, id: number): Promise<void> {
     await db
       .delete(tradeRecommendations)
-      .where(eq(tradeRecommendations.id, id));
+      .where(and(eq(tradeRecommendations.id, id), eq(tradeRecommendations.userId, userId)));
   }
 
-  async getSettings(): Promise<LeagueSettings> {
-    const [existing] = await db.select().from(leagueSettings);
+  async getSettings(userId: string): Promise<LeagueSettings> {
+    const [existing] = await db.select().from(leagueSettings).where(eq(leagueSettings.userId, userId));
     if (existing) return existing;
     const [created] = await db
       .insert(leagueSettings)
       .values({
+        userId,
         teamName: "My Team",
         salaryCap: 10000000,
         currentRound: 1,
@@ -292,13 +295,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSettings(
+    userId: string,
     settings: Partial<InsertLeagueSettings>
   ): Promise<LeagueSettings> {
-    const existing = await this.getSettings();
+    const existing = await this.getSettings(userId);
     const [updated] = await db
       .update(leagueSettings)
       .set(settings)
-      .where(eq(leagueSettings.id, existing.id))
+      .where(and(eq(leagueSettings.id, existing.id), eq(leagueSettings.userId, userId)))
       .returning();
     return updated;
   }
@@ -475,41 +479,42 @@ export class DatabaseStorage implements IStorage {
     await db.delete(modelWeights).where(eq(modelWeights.key, key));
   }
 
-  async getSavedTeams(): Promise<SavedTeam[]> {
-    return db.select().from(savedTeams).orderBy(desc(savedTeams.createdAt));
+  async getSavedTeams(userId: string): Promise<SavedTeam[]> {
+    return db.select().from(savedTeams).where(eq(savedTeams.userId, userId)).orderBy(desc(savedTeams.createdAt));
   }
 
-  async getSavedTeam(id: number): Promise<SavedTeam | undefined> {
-    const [team] = await db.select().from(savedTeams).where(eq(savedTeams.id, id));
+  async getSavedTeam(userId: string, id: number): Promise<SavedTeam | undefined> {
+    const [team] = await db.select().from(savedTeams).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId)));
     return team;
   }
 
-  async createSavedTeam(data: InsertSavedTeam): Promise<SavedTeam> {
-    const [created] = await db.insert(savedTeams).values(data).returning();
+  async createSavedTeam(userId: string, data: InsertSavedTeam): Promise<SavedTeam> {
+    const [created] = await db.insert(savedTeams).values({ ...data, userId }).returning();
     return created;
   }
 
-  async updateSavedTeam(id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam> {
-    const [updated] = await db.update(savedTeams).set(data).where(eq(savedTeams.id, id)).returning();
+  async updateSavedTeam(userId: string, id: number, data: Partial<InsertSavedTeam>): Promise<SavedTeam> {
+    const [updated] = await db.update(savedTeams).set(data).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId))).returning();
     return updated;
   }
 
-  async deleteSavedTeam(id: number): Promise<void> {
-    await db.delete(savedTeams).where(eq(savedTeams.id, id));
+  async deleteSavedTeam(userId: string, id: number): Promise<void> {
+    await db.delete(savedTeams).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId)));
   }
 
-  async activateSavedTeam(id: number): Promise<void> {
-    await db.update(savedTeams).set({ isActive: false });
-    await db.update(savedTeams).set({ isActive: true }).where(eq(savedTeams.id, id));
+  async activateSavedTeam(userId: string, id: number): Promise<void> {
+    await db.update(savedTeams).set({ isActive: false }).where(eq(savedTeams.userId, userId));
+    await db.update(savedTeams).set({ isActive: true }).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId)));
 
-    const team = await this.getSavedTeam(id);
+    const team = await this.getSavedTeam(userId, id);
     if (!team) throw new Error("Saved team not found");
 
     const playerEntries: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }> = JSON.parse(team.playerData);
 
-    await db.delete(myTeamPlayers);
+    await db.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
     for (const entry of playerEntries) {
       await db.insert(myTeamPlayers).values({
+        userId,
         playerId: entry.playerId,
         isOnField: entry.isOnField,
         isCaptain: entry.isCaptain,
@@ -519,8 +524,8 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async saveCurrentTeamAsVariant(name: string, description: string | null, source: string): Promise<SavedTeam> {
-    const teamEntries = await db.select().from(myTeamPlayers);
+  async saveCurrentTeamAsVariant(userId: string, name: string, description: string | null, source: string): Promise<SavedTeam> {
+    const teamEntries = await db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
     const allPlayers = await db.select().from(players);
     const playerMap = new Map(allPlayers.map(p => [p.id, p]));
 
@@ -544,7 +549,7 @@ export class DatabaseStorage implements IStorage {
         return sum + (p?.avgScore || 0);
       }, 0);
 
-    return this.createSavedTeam({
+    return this.createSavedTeam(userId, {
       name,
       description,
       playerData: JSON.stringify(playerData),
@@ -555,32 +560,32 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getLeagueOpponents(leagueName?: string): Promise<LeagueOpponent[]> {
+  async getLeagueOpponents(userId: string, leagueName?: string): Promise<LeagueOpponent[]> {
     if (leagueName) {
       return db.select().from(leagueOpponents)
-        .where(eq(leagueOpponents.leagueName, leagueName))
+        .where(and(eq(leagueOpponents.userId, userId), eq(leagueOpponents.leagueName, leagueName)))
         .orderBy(desc(leagueOpponents.createdAt));
     }
-    return db.select().from(leagueOpponents).orderBy(desc(leagueOpponents.createdAt));
+    return db.select().from(leagueOpponents).where(eq(leagueOpponents.userId, userId)).orderBy(desc(leagueOpponents.createdAt));
   }
 
-  async getLeagueOpponent(id: number): Promise<LeagueOpponent | undefined> {
-    const [opp] = await db.select().from(leagueOpponents).where(eq(leagueOpponents.id, id));
+  async getLeagueOpponent(userId: string, id: number): Promise<LeagueOpponent | undefined> {
+    const [opp] = await db.select().from(leagueOpponents).where(and(eq(leagueOpponents.id, id), eq(leagueOpponents.userId, userId)));
     return opp;
   }
 
-  async createLeagueOpponent(data: InsertLeagueOpponent): Promise<LeagueOpponent> {
-    const [created] = await db.insert(leagueOpponents).values(data).returning();
+  async createLeagueOpponent(userId: string, data: InsertLeagueOpponent): Promise<LeagueOpponent> {
+    const [created] = await db.insert(leagueOpponents).values({ ...data, userId }).returning();
     return created;
   }
 
-  async updateLeagueOpponent(id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent> {
-    const [updated] = await db.update(leagueOpponents).set(data).where(eq(leagueOpponents.id, id)).returning();
+  async updateLeagueOpponent(userId: string, id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent> {
+    const [updated] = await db.update(leagueOpponents).set(data).where(and(eq(leagueOpponents.id, id), eq(leagueOpponents.userId, userId))).returning();
     return updated;
   }
 
-  async deleteLeagueOpponent(id: number): Promise<void> {
-    await db.delete(leagueOpponents).where(eq(leagueOpponents.id, id));
+  async deleteLeagueOpponent(userId: string, id: number): Promise<void> {
+    await db.delete(leagueOpponents).where(and(eq(leagueOpponents.id, id), eq(leagueOpponents.userId, userId)));
   }
 }
 

@@ -109,6 +109,7 @@ export const projections = pgTable("projections", {
 
 export const myTeamPlayers = pgTable("my_team_players", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
   playerId: integer("player_id").notNull(),
   isOnField: boolean("is_on_field").notNull().default(true),
   isCaptain: boolean("is_captain").notNull().default(false),
@@ -118,6 +119,7 @@ export const myTeamPlayers = pgTable("my_team_players", {
 
 export const tradeRecommendations = pgTable("trade_recommendations", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
   playerOutId: integer("player_out_id").notNull(),
   playerInId: integer("player_in_id").notNull(),
   reason: text("reason").notNull(),
@@ -136,6 +138,7 @@ export const tradeRecommendations = pgTable("trade_recommendations", {
 
 export const leagueSettings = pgTable("league_settings", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
   teamName: text("team_name").notNull().default("My Team"),
   salaryCap: integer("salary_cap").notNull().default(18300000),
   currentRound: integer("current_round").notNull().default(1),
@@ -354,6 +357,7 @@ export type InsertTagMatchupHistory = z.infer<typeof insertTagMatchupHistorySche
 
 export const savedTeams = pgTable("saved_teams", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
   name: text("name").notNull(),
   description: text("description").default(null),
   playerData: text("player_data").notNull(),
@@ -366,6 +370,7 @@ export const savedTeams = pgTable("saved_teams", {
 
 export const leagueOpponents = pgTable("league_opponents", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
   leagueName: text("league_name").notNull(),
   opponentName: text("opponent_name").notNull(),
   playerData: text("player_data").default(null),

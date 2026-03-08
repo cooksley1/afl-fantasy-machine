@@ -50,14 +50,15 @@ function updateUserSession(
   user.expires_at = user.claims?.exp;
 }
 
-async function upsertUser(claims: any) {
+async function upsertUser(claims: any, meta?: { userAgent?: string; ipAddress?: string }) {
   await authStorage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
-  });
+    replitUsername: claims["username"] || claims["preferred_username"] || null,
+  }, meta);
 }
 
 export async function setupAuth(app: Express) {
@@ -74,7 +75,6 @@ export async function setupAuth(app: Express) {
   ) => {
     const user = {};
     updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
     verified(null, user);
   };
 
@@ -113,9 +113,21 @@ export async function setupAuth(app: Express) {
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
-    })(req, res, next);
+    })(req, res, async () => {
+      try {
+        const user = req.user as any;
+        if (user?.claims?.sub) {
+          await upsertUser(user.claims, {
+            userAgent: req.headers["user-agent"] || undefined,
+            ipAddress: (req.ip || req.headers["x-forwarded-for"]?.toString()) || undefined,
+          });
+        }
+      } catch (e) {
+        console.error("Post-login metadata capture error:", e);
+      }
+      res.redirect("/");
+    });
   });
 
   app.get("/api/logout", (req, res) => {

@@ -73,6 +73,27 @@ function ScrollToTop({ mainRef }: { mainRef: React.RefObject<HTMLElement | null>
   return null;
 }
 
+function ImpersonationBanner() {
+  const { isImpersonating, impersonating, stopImpersonation } = useAuth();
+
+  if (!isImpersonating || !impersonating) return null;
+
+  const name = [impersonating.firstName, impersonating.lastName].filter(Boolean).join(" ") || impersonating.email || impersonating.id;
+
+  return (
+    <div className="bg-amber-500 text-black text-center py-1.5 px-3 text-xs font-medium flex items-center justify-center gap-2 shrink-0" data-testid="banner-impersonation">
+      <span>Viewing as: {name}</span>
+      <button
+        onClick={() => stopImpersonation()}
+        className="underline font-semibold hover:no-underline"
+        data-testid="button-stop-impersonation"
+      >
+        Stop
+      </button>
+    </div>
+  );
+}
+
 function AuthenticatedApp() {
   const mainRef = useRef<HTMLElement>(null);
   const [onboardingComplete, setOnboardingComplete] = useState(
@@ -88,6 +109,7 @@ function AuthenticatedApp() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
+          <ImpersonationBanner />
           <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-sidebar-border h-12 shrink-0 sticky top-0 z-50 bg-sidebar text-sidebar-foreground">
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="h-9 w-9 text-sidebar-foreground hover:text-sidebar-primary" />

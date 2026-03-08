@@ -1,7 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
+import { apiRequest } from "@/lib/queryClient";
 
-async function fetchUser(): Promise<User | null> {
+export type AuthUser = User & {
+  impersonating?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+  } | null;
+};
+
+async function fetchUser(): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
   });
@@ -23,7 +33,7 @@ async function logout(): Promise<void> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
@@ -37,11 +47,23 @@ export function useAuth() {
     },
   });
 
+  const stopImpersonationMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/stop-impersonation");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    },
+  });
+
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+    isImpersonating: !!user?.impersonating,
+    impersonating: user?.impersonating || null,
+    stopImpersonation: stopImpersonationMutation.mutate,
   };
 }

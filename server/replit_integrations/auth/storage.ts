@@ -1,12 +1,11 @@
 import { users, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
-// Interface for auth storage operations
-// (IMPORTANT) These user operations are mandatory for Replit Auth.
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
+  upsertUser(user: UpsertUser, meta?: { userAgent?: string; ipAddress?: string }): Promise<User>;
+  getAllUsers(): Promise<User[]>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -15,19 +14,40 @@ class AuthStorage implements IAuthStorage {
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
+  async upsertUser(userData: UpsertUser, meta?: { userAgent?: string; ipAddress?: string }): Promise<User> {
+    const existing = await this.getUser(userData.id!);
+    const now = new Date();
+
     const [user] = await db
       .insert(users)
-      .values(userData)
+      .values({
+        ...userData,
+        lastLoginAt: now,
+        loginCount: 1,
+        lastUserAgent: meta?.userAgent || null,
+        lastIpAddress: meta?.ipAddress || null,
+      })
       .onConflictDoUpdate({
         target: users.id,
         set: {
-          ...userData,
-          updatedAt: new Date(),
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          profileImageUrl: userData.profileImageUrl,
+          replitUsername: userData.replitUsername,
+          lastLoginAt: now,
+          loginCount: existing ? (existing.loginCount || 0) + 1 : 1,
+          lastUserAgent: meta?.userAgent || undefined,
+          lastIpAddress: meta?.ipAddress || undefined,
+          updatedAt: now,
         },
       })
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.createdAt);
   }
 }
 

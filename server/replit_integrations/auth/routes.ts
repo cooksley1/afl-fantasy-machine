@@ -13,7 +13,22 @@ export function registerAuthRoutes(app: Express): void {
       if (user.isBlocked) {
         return res.status(403).json({ message: "Your account has been suspended" });
       }
-      res.json(user);
+
+      const impersonateUserId = req.session?.impersonateUserId;
+      let impersonating = null;
+      if (impersonateUserId && user.isAdmin) {
+        const impersonatedUser = await authStorage.getUser(impersonateUserId);
+        if (impersonatedUser) {
+          impersonating = {
+            id: impersonatedUser.id,
+            firstName: impersonatedUser.firstName,
+            lastName: impersonatedUser.lastName,
+            email: impersonatedUser.email,
+          };
+        }
+      }
+
+      res.json({ ...user, impersonating });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });

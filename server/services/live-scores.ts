@@ -117,16 +117,22 @@ export async function fetchMatchStatuses(round?: number): Promise<MatchStatus[]>
   }
 }
 
-export async function getLiveRoundData(round?: number): Promise<LiveRoundData> {
-  const settings = await db.select().from(leagueSettings).limit(1);
-  const currentRound = round != null ? round : (settings[0]?.currentRound ?? 0);
+export async function getLiveRoundData(round?: number, userId?: string): Promise<LiveRoundData> {
+  let currentRound = round ?? 0;
+  if (userId) {
+    const settings = await db.select().from(leagueSettings).where(eq(leagueSettings.userId, userId)).limit(1);
+    if (!round && settings[0]) currentRound = settings[0].currentRound ?? 0;
+  } else {
+    const settings = await db.select().from(leagueSettings).limit(1);
+    if (!round && settings[0]) currentRound = settings[0].currentRound ?? 0;
+  }
 
   const matches = await fetchMatchStatuses(currentRound);
 
-  const myTeamResult = await db
-    .select()
-    .from(myTeamPlayers)
-    .innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+  const myTeamQuery = userId
+    ? db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId)).innerJoin(players, eq(myTeamPlayers.playerId, players.id))
+    : db.select().from(myTeamPlayers).innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+  const myTeamResult = await myTeamQuery;
 
   const playerIds = myTeamResult.map((row) => row.my_team_players.playerId);
   
@@ -397,7 +403,8 @@ async function fetchMatchFromFootywire(homeTeam: string, awayTeam: string, round
 export async function getMatchPlayers(
   homeTeam: string,
   awayTeam: string,
-  round: number
+  round: number,
+  userId?: string
 ): Promise<LivePlayerScore[]> {
   const allMatchPlayers = await db
     .select()
@@ -406,10 +413,10 @@ export async function getMatchPlayers(
       inArray(players.team, [homeTeam, awayTeam])
     );
 
-  const myTeamResult = await db
-    .select()
-    .from(myTeamPlayers)
-    .innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+  const myTeamQuery = userId
+    ? db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId)).innerJoin(players, eq(myTeamPlayers.playerId, players.id))
+    : db.select().from(myTeamPlayers).innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+  const myTeamResult = await myTeamQuery;
 
   const myTeamMap = new Map(
     myTeamResult.map((row) => [

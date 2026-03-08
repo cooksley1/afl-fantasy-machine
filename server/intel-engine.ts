@@ -82,10 +82,10 @@ function getDPPPlayers(players: Player[]): string {
     .join('\n');
 }
 
-export async function generateIntelReports(): Promise<void> {
+export async function generateIntelReports(userId: string): Promise<void> {
   const allPlayers = await storage.getAllPlayers();
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
 
   const playerData = buildPlayerSummary(allPlayers);
   const teamData = buildTeamSummary(myTeam);
@@ -272,10 +272,10 @@ Generate 10-14 reports. Prioritize the most impactful advice first.`;
   }
 }
 
-export async function generateAITradeRecommendations(): Promise<void> {
+export async function generateAITradeRecommendations(userId: string): Promise<void> {
   const allPlayers = await storage.getAllPlayers();
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
 
   if (myTeam.length === 0) {
     throw new Error("Add players to your team first");
@@ -353,14 +353,14 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
       throw new Error("AI returned no trade recommendations");
     }
 
-    await storage.clearTradeRecommendations();
+    await storage.clearTradeRecommendations(userId);
 
     for (const trade of trades) {
       const playerOut = myTeam.find(p => p.name === trade.playerOutName);
       const playerIn = availablePlayers.find(p => p.name === trade.playerInName);
 
       if (playerOut && playerIn) {
-        await storage.createTradeRecommendation({
+        await storage.createTradeRecommendation(userId, {
           playerOutId: playerOut.id,
           playerInId: playerIn.id,
           reason: trade.reason || "AI recommendation based on form analysis",
@@ -527,13 +527,13 @@ Extract ALL teams visible in the image. Position should be their ladder rank (1 
   }
 }
 
-export async function generateCaptainAdvice(): Promise<{
+export async function generateCaptainAdvice(userId: string): Promise<{
   vcPick: { name: string; reason: string; gameTime: string; projectedScore: number };
   captainPick: { name: string; reason: string; gameTime: string; projectedScore: number };
   loopholeThreshold: number;
   decisionTree: string;
 }> {
-  const myTeam = await storage.getMyTeam();
+  const myTeam = await storage.getMyTeam(userId);
   const onField = myTeam.filter(p => p.isOnField);
 
   const teamWithTimes = onField.map(p => ({
@@ -607,10 +607,10 @@ export interface TeamAnalysisResult {
   captainStrategy: string;
 }
 
-export async function analyzeMyTeam(): Promise<TeamAnalysisResult> {
+export async function analyzeMyTeam(userId: string): Promise<TeamAnalysisResult> {
   const allPlayers = await storage.getAllPlayers();
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
 
   if (myTeam.length === 0) {
     throw new Error("Add players to your team first");
@@ -731,13 +731,13 @@ export interface PlayerReport {
   keyStats: { label: string; value: string; trend: "up" | "down" | "stable" }[];
 }
 
-export async function generatePlayerReport(playerId: number): Promise<PlayerReport> {
+export async function generatePlayerReport(userId: string, playerId: number): Promise<PlayerReport> {
   const player = await storage.getPlayer(playerId);
   if (!player) throw new Error("Player not found");
 
   const allPlayers = await storage.getAllPlayers();
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
 
   const isOnMyTeam = myTeam.some(p => p.id === playerId);
   const samePositionPlayers = allPlayers

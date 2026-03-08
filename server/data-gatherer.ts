@@ -336,8 +336,8 @@ async function isDuplicate(title: string): Promise<boolean> {
   return existing.length > 0;
 }
 
-export async function gatherIntelligence(): Promise<{ fetched: number; processed: number }> {
-  const settings = await storage.getSettings();
+export async function gatherIntelligence(userId: string): Promise<{ fetched: number; processed: number }> {
+  const settings = await storage.getSettings(userId);
   const currentRound = settings.currentRound || 1;
 
   console.log(`[DataGatherer] Starting intelligence gathering for Round ${currentRound}...`);
@@ -380,11 +380,11 @@ export async function gatherIntelligence(): Promise<{ fetched: number; processed
 
   console.log(`[DataGatherer] Fetched ${fetched} new items from ${allItems.length} total`);
 
-  const processed = await processUnprocessedIntel();
+  const processed = await processUnprocessedIntel(userId);
   return { fetched, processed };
 }
 
-async function processUnprocessedIntel(): Promise<number> {
+async function processUnprocessedIntel(userId: string): Promise<number> {
   const unprocessed = await db.select()
     .from(intelSources)
     .where(eq(intelSources.isProcessed, false))
@@ -394,8 +394,8 @@ async function processUnprocessedIntel(): Promise<number> {
   if (unprocessed.length === 0) return 0;
 
   const allPlayers = await storage.getAllPlayers();
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
   const playerNames = allPlayers.map(p => p.name);
   const myTeamNames = myTeam.map(p => p.name);
 
@@ -515,14 +515,14 @@ Return JSON:
   }
 }
 
-export async function generatePreGameAdvice(): Promise<{
+export async function generatePreGameAdvice(userId: string): Promise<{
   tradeDeadlineAdvice: string;
   captainRecommendation: string;
   lastMinuteChanges: string[];
   playerAlerts: { name: string; alert: string; action: string }[];
 }> {
-  const myTeam = await storage.getMyTeam();
-  const settings = await storage.getSettings();
+  const myTeam = await storage.getMyTeam(userId);
+  const settings = await storage.getSettings(userId);
 
   if (myTeam.length === 0) {
     throw new Error("Add players to your team first");

@@ -23,6 +23,20 @@ import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
 
+function getUserId(req: Request): string {
+  const userId = (req.user as any)?.claims?.sub;
+  if (!userId) throw new Error("Not authenticated");
+  return userId;
+}
+
+function getEffectiveUserId(req: Request): string {
+  const session = (req as any).session;
+  if (session?.impersonateUserId) {
+    return session.impersonateUserId;
+  }
+  return getUserId(req);
+}
+
 function isAdmin(req: Request, res: Response, next: NextFunction) {
   const user = req.user as any;
   if (!user?.claims?.sub) {
@@ -83,9 +97,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/my-team", async (_req, res) => {
+  app.get("/api/my-team", async (req, res) => {
     try {
-      const team = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const team = await storage.getMyTeam(uid);
       res.json(team);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -101,13 +116,14 @@ export async function registerRoutes(
         })
         .parse(req.body);
 
-      const existing = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const existing = await storage.getMyTeam(uid);
       const alreadyOnTeam = existing.find((p) => p.id === data.playerId);
       if (alreadyOnTeam) {
         return res.status(400).json({ message: "Player already on team" });
       }
 
-      const entry = await storage.addToMyTeam({
+      const entry = await storage.addToMyTeam(uid, {
         playerId: data.playerId,
         isOnField: true,
         isCaptain: false,
@@ -122,7 +138,8 @@ export async function registerRoutes(
 
   app.delete("/api/my-team/:id", async (req, res) => {
     try {
-      await storage.removeFromMyTeam(parseInt(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.removeFromMyTeam(uid, parseInt(req.params.id));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -131,7 +148,8 @@ export async function registerRoutes(
 
   app.post("/api/my-team/:id/captain", async (req, res) => {
     try {
-      await storage.setCaptain(parseInt(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.setCaptain(uid, parseInt(req.params.id));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -140,7 +158,8 @@ export async function registerRoutes(
 
   app.post("/api/my-team/:id/vice-captain", async (req, res) => {
     try {
-      await storage.setViceCaptain(parseInt(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.setViceCaptain(uid, parseInt(req.params.id));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -155,7 +174,8 @@ export async function registerRoutes(
         fieldPosition: z.string().optional(),
       }).parse(req.body);
 
-      await storage.updateMyTeamPlayer(id, data);
+      const uid = getEffectiveUserId(req);
+      await storage.updateMyTeamPlayer(uid, id, data);
       res.json({ success: true });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -169,7 +189,8 @@ export async function registerRoutes(
         playerBId: z.number(),
       }).parse(req.body);
 
-      const team = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const team = await storage.getMyTeam(uid);
       const playerA = team.find(p => p.myTeamPlayerId === playerAId);
       const playerB = team.find(p => p.myTeamPlayerId === playerBId);
 
@@ -194,11 +215,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: `${playerB.name} cannot play ${bTargetPos}` });
       }
 
-      await storage.updateMyTeamPlayer(playerAId, {
+      await storage.updateMyTeamPlayer(uid, playerAId, {
         fieldPosition: aTargetPos,
         isOnField: playerB.isOnField!,
       });
-      await storage.updateMyTeamPlayer(playerBId, {
+      await storage.updateMyTeamPlayer(uid, playerBId, {
         fieldPosition: bTargetPos,
         isOnField: playerA.isOnField!,
       });
@@ -216,7 +237,8 @@ export async function registerRoutes(
         newPlayerId: z.number(),
       }).parse(req.body);
 
-      const team = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const team = await storage.getMyTeam(uid);
       const oldPlayer = team.find(p => p.myTeamPlayerId === myTeamPlayerId);
       if (!oldPlayer) {
         return res.status(404).json({ message: "Player not found on team" });
@@ -232,7 +254,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Player not found in database" });
       }
 
-      const settings = await storage.getSettings();
+      const settings = await storage.getSettings(uid);
       const salaryCap = settings.salaryCap || AFL_FANTASY_CLASSIC_2026.salaryCap;
       const currentTotal = team.reduce((sum, p) => sum + p.price, 0);
       const newTotal = currentTotal - oldPlayer.price + newPlayer.price;
@@ -248,8 +270,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: `${newPlayer.name} cannot play ${targetPos}` });
       }
 
-      await storage.removeFromMyTeam(myTeamPlayerId);
-      await storage.addToMyTeam({
+      await storage.removeFromMyTeam(uid, myTeamPlayerId);
+      await storage.addToMyTeam(uid, {
         playerId: newPlayerId,
         isOnField: oldPlayer.isOnField!,
         isCaptain: false,
@@ -263,7 +285,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/my-team/setup-glens-team", async (_req, res) => {
+  app.post("/api/my-team/setup-glens-team", async (req, res) => {
     try {
       const allPlayers = await storage.getAllPlayers();
       const findPlayer = (name: string) => allPlayers.find(p => p.name === name);
@@ -362,7 +384,8 @@ export async function registerRoutes(
         }
       }
 
-      await storage.clearMyTeam();
+      const uid = getEffectiveUserId(req);
+      await storage.clearMyTeam(uid);
 
       const teamEntries: Array<{
         playerId: number;
@@ -404,43 +427,45 @@ export async function registerRoutes(
       ];
 
       for (const entry of teamEntries) {
-        await storage.addToMyTeam(entry);
+        await storage.addToMyTeam(uid, entry);
       }
 
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       res.json({ success: true, playerCount: team.length, team });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/trade-recommendations", async (_req, res) => {
+  app.get("/api/trade-recommendations", async (req, res) => {
     try {
-      const recs = await storage.getTradeRecommendations();
+      const uid = getEffectiveUserId(req);
+      const recs = await storage.getTradeRecommendations(uid);
       res.json(recs);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/trade-recommendations/generate", async (_req, res) => {
+  app.post("/api/trade-recommendations/generate", async (req, res) => {
     try {
-      await storage.clearTradeRecommendations();
+      const uid = getEffectiveUserId(req);
+      await storage.clearTradeRecommendations(uid);
 
-      const myTeam = await storage.getMyTeam();
+      const myTeam = await storage.getMyTeam(uid);
       if (myTeam.length === 0) {
         return res.status(400).json({ message: "Add players to your team first to generate recommendations" });
       }
 
       const allPlayers = await storage.getAllPlayers();
-      const settings = await storage.getSettings();
+      const settings = await storage.getSettings(uid);
       const currentRound = settings?.currentRound ?? 0;
       const salaryCap = settings?.salaryCap || 18300000;
 
       const finalTrades = generateTradeRecommendations(myTeam, allPlayers, currentRound, salaryCap);
 
       for (const trade of finalTrades) {
-        await storage.createTradeRecommendation({
+        await storage.createTradeRecommendation(uid, {
           playerOutId: trade.playerOut.id,
           playerInId: trade.playerIn.id,
           reason: trade.reasons.join(". ") + ".",
@@ -457,7 +482,7 @@ export async function registerRoutes(
         });
       }
 
-      const recs = await storage.getTradeRecommendations();
+      const recs = await storage.getTradeRecommendations(uid);
       res.json(recs);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -467,16 +492,17 @@ export async function registerRoutes(
   app.post("/api/trade-recommendations/:id/execute", async (req, res) => {
     try {
       const tradeId = parseInt(req.params.id);
-      const trade = await storage.getTradeRecommendation(tradeId);
+      const uid = getEffectiveUserId(req);
+      const trade = await storage.getTradeRecommendation(uid, tradeId);
       if (!trade) return res.status(404).json({ message: "Trade not found" });
 
-      const settings = await storage.getSettings();
+      const settings = await storage.getSettings(uid);
       const maxTradesThisRound = getTradesForRound(settings.currentRound);
       if (settings.tradesRemaining <= 0) {
         return res.status(400).json({ message: `No trades remaining this round (${maxTradesThisRound} per round${gameRules.byeRounds.includes(settings.currentRound) ? ' - bye round' : ''})` });
       }
 
-      const myTeam = await storage.getMyTeam();
+      const myTeam = await storage.getMyTeam(uid);
       const teamEntry = myTeam.find((p) => p.id === trade.playerOutId);
       if (!teamEntry) {
         return res.status(400).json({ message: "Player not on team" });
@@ -485,12 +511,12 @@ export async function registerRoutes(
       const inheritedOnField = teamEntry.isOnField;
       const inheritedFieldPosition = teamEntry.fieldPosition;
 
-      await storage.removeFromMyTeam(teamEntry.myTeamPlayerId!);
+      await storage.removeFromMyTeam(uid, teamEntry.myTeamPlayerId!);
 
       const playerIn = await storage.getPlayer(trade.playerInId);
       if (!playerIn) return res.status(404).json({ message: "Player not found" });
 
-      await storage.addToMyTeam({
+      await storage.addToMyTeam(uid, {
         playerId: trade.playerInId,
         isOnField: inheritedOnField,
         isCaptain: false,
@@ -498,12 +524,12 @@ export async function registerRoutes(
         fieldPosition: inheritedFieldPosition || playerIn.position,
       });
 
-      await storage.updateSettings({
+      await storage.updateSettings(uid, {
         tradesRemaining: settings.tradesRemaining - 1,
         totalTradesUsed: settings.totalTradesUsed + 1,
       });
 
-      await storage.deleteTradeRecommendation(tradeId);
+      await storage.deleteTradeRecommendation(uid, tradeId);
 
       res.json({ success: true });
     } catch (error: any) {
@@ -515,8 +541,9 @@ export async function registerRoutes(
     try {
       const { candidateId } = req.body as { candidateId: number };
       if (!candidateId) return res.status(400).json({ message: "candidateId required" });
-      const settings = await storage.getSettings();
-      const myTeam = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
+      const myTeam = await storage.getMyTeam(uid);
       const teamPlayerIds = myTeam.map(p => p.id);
       const evaluation = await evaluateTrade(candidateId, teamPlayerIds, settings.currentRound);
       res.json(evaluation);
@@ -539,10 +566,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/season-plan/generate", async (_req, res) => {
+  app.post("/api/season-plan/generate", async (req, res) => {
     try {
-      const settings = await storage.getSettings();
-      const myTeam = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
+      const myTeam = await storage.getMyTeam(uid);
       const teamPlayerIds = myTeam.map(p => p.id);
       if (teamPlayerIds.length === 0) {
         return res.status(400).json({ message: "No team found. Import or build a team first." });
@@ -559,12 +587,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/season-plan/build-team", async (_req, res) => {
+  app.post("/api/season-plan/build-team", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const result = await buildOptimalTeam();
-      await storage.clearMyTeam();
+      await storage.clearMyTeam(uid);
       for (const p of result.teamPlayers) {
-        await storage.addToMyTeam({
+        await storage.addToMyTeam(uid, {
           playerId: p.id,
           isOnField: p.isOnField,
           isCaptain: false,
@@ -572,7 +601,7 @@ export async function registerRoutes(
           fieldPosition: p.fieldPosition,
         });
       }
-      const settings = await storage.getSettings();
+      const settings = await storage.getSettings(uid);
       const teamPlayerIds = result.teamPlayers.map(p => p.id);
       const plan = await generateSeasonPlan(teamPlayerIds, settings.currentRound);
       const saved = await saveSeasonPlan(plan, settings.currentRound);
@@ -585,15 +614,15 @@ export async function registerRoutes(
         .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
 
       if (bestScorer) {
-        const myTeam = await storage.getMyTeam();
+        const myTeam = await storage.getMyTeam(uid);
         const captainEntry = myTeam.find(p => p.id === bestScorer.id);
         if (captainEntry?.myTeamPlayerId) {
-          await storage.setCaptain(captainEntry.myTeamPlayerId);
+          await storage.setCaptain(uid, captainEntry.myTeamPlayerId);
         }
         if (secondBest) {
           const vcEntry = myTeam.find(p => p.id === secondBest.id);
           if (vcEntry?.myTeamPlayerId) {
-            await storage.setViceCaptain(vcEntry.myTeamPlayerId);
+            await storage.setViceCaptain(uid, vcEntry.myTeamPlayerId);
           }
         }
       }
@@ -621,12 +650,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/dream-team/activate-starting", async (_req, res) => {
+  app.post("/api/dream-team/activate-starting", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const result = await buildDreamTeamReverse();
-      await storage.clearMyTeam();
+      await storage.clearMyTeam(uid);
       for (const p of result.startingTeam) {
-        await storage.addToMyTeam({
+        await storage.addToMyTeam(uid, {
           playerId: p.id,
           isOnField: p.isOnField,
           isCaptain: false,
@@ -640,9 +670,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/settings", async (_req, res) => {
+  app.get("/api/settings", async (req, res) => {
     try {
-      const settings = await storage.getSettings();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
       res.json(settings);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -669,7 +700,8 @@ export async function registerRoutes(
           data.tradesRemaining = tradesForRound;
         }
       }
-      const updated = await storage.updateSettings(data);
+      const uid = getEffectiveUserId(req);
+      const updated = await storage.updateSettings(uid, data);
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -708,10 +740,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/intel/generate", async (_req, res) => {
+  app.post("/api/intel/generate", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { generateIntelReports } = await import("./intel-engine");
-      await generateIntelReports();
+      await generateIntelReports(uid);
       const reports = await storage.getIntelReports();
       res.json(reports);
     } catch (error: any) {
@@ -732,7 +765,8 @@ export async function registerRoutes(
 
   app.get("/api/late-changes", async (req, res) => {
     try {
-      const settings = await storage.getSettings();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
       const changes = await storage.getLateChanges(settings.currentRound);
       res.json(changes);
     } catch (error: any) {
@@ -892,10 +926,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/captain-advice", async (_req, res) => {
+  app.get("/api/captain-advice", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { generateCaptainAdvice } = await import("./intel-engine");
-      const advice = await generateCaptainAdvice();
+      const advice = await generateCaptainAdvice(uid);
       res.json(advice);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -939,8 +974,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No players identified to save" });
       }
 
+      const uid = getEffectiveUserId(req);
       const allPlayers = await storage.getAllPlayers();
-      await storage.clearMyTeam();
+      await storage.clearMyTeam(uid);
 
       const posMap: Record<string, string> = {
         DEF: "DEF", DEFENDER: "DEF", BACK: "DEF",
@@ -1081,7 +1117,7 @@ export async function registerRoutes(
           (viceCaptainName && match.name.toLowerCase() === viceCaptainName.toLowerCase()) ||
           (viceCaptainName && match.name.toLowerCase().split(" ").pop() === viceCaptainName.toLowerCase().split(" ").pop());
 
-        await storage.addToMyTeam({
+        await storage.addToMyTeam(uid, {
           playerId: match.id,
           isOnField,
           isCaptain: !!playerIsCaptain,
@@ -1090,7 +1126,7 @@ export async function registerRoutes(
         });
       }
 
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       res.json({
         success: true,
         savedCount: resolvedPlayers.length,
@@ -1102,14 +1138,15 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/my-team/analyze", async (_req, res) => {
+  app.post("/api/my-team/analyze", async (req, res) => {
     try {
-      const myTeam = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const myTeam = await storage.getMyTeam(uid);
       if (myTeam.length === 0) {
         return res.status(400).json({ message: "Add players to your team first" });
       }
       const { analyzeMyTeam } = await import("./intel-engine");
-      const analysis = await analyzeMyTeam();
+      const analysis = await analyzeMyTeam(uid);
       res.json(analysis);
     } catch (error: any) {
       console.error("Team analysis error:", error.message);
@@ -1123,8 +1160,9 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ message: "Invalid player ID" });
       const player = await storage.getPlayer(id);
       if (!player) return res.status(404).json({ message: "Player not found" });
+      const uid = getEffectiveUserId(req);
       const { generatePlayerReport } = await import("./intel-engine");
-      const report = await generatePlayerReport(id);
+      const report = await generatePlayerReport(uid, id);
       res.json({ player, report });
     } catch (error: any) {
       console.error("Player report error:", error.message);
@@ -1132,10 +1170,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/intel/gather", async (_req, res) => {
+  app.post("/api/intel/gather", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { gatherIntelligence } = await import("./data-gatherer");
-      const result = await gatherIntelligence();
+      const result = await gatherIntelligence(uid);
       res.json(result);
     } catch (error: any) {
       console.error("Intel gathering error:", error.message);
@@ -1163,10 +1202,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/intel/pre-game", async (_req, res) => {
+  app.post("/api/intel/pre-game", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { generatePreGameAdvice } = await import("./data-gatherer");
-      const advice = await generatePreGameAdvice();
+      const advice = await generatePreGameAdvice(uid);
       res.json(advice);
     } catch (error: any) {
       console.error("Pre-game advice error:", error.message);
@@ -1183,11 +1223,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/trade-recommendations/generate-ai", async (_req, res) => {
+  app.post("/api/trade-recommendations/generate-ai", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { generateAITradeRecommendations } = await import("./intel-engine");
-      await generateAITradeRecommendations();
-      const recs = await storage.getTradeRecommendations();
+      await generateAITradeRecommendations(uid);
+      const recs = await storage.getTradeRecommendations(uid);
       res.json(recs);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1501,8 +1542,9 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/live-scores", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
-      const data = await getLiveRoundData(round);
+      const data = await getLiveRoundData(round, uid);
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1521,13 +1563,14 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/live-scores/match-players", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const homeTeam = req.query.homeTeam as string;
       const awayTeam = req.query.awayTeam as string;
       const round = req.query.round != null ? parseInt(req.query.round as string) : 0;
       if (!homeTeam || !awayTeam) {
         return res.status(400).json({ message: "homeTeam and awayTeam are required" });
       }
-      const matchPlayers = await getMatchPlayers(homeTeam, awayTeam, round);
+      const matchPlayers = await getMatchPlayers(homeTeam, awayTeam, round, uid);
       res.json(matchPlayers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1599,17 +1642,18 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
-  app.get("/api/my-team/risks", async (_req, res) => {
+  app.get("/api/my-team/risks", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { getTagWarningsForTeam } = await import("./services/tag-intelligence");
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       if (team.length === 0) {
         return res.json({ alerts: [], swapSuggestions: [], tagWarnings: [] });
       }
 
       const onField = team.filter(p => p.isOnField);
       const bench = team.filter(p => !p.isOnField);
-      const settings = await storage.getSettings();
+      const settings = await storage.getSettings(uid);
       const currentRound = settings?.currentRound || 1;
 
       const alerts: any[] = [];
@@ -1750,10 +1794,11 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
-  app.post("/api/simulate-round", async (_req, res) => {
+  app.post("/api/simulate-round", async (req, res) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { simulateRound } = await import("./services/simulation-engine");
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       if (team.length === 0) {
         return res.status(400).json({ message: "No team set up" });
       }
@@ -1821,13 +1866,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       if (!targetUser.length) {
         return res.status(404).json({ message: "User not found" });
       }
-      const sessionUser = req.user as any;
-      sessionUser.impersonating = {
-        originalUserId: sessionUser.claims.sub,
-        targetUserId: req.params.id,
-        targetUser: targetUser[0],
-      };
-      sessionUser.claims = { ...sessionUser.claims, sub: req.params.id };
+      const session = (req as any).session;
+      session.impersonateUserId = req.params.id;
       res.json({ message: "Now impersonating user", user: targetUser[0] });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1836,12 +1876,11 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.post("/api/admin/stop-impersonation", isAuthenticated, async (req, res) => {
     try {
-      const sessionUser = req.user as any;
-      if (!sessionUser.impersonating) {
+      const session = (req as any).session;
+      if (!session.impersonateUserId) {
         return res.status(400).json({ message: "Not currently impersonating" });
       }
-      sessionUser.claims = { ...sessionUser.claims, sub: sessionUser.impersonating.originalUserId };
-      delete sessionUser.impersonating;
+      delete session.impersonateUserId;
       res.json({ message: "Stopped impersonation" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1919,16 +1958,17 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   // ============ TAG PREDICTION TRACKING ============
 
-  app.post("/api/admin/tag-predictions/save", isAdmin, async (_req, res) => {
+  app.post("/api/admin/tag-predictions/save", isAdmin, async (req, res) => {
     try {
       const { getTagWarningsForTeam, saveTagPredictions } = await import("./services/tag-intelligence");
-      const settings = await storage.getSettings();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
       const currentRound = settings?.currentRound;
       if (!currentRound || currentRound < 1) {
         return res.status(400).json({ message: "Current round must be set to at least 1 before saving predictions" });
       }
 
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       const onField = team.filter(p => p.isOnField);
       if (onField.length === 0) {
         return res.status(400).json({ message: "No on-field players found — add players to your team first" });
@@ -2022,7 +2062,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/saved-teams", async (req, res) => {
     try {
-      const teams = await storage.getSavedTeams();
+      const uid = getEffectiveUserId(req);
+      const teams = await storage.getSavedTeams(uid);
       res.json(teams);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2033,7 +2074,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     try {
       const { name, description, source } = req.body;
       if (!name) return res.status(400).json({ message: "Team name is required" });
-      const team = await storage.saveCurrentTeamAsVariant(name, description || null, source || "manual");
+      const uid = getEffectiveUserId(req);
+      const team = await storage.saveCurrentTeamAsVariant(uid, name, description || null, source || "manual");
       res.json(team);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2045,7 +2087,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const { name, description } = req.body;
       const teamName = name || `AI Build ${new Date().toLocaleDateString()}`;
 
-      const currentTeam = await storage.getMyTeam();
+      const uid = getEffectiveUserId(req);
+      const currentTeam = await storage.getMyTeam(uid);
 
       const excludePremiumIds = new Set<number>();
       const premiumOnTeam = currentTeam
@@ -2083,7 +2126,7 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
         if (entry) entry.isViceCaptain = true;
       }
 
-      const team = await storage.createSavedTeam({
+      const team = await storage.createSavedTeam(uid, {
         name: teamName,
         description: description || "AI-generated alternative team",
         playerData: JSON.stringify(playerData),
@@ -2102,7 +2145,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
   app.put("/api/saved-teams/:id", async (req, res) => {
     try {
       const { name, description } = req.body;
-      const updated = await storage.updateSavedTeam(Number(req.params.id), { name, description });
+      const uid = getEffectiveUserId(req);
+      const updated = await storage.updateSavedTeam(uid, Number(req.params.id), { name, description });
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2111,7 +2155,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.delete("/api/saved-teams/:id", async (req, res) => {
     try {
-      await storage.deleteSavedTeam(Number(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.deleteSavedTeam(uid, Number(req.params.id));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2120,7 +2165,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.post("/api/saved-teams/:id/activate", async (req, res) => {
     try {
-      await storage.activateSavedTeam(Number(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.activateSavedTeam(uid, Number(req.params.id));
       res.json({ success: true, message: "Team activated and loaded" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2129,10 +2175,11 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/saved-teams/:id/compare", async (req, res) => {
     try {
-      const savedTeam = await storage.getSavedTeam(Number(req.params.id));
+      const uid = getEffectiveUserId(req);
+      const savedTeam = await storage.getSavedTeam(uid, Number(req.params.id));
       if (!savedTeam) return res.status(404).json({ message: "Team not found" });
 
-      const currentTeam = await storage.getMyTeam();
+      const currentTeam = await storage.getMyTeam(uid);
       const savedPlayers: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }> = JSON.parse(savedTeam.playerData);
       const allPlayers = await storage.getAllPlayers();
       const playerMap = new Map(allPlayers.map(p => [p.id, p]));
@@ -2172,7 +2219,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
   app.get("/api/league/opponents", async (req, res) => {
     try {
       const leagueName = req.query.leagueName as string | undefined;
-      const opponents = await storage.getLeagueOpponents(leagueName);
+      const uid = getEffectiveUserId(req);
+      const opponents = await storage.getLeagueOpponents(uid, leagueName);
       res.json(opponents);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2185,7 +2233,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       if (!leagueName || !opponentName) {
         return res.status(400).json({ message: "League name and opponent name are required" });
       }
-      const opponent = await storage.createLeagueOpponent({
+      const uid = getEffectiveUserId(req);
+      const opponent = await storage.createLeagueOpponent(uid, {
         leagueName,
         opponentName,
         totalScore: totalScore || null,
@@ -2201,7 +2250,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
   app.put("/api/league/opponents/:id", async (req, res) => {
     try {
       const { opponentName, totalScore, lastRoundScore, notes, leagueName } = req.body;
-      const updated = await storage.updateLeagueOpponent(Number(req.params.id), {
+      const uid = getEffectiveUserId(req);
+      const updated = await storage.updateLeagueOpponent(uid, Number(req.params.id), {
         opponentName, totalScore, lastRoundScore, notes, leagueName,
       });
       res.json(updated);
@@ -2212,7 +2262,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.delete("/api/league/opponents/:id", async (req, res) => {
     try {
-      await storage.deleteLeagueOpponent(Number(req.params.id));
+      const uid = getEffectiveUserId(req);
+      await storage.deleteLeagueOpponent(uid, Number(req.params.id));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2248,6 +2299,7 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
           position: z.number(),
         })).min(1),
       });
+      const uid = getEffectiveUserId(req);
       const { leagueName, teams } = bulkImportSchema.parse(req.body);
 
       const created = [];
@@ -2255,7 +2307,7 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
         const opponentName = team.managerName
           ? `${team.teamName} (${team.managerName})`
           : team.teamName;
-        const opponent = await storage.createLeagueOpponent({
+        const opponent = await storage.createLeagueOpponent(uid, {
           leagueName,
           opponentName,
           totalScore: null,
@@ -2297,7 +2349,8 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
           } : { name: ip.name, position: ip.position, avgScore: null, price: null };
         });
 
-        await storage.updateLeagueOpponent(Number(req.params.id), {
+          const uid = getEffectiveUserId(req);
+        await storage.updateLeagueOpponent(uid, Number(req.params.id), {
           playerData: JSON.stringify(matchedPlayers),
         });
 
@@ -2312,11 +2365,12 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/league/opponents/:id/matchup", async (req, res) => {
     try {
-      const opponent = await storage.getLeagueOpponent(Number(req.params.id));
+      const uid = getEffectiveUserId(req);
+      const opponent = await storage.getLeagueOpponent(uid, Number(req.params.id));
       if (!opponent) return res.status(404).json({ message: "Opponent not found" });
       if (!opponent.playerData) return res.json({ message: "No squad data for this opponent. Upload a screenshot of their team." });
 
-      const currentTeam = await storage.getMyTeam();
+      const currentTeam = await storage.getMyTeam(uid);
       const oppPlayers: Array<{ playerId?: number; name: string; position: string; avgScore: number | null; price: number | null }> = JSON.parse(opponent.playerData);
 
       const myIds = new Set(currentTeam.map(p => p.id));
@@ -2367,18 +2421,19 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   // ============ WEEKLY PLAN (DIRECTIVE COACHING NARRATIVE) ============
 
-  app.get("/api/weekly-plan", async (_req, res) => {
+  app.get("/api/weekly-plan", async (req, res) => {
     try {
-      const settings = await storage.getSettings();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
       const currentRound = settings?.currentRound || 1;
-      const team = await storage.getMyTeam();
+      const team = await storage.getMyTeam(uid);
       if (team.length === 0) {
         return res.json({ steps: [], round: currentRound, summary: "Set up your team to get your weekly plan." });
       }
 
       const onField = team.filter(p => p.isOnField);
       const bench = team.filter(p => !p.isOnField);
-      const tradeRecs = await storage.getTradeRecommendations();
+      const tradeRecs = await storage.getTradeRecommendations(uid);
       const pendingTrades = tradeRecs.filter(t => t.status === "pending");
 
       const captain = team.find(p => p.isCaptain);
@@ -2545,9 +2600,10 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
 
   app.get("/api/game-day-guide", async (req, res) => {
     try {
-      const settings = await storage.getSettings();
-      const currentTeam = await storage.getMyTeam();
-      const tradeRecs = await storage.getTradeRecommendations();
+      const uid = getEffectiveUserId(req);
+      const settings = await storage.getSettings(uid);
+      const currentTeam = await storage.getMyTeam(uid);
+      const tradeRecs = await storage.getTradeRecommendations(uid);
 
       const pendingTrades = tradeRecs.filter(t => t.status === "pending").slice(0, settings.tradesRemaining);
 

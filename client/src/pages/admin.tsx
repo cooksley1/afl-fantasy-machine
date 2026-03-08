@@ -112,9 +112,21 @@ function UsersTab() {
                       {user.email || "No email"}
                     </span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    Joined {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Unknown"}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span className="text-[10px] text-muted-foreground">
+                      Joined {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Unknown"}
+                    </span>
+                    {user.loginCount != null && user.loginCount > 0 && (
+                      <span className="text-[10px] text-muted-foreground" data-testid={`text-login-count-${user.id}`}>
+                        {user.loginCount} login{user.loginCount !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {user.lastLoginAt && (
+                      <span className="text-[10px] text-muted-foreground" data-testid={`text-last-login-${user.id}`}>
+                        Last: {new Date(user.lastLoginAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">

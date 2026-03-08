@@ -15,8 +15,14 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 ## System Architecture
 The application features a mobile-first, responsive design with a custom navy/gold AFL-themed color scheme and dark mode support.
 
-### Authentication
+### Authentication & User Isolation
 Replit Auth (OpenID Connect) handles authentication for Google, Apple, GitHub, X, and email/password. All API routes, except authentication endpoints, are protected. User sessions are stored in a PostgreSQL `sessions` table.
+
+**User data isolation**: All user-scoped tables (`my_team_players`, `trade_recommendations`, `league_settings`, `saved_teams`, `league_opponents`) include a `userId` column. All storage methods and route handlers pass `userId` from the session to ensure each user's data is isolated.
+
+**Admin impersonation**: Admin users can impersonate other users via `POST /api/admin/impersonate/:id` and `POST /api/admin/stop-impersonation`. The impersonated userId is stored in `req.session.impersonateUserId`. Routes use `getEffectiveUserId(req)` which returns the impersonated user if set, otherwise the real user. An amber banner is shown in the frontend when impersonation is active.
+
+**User details**: The `users` table captures `replitUsername`, `lastLoginAt`, `loginCount`, `lastUserAgent`, and `lastIpAddress` on login via the auth callback.
 
 ### Frontend
 Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
