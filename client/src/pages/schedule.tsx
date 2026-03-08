@@ -28,9 +28,12 @@ import {
   ExternalLink,
   Loader2,
   Sparkles,
+  Users,
+  Ban,
 } from "lucide-react";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
-import type { Fixture } from "@shared/schema";
+import type { Fixture, PlayerWithTeamInfo } from "@shared/schema";
 
 interface FixtureGroup {
   roundName: string;
@@ -418,9 +421,30 @@ const BYE_ROUNDS: Record<number, string[]> = {
   14: ["Port Adelaide", "Richmond", "St Kilda", "Sydney", "West Coast", "Western Bulldogs"],
 };
 
+function positionLabel(pos: string): string {
+  switch (pos) {
+    case "DEF": return "Defenders";
+    case "MID": return "Midfielders";
+    case "RUC": return "Rucks";
+    case "FWD": return "Forwards";
+    case "UTIL": return "Utility";
+    default: return pos;
+  }
+}
+
+function getInitials(name: string): string {
+  const parts = name.split(" ");
+  if (parts.length < 2) return name;
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`;
+}
+
 export default function SchedulePage() {
   const { data, isLoading } = useQuery<GroupedFixtures>({
     queryKey: ["/api/fixtures"],
+  });
+
+  const { data: teamPlayers } = useQuery<PlayerWithTeamInfo[]>({
+    queryKey: ["/api/my-team"],
   });
 
   const rounds = useMemo(() => {
@@ -612,6 +636,86 @@ export default function SchedulePage() {
                 The Opening Round kicks off the AFL season. While scores don't count for AFL Fantasy Classic, they contribute to player averages and form — giving you an early edge on your analysis.
               </p>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {teamPlayers && teamPlayers.length > 0 && (
+        <Card data-testid="card-my-team-round">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap" data-testid="heading-my-team-round">
+              <Users className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider">My Team — {activeGroup?.roundName || getRoundLabel(activeRound, "")}</h3>
+              {(() => {
+                const byeCount = teamPlayers.filter(p => p.byeRound === activeRound).length;
+                return byeCount > 0 ? (
+                  <Badge className="text-[9px] px-1.5 py-0 h-4 bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" data-testid="badge-bye-count">
+                    {byeCount} on bye
+                  </Badge>
+                ) : null;
+              })()}
+            </div>
+            {["DEF", "MID", "RUC", "FWD", "UTIL"].map((pos) => {
+              const posPlayers = teamPlayers.filter(p => p.fieldPosition === pos);
+              if (posPlayers.length === 0) return null;
+              const onField = posPlayers.filter(p => p.isOnField);
+              const bench = posPlayers.filter(p => !p.isOnField);
+              const sorted = [...onField, ...bench];
+              return (
+                <div key={pos} className="mb-2 last:mb-0" data-testid={`schedule-team-group-${pos.toLowerCase()}`}>
+                  <p className="text-[10px] font-bold text-primary/70 uppercase tracking-wider mb-1 px-1">{positionLabel(pos)}</p>
+                  <div className="space-y-0">
+                    {sorted.map((player) => {
+                      const isBye = player.byeRound === activeRound;
+                      const teamColors = getTeamColors(player.team);
+                      return (
+                        <div
+                          key={player.myTeamPlayerId}
+                          className={`flex items-center gap-2 py-1.5 px-2 rounded-md ${isBye ? "bg-amber-500/10 border border-amber-500/20" : ""} ${!player.isOnField ? "opacity-60" : ""}`}
+                          data-testid={`schedule-player-${player.id}`}
+                        >
+                          <PlayerAvatar
+                            aflFantasyId={player.aflFantasyId}
+                            playerName={player.name}
+                            team={player.team}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold truncate" data-testid={`text-schedule-player-name-${player.id}`}>{getInitials(player.name)}</span>
+                              {!player.isOnField && (
+                                <Badge variant="outline" className="text-[7px] px-1 py-0 h-3 bg-muted text-muted-foreground">B</Badge>
+                              )}
+                              {isBye && (
+                                <Badge className="text-[7px] px-1 py-0 h-3.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 gap-0.5" data-testid={`badge-bye-${player.id}`}>
+                                  <Ban className="w-2.5 h-2.5" />BYE
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div
+                                className="w-3 h-3 rounded-sm shrink-0"
+                                style={{ backgroundColor: teamColors.primary }}
+                              />
+                              <span className="text-[10px] text-muted-foreground">{getTeamAbbr(player.team)}</span>
+                              {player.nextOpponent && !isBye && (
+                                <span className="text-[10px] text-muted-foreground">v {player.nextOpponent}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className={`text-xs font-mono font-bold ${isBye ? "text-amber-500 line-through" : ""}`} data-testid={`text-schedule-avg-${player.id}`}>
+                              {player.avgScore?.toFixed(0) || "0"}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground">avg</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
