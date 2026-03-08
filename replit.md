@@ -19,7 +19,16 @@ The application features a mobile-first, responsive design with a custom navy/go
 Replit Auth (OpenID Connect) handles authentication for Google, Apple, GitHub, X, and email/password. All API routes, except authentication endpoints, are protected. User sessions are stored in a PostgreSQL `sessions` table.
 
 ### Frontend
-Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, and Landing. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
+Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
+
+### My Team Player Management
+Tapping any player on the My Team page opens an action dialog with:
+- **View Report** — navigate to full player analysis
+- **Swap with Teammate** — swap positions/field-bench status with an eligible teammate (validates position eligibility via player.position and dualPosition)
+- **Replace with Database Player** — replace with any eligible player from the full database (filtered by position and salary cap budget)
+- **Set Captain / Vice Captain** — assign captaincy roles
+- **Remove from Team** — delete player with confirmation
+API routes: `PATCH /api/my-team/:id`, `POST /api/my-team/swap`, `POST /api/my-team/:id/replace`. Storage method: `updateMyTeamPlayer(id, data)`.
 
 ### Backend
 An Express.js and Node.js server manages API requests, file uploads, and service integrations.

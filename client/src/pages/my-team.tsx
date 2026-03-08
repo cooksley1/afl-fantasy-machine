@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Crown,
   Shield,
@@ -27,6 +29,12 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Users,
+  ArrowLeftRight,
+  ArrowUpDown,
+  UserPlus,
+  Search,
+  X,
+  Check,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -44,7 +52,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
-import type { PlayerWithTeamInfo, LeagueSettings } from "@shared/schema";
+import type { PlayerWithTeamInfo, Player, LeagueSettings } from "@shared/schema";
 
 type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price" | "last";
 
@@ -105,13 +113,20 @@ function getInitials(name: string): string {
   return name;
 }
 
-function getPositionDisplay(player: PlayerWithTeamInfo): string {
+function getPositionDisplay(player: { position?: string | null; dualPosition?: string | null }): string {
   if (player.dualPosition) {
     const primary = player.position?.slice(0, 1) || "";
     const dual = player.dualPosition?.slice(0, 1) || "";
     return `${primary}/${dual}`;
   }
   return player.position?.slice(0, 3) || "";
+}
+
+function canPlayPosition(player: { position?: string | null; dualPosition?: string | null }, targetPos: string): boolean {
+  if (targetPos === "UTIL") return true;
+  const primary = (player.position || "").toUpperCase();
+  const dual = (player.dualPosition || "").toUpperCase();
+  return primary === targetPos || dual === targetPos;
 }
 
 function FormBadge({ trend }: { trend: string }) {
@@ -200,12 +215,12 @@ function getStatColor(player: PlayerWithTeamInfo, key: StatKey): string {
 
 function FieldViewCard({
   player,
-  onViewReport,
+  onTapPlayer,
   visibleStats,
   isBench = false,
 }: {
   player: PlayerWithTeamInfo;
-  onViewReport: (id: number) => void;
+  onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
   isBench?: boolean;
 }) {
@@ -218,7 +233,7 @@ function FieldViewCard({
   return (
     <div
       className={`flex flex-col items-center cursor-pointer group ${isBench ? "opacity-60" : ""}`}
-      onClick={() => onViewReport(player.id)}
+      onClick={() => onTapPlayer(player)}
       data-testid={`field-card-${player.id}`}
     >
       <div className="relative">
@@ -305,11 +320,11 @@ function FieldViewCard({
 
 function FieldView({
   teamPlayers,
-  onViewReport,
+  onTapPlayer,
   visibleStats,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
-  onViewReport: (id: number) => void;
+  onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
 }) {
   const onFieldByPos = (pos: string) =>
@@ -346,13 +361,13 @@ function FieldView({
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
               {topRow.map((p) => (
-                <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
               ))}
             </div>
             {bottomRow.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
                 {bottomRow.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
                 ))}
               </div>
             )}
@@ -367,7 +382,7 @@ function FieldView({
                 </div>
                 <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
                   {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} isBench />
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench />
                   ))}
                 </div>
               </div>
@@ -386,7 +401,7 @@ function FieldView({
           </div>
           <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
             {utilPlayers.map((p) => (
-              <FieldViewCard key={p.myTeamPlayerId} player={p} onViewReport={onViewReport} visibleStats={visibleStats} />
+              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
             ))}
           </div>
         </div>
@@ -398,23 +413,21 @@ function FieldView({
 function ListViewRow({
   player,
   advice,
-  onRemove,
+  onTapPlayer,
   onSetCaptain,
   onSetViceCaptain,
-  onViewReport,
 }: {
   player: PlayerWithTeamInfo;
   advice?: PlayerAdvice;
-  onRemove: (id: number) => void;
+  onTapPlayer: (player: PlayerWithTeamInfo) => void;
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
-  onViewReport: (id: number) => void;
 }) {
   return (
     <div
       className="flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 border-b border-border/40 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors"
       data-testid={`list-row-${player.id}`}
-      onClick={() => onViewReport(player.id)}
+      onClick={() => onTapPlayer(player)}
     >
       <div className="relative shrink-0">
         <PlayerAvatar
@@ -450,10 +463,13 @@ function ListViewRow({
           {player.selectionStatus === "selected" && (
             <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shrink-0" data-testid={`badge-sel-${player.id}`}>IN</Badge>
           )}
+          {!player.isOnField && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-muted text-muted-foreground shrink-0">BENCH</Badge>
+          )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-bold">
-            {getPositionDisplay(player)}
+            {player.fieldPosition} · {getPositionDisplay(player)}
           </Badge>
           <Badge className="text-[9px] px-1 py-0 h-4 bg-primary/10 text-primary hover:bg-primary/10 font-bold border-0">
             {formatPrice(player.price)}
@@ -505,37 +521,6 @@ function ListViewRow({
           >
             <span className={`text-[10px] sm:text-[11px] font-black ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`}>VC</span>
           </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 sm:h-7 sm:w-7"
-                title="Remove player"
-                data-testid={`button-remove-${player.id}`}
-              >
-                <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remove {player.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will remove {player.name} from your team. You can re-add them later from the players list.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel data-testid="button-cancel-remove">Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => onRemove(player.myTeamPlayerId!)}
-                  data-testid="button-confirm-remove"
-                >
-                  Remove
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
       </div>
 
@@ -564,18 +549,16 @@ function getNumericStatForSort(player: PlayerWithTeamInfo, key: StatKey): number
 function ListView({
   teamPlayers,
   analysis,
-  onRemove,
+  onTapPlayer,
   onSetCaptain,
   onSetViceCaptain,
-  onViewReport,
   sortBy,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   analysis: TeamAnalysisResult | null;
-  onRemove: (id: number) => void;
+  onTapPlayer: (player: PlayerWithTeamInfo) => void;
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
-  onViewReport: (id: number) => void;
   sortBy: "position" | StatKey;
 }) {
   const getAdvice = (playerId: number) => analysis?.playerAdvice.find(a => a.playerId === playerId);
@@ -596,10 +579,9 @@ function ListView({
               key={player.myTeamPlayerId}
               player={player}
               advice={getAdvice(player.id)}
-              onRemove={onRemove}
+              onTapPlayer={onTapPlayer}
               onSetCaptain={onSetCaptain}
               onSetViceCaptain={onSetViceCaptain}
-              onViewReport={onViewReport}
             />
           ))}
         </div>
@@ -628,10 +610,9 @@ function ListView({
                   key={player.myTeamPlayerId}
                   player={player}
                   advice={getAdvice(player.id)}
-                  onRemove={onRemove}
+                  onTapPlayer={onTapPlayer}
                   onSetCaptain={onSetCaptain}
                   onSetViceCaptain={onSetViceCaptain}
-                  onViewReport={onViewReport}
                 />
               ))}
             </div>
@@ -751,6 +732,399 @@ function AnalysisPanel({ analysis }: { analysis: TeamAnalysisResult }) {
   );
 }
 
+type ActionMode = "actions" | "swap" | "replace";
+
+function PlayerActionDialog({
+  player,
+  teamPlayers,
+  salaryCap,
+  onClose,
+}: {
+  player: PlayerWithTeamInfo;
+  teamPlayers: PlayerWithTeamInfo[];
+  salaryCap: number;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [mode, setMode] = useState<ActionMode>("actions");
+  const [replaceSearch, setReplaceSearch] = useState("");
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+
+  const { data: allPlayers } = useQuery<Player[]>({
+    queryKey: ["/api/players"],
+    enabled: mode === "replace",
+  });
+
+  const totalSalary = teamPlayers.reduce((sum, p) => sum + p.price, 0);
+  const remainingBudget = salaryCap - totalSalary;
+  const budgetAfterRemoval = remainingBudget + player.price;
+
+  const swapMutation = useMutation({
+    mutationFn: async (targetId: number) => {
+      await apiRequest("POST", "/api/my-team/swap", {
+        playerAId: player.myTeamPlayerId,
+        playerBId: targetId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Players swapped" });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Swap failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const replaceMutation = useMutation({
+    mutationFn: async (newPlayerId: number) => {
+      const res = await apiRequest("POST", `/api/my-team/${player.myTeamPlayerId}/replace`, {
+        newPlayerId,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Player replaced", description: `Replaced with ${data.replacedWith}` });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Replace failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/my-team/${player.myTeamPlayerId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: `${player.name} removed from team` });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Remove failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const captainMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/my-team/${player.myTeamPlayerId}/captain`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Captain updated" });
+      onClose();
+    },
+  });
+
+  const viceCaptainMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/my-team/${player.myTeamPlayerId}/vice-captain`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Vice Captain updated" });
+      onClose();
+    },
+  });
+
+  const swapCandidates = useMemo(() => {
+    return teamPlayers.filter(p => {
+      if (p.myTeamPlayerId === player.myTeamPlayerId) return false;
+      const aCanPlayBPos = canPlayPosition(player, p.fieldPosition!);
+      const bCanPlayAPos = canPlayPosition(p, player.fieldPosition!);
+      return aCanPlayBPos && bCanPlayAPos;
+    });
+  }, [teamPlayers, player]);
+
+  const replaceCandidates = useMemo(() => {
+    if (!allPlayers) return [];
+    const teamIds = new Set(teamPlayers.map(p => p.id));
+    const targetPos = player.fieldPosition!;
+
+    return allPlayers
+      .filter(p => {
+        if (teamIds.has(p.id)) return false;
+        if (!canPlayPosition(p, targetPos)) return false;
+        if (p.price > budgetAfterRemoval) return false;
+        if (replaceSearch) {
+          const q = replaceSearch.toLowerCase();
+          return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
+        }
+        return true;
+      })
+      .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+      .slice(0, 50);
+  }, [allPlayers, teamPlayers, player, budgetAfterRemoval, replaceSearch]);
+
+  const teamColors = getTeamColors(player.team);
+
+  if (mode === "swap") {
+    return (
+      <>
+        <DialogHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-sm">Swap {getInitials(player.name)}</DialogTitle>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setMode("actions")} data-testid="button-back-actions">
+              Back
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Currently at {player.fieldPosition} ({player.isOnField ? "on field" : "bench"}).
+            Select a teammate to swap with.
+          </p>
+        </DialogHeader>
+        <div className="max-h-[50vh] overflow-y-auto -mx-2">
+          {swapCandidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No eligible swap candidates</p>
+          ) : (
+            swapCandidates.map(target => {
+              const tc = getTeamColors(target.team);
+              return (
+                <button
+                  key={target.myTeamPlayerId}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                  onClick={() => swapMutation.mutate(target.myTeamPlayerId!)}
+                  disabled={swapMutation.isPending}
+                  data-testid={`swap-target-${target.id}`}
+                >
+                  <div
+                    className="w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold shrink-0"
+                    style={{ backgroundColor: tc.primary, color: tc.text }}
+                  >
+                    {getTeamAbbr(target.team)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{target.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground">{target.fieldPosition} · {target.isOnField ? "Field" : "Bench"}</span>
+                      <span className="text-[10px] text-muted-foreground">avg {(target.avgScore || 0).toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-mono font-bold">{formatPrice(target.price)}</p>
+                  </div>
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })
+          )}
+        </div>
+      </>
+    );
+  }
+
+  if (mode === "replace") {
+    return (
+      <>
+        <DialogHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-sm">Replace {getInitials(player.name)}</DialogTitle>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setMode("actions")} data-testid="button-back-actions">
+              Back
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Position: {player.fieldPosition} · Budget: {formatPrice(budgetAfterRemoval)}
+          </p>
+        </DialogHeader>
+        <div className="relative mb-2">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search players..."
+            value={replaceSearch}
+            onChange={(e) => setReplaceSearch(e.target.value)}
+            className="h-8 text-xs pl-8"
+            data-testid="input-replace-search"
+          />
+          {replaceSearch && (
+            <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setReplaceSearch("")}>
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto -mx-2">
+          {replaceCandidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              {replaceSearch ? "No matching players" : "No eligible players"}
+            </p>
+          ) : (
+            replaceCandidates.map(rp => {
+              const rc = getTeamColors(rp.team);
+              return (
+                <button
+                  key={rp.id}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                  onClick={() => replaceMutation.mutate(rp.id)}
+                  disabled={replaceMutation.isPending}
+                  data-testid={`replace-target-${rp.id}`}
+                >
+                  <div
+                    className="w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold shrink-0"
+                    style={{ backgroundColor: rc.primary, color: rc.text }}
+                  >
+                    {getTeamAbbr(rp.team)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{rp.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground">{getPositionDisplay(rp)}</span>
+                      <span className="text-[10px] text-muted-foreground">avg {(rp.avgScore || 0).toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-mono font-bold">{formatPrice(rp.price)}</p>
+                  </div>
+                  <UserPlus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })
+          )}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <DialogHeader className="pb-0">
+        <DialogTitle className="sr-only">Player actions for {player.name}</DialogTitle>
+      </DialogHeader>
+      <div className="flex items-center gap-3 pb-3 border-b">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
+          style={{ backgroundColor: teamColors.primary, color: teamColors.text }}
+        >
+          {getTeamAbbr(player.team)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm truncate">{player.name}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-bold">
+              {player.fieldPosition} · {getPositionDisplay(player)}
+            </Badge>
+            <Badge className="text-[9px] px-1 py-0 h-4 bg-primary/10 text-primary hover:bg-primary/10 font-bold border-0">
+              {formatPrice(player.price)}
+            </Badge>
+            {player.isOnField ? (
+              <Badge className="text-[9px] px-1 py-0 h-4 bg-green-500/10 text-green-600 dark:text-green-400 font-bold border-0">On Field</Badge>
+            ) : (
+              <Badge className="text-[9px] px-1 py-0 h-4 bg-muted text-muted-foreground font-bold border-0">Bench</Badge>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            avg {(player.avgScore || 0).toFixed(1)} · BE {player.breakEven || "-"}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-1 pt-2">
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          onClick={() => navigate(`/player/${player.id}`)}
+          data-testid="action-view-report"
+        >
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">View Report</p>
+            <p className="text-[10px] text-muted-foreground">Full player analysis</p>
+          </div>
+        </button>
+
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          onClick={() => setMode("swap")}
+          data-testid="action-swap"
+        >
+          <ArrowLeftRight className="w-4 h-4 text-blue-500" />
+          <div>
+            <p className="text-sm font-medium">Swap with Teammate</p>
+            <p className="text-[10px] text-muted-foreground">Swap positions or field/bench with an eligible player</p>
+          </div>
+        </button>
+
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          onClick={() => setMode("replace")}
+          data-testid="action-replace"
+        >
+          <UserPlus className="w-4 h-4 text-green-500" />
+          <div>
+            <p className="text-sm font-medium">Replace with Database Player</p>
+            <p className="text-[10px] text-muted-foreground">Swap for a different player from the full list</p>
+          </div>
+        </button>
+
+        <div className="flex gap-1.5 pt-1">
+          <button
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-left ${
+              player.isCaptain ? "bg-red-500/10 ring-1 ring-red-500/30" : "hover:bg-muted/50"
+            }`}
+            onClick={() => captainMutation.mutate()}
+            data-testid="action-captain"
+          >
+            <Crown className={`w-3.5 h-3.5 ${player.isCaptain ? "text-red-500" : "text-muted-foreground"}`} />
+            <span className={`text-xs font-medium ${player.isCaptain ? "text-red-500" : ""}`}>
+              {player.isCaptain ? "Captain ✓" : "Set Captain"}
+            </span>
+          </button>
+          <button
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-left ${
+              player.isViceCaptain ? "bg-emerald-500/10 ring-1 ring-emerald-500/30" : "hover:bg-muted/50"
+            }`}
+            onClick={() => viceCaptainMutation.mutate()}
+            data-testid="action-vc"
+          >
+            <Shield className={`w-3.5 h-3.5 ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`} />
+            <span className={`text-xs font-medium ${player.isViceCaptain ? "text-emerald-500" : ""}`}>
+              {player.isViceCaptain ? "Vice ✓" : "Set Vice"}
+            </span>
+          </button>
+        </div>
+
+        <div className="pt-2 border-t mt-2">
+          {!showRemoveConfirm ? (
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-destructive/10 transition-colors text-left"
+              onClick={() => setShowRemoveConfirm(true)}
+              data-testid="action-remove"
+            >
+              <Trash2 className="w-4 h-4 text-destructive" />
+              <div>
+                <p className="text-sm font-medium text-destructive">Remove from Team</p>
+                <p className="text-[10px] text-muted-foreground">Delete this player from your squad</p>
+              </div>
+            </button>
+          ) : (
+            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+              <p className="text-xs font-medium mb-2">Remove {player.name}?</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => setShowRemoveConfirm(false)}
+                  data-testid="button-cancel-remove"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1 h-7 text-xs"
+                  onClick={() => removeMutation.mutate()}
+                  disabled={removeMutation.isPending}
+                  data-testid="button-confirm-remove"
+                >
+                  {removeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Remove"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function MyTeam() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -758,6 +1132,7 @@ export default function MyTeam() {
   const [viewMode, setViewMode] = useState<"field" | "list">("field");
   const [visibleStats, setVisibleStats] = useState<StatKey[]>(DEFAULT_VISIBLE_STATS);
   const [sortBy, setSortBy] = useState<"position" | StatKey>("position");
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithTeamInfo | null>(null);
 
   const toggleStat = (key: StatKey) => {
     setVisibleStats(prev =>
@@ -798,44 +1173,6 @@ export default function MyTeam() {
     },
     onError: (error: Error) => {
       toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const player = teamPlayers?.find(p => p.myTeamPlayerId === id);
-      await apiRequest("DELETE", `/api/my-team/${id}`);
-      return player;
-    },
-    onSuccess: (removedPlayer) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
-      setAnalysis(null);
-      if (removedPlayer) {
-        toast({
-          title: `${removedPlayer.name} removed`,
-          description: "Tap Undo to restore them to your team.",
-          action: (
-            <ToastAction
-              altText="Undo remove"
-              onClick={async () => {
-                try {
-                  await apiRequest("POST", "/api/my-team", {
-                    playerId: removedPlayer.id,
-                    fieldPosition: removedPlayer.fieldPosition || removedPlayer.position,
-                  });
-                  queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
-                  toast({ title: `${removedPlayer.name} restored` });
-                } catch {
-                  toast({ title: "Could not restore player", variant: "destructive" });
-                }
-              }}
-              data-testid="button-undo-remove"
-            >
-              Undo
-            </ToastAction>
-          ),
-        });
-      }
     },
   });
 
@@ -1075,12 +1412,12 @@ export default function MyTeam() {
           <>
             <div className="flex justify-between items-center px-3 py-2 bg-muted/30 border-b">
               <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">{teamPlayers.length} PLAYERS</span>
-              <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">ON FIELD + BENCH</span>
+              <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">TAP TO MANAGE</span>
             </div>
             <CardContent className="p-1.5 sm:p-4">
               <FieldView
                 teamPlayers={teamPlayers}
-                onViewReport={(id) => navigate(`/player/${id}`)}
+                onTapPlayer={setSelectedPlayer}
                 visibleStats={visibleStats}
               />
             </CardContent>
@@ -1091,14 +1428,26 @@ export default function MyTeam() {
           <ListView
             teamPlayers={teamPlayers}
             analysis={analysis}
-            onRemove={(id) => removeMutation.mutate(id)}
+            onTapPlayer={setSelectedPlayer}
             onSetCaptain={(id) => captainMutation.mutate(id)}
             onSetViceCaptain={(id) => viceCaptainMutation.mutate(id)}
-            onViewReport={(id) => navigate(`/player/${id}`)}
             sortBy={sortBy}
           />
         )}
       </Card>
+
+      <Dialog open={!!selectedPlayer} onOpenChange={(open) => { if (!open) setSelectedPlayer(null); }}>
+        <DialogContent className="max-w-sm mx-auto" data-testid="dialog-player-actions">
+          {selectedPlayer && teamPlayers && (
+            <PlayerActionDialog
+              player={selectedPlayer}
+              teamPlayers={teamPlayers}
+              salaryCap={salaryCap}
+              onClose={() => setSelectedPlayer(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

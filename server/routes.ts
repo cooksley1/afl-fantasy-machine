@@ -147,6 +147,122 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/my-team/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = z.object({
+        isOnField: z.boolean().optional(),
+        fieldPosition: z.string().optional(),
+      }).parse(req.body);
+
+      await storage.updateMyTeamPlayer(id, data);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/my-team/swap", async (req, res) => {
+    try {
+      const { playerAId, playerBId } = z.object({
+        playerAId: z.number(),
+        playerBId: z.number(),
+      }).parse(req.body);
+
+      const team = await storage.getMyTeam();
+      const playerA = team.find(p => p.myTeamPlayerId === playerAId);
+      const playerB = team.find(p => p.myTeamPlayerId === playerBId);
+
+      if (!playerA || !playerB) {
+        return res.status(404).json({ message: "Player not found on team" });
+      }
+
+      const canPlayPosition = (player: typeof playerA, targetPos: string): boolean => {
+        if (targetPos === "UTIL") return true;
+        const primary = player.position?.toUpperCase() || "";
+        const dual = player.dualPosition?.toUpperCase() || "";
+        return primary === targetPos || dual === targetPos;
+      };
+
+      const bTargetPos = playerA.fieldPosition!;
+      const aTargetPos = playerB.fieldPosition!;
+
+      if (!canPlayPosition(playerA, aTargetPos)) {
+        return res.status(400).json({ message: `${playerA.name} cannot play ${aTargetPos}` });
+      }
+      if (!canPlayPosition(playerB, bTargetPos)) {
+        return res.status(400).json({ message: `${playerB.name} cannot play ${bTargetPos}` });
+      }
+
+      await storage.updateMyTeamPlayer(playerAId, {
+        fieldPosition: aTargetPos,
+        isOnField: playerB.isOnField!,
+      });
+      await storage.updateMyTeamPlayer(playerBId, {
+        fieldPosition: bTargetPos,
+        isOnField: playerA.isOnField!,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/my-team/:id/replace", async (req, res) => {
+    try {
+      const myTeamPlayerId = parseInt(req.params.id);
+      const { newPlayerId } = z.object({
+        newPlayerId: z.number(),
+      }).parse(req.body);
+
+      const team = await storage.getMyTeam();
+      const oldPlayer = team.find(p => p.myTeamPlayerId === myTeamPlayerId);
+      if (!oldPlayer) {
+        return res.status(404).json({ message: "Player not found on team" });
+      }
+
+      const alreadyOnTeam = team.find(p => p.id === newPlayerId);
+      if (alreadyOnTeam) {
+        return res.status(400).json({ message: "Player already on team" });
+      }
+
+      const newPlayer = await storage.getPlayer(newPlayerId);
+      if (!newPlayer) {
+        return res.status(404).json({ message: "Player not found in database" });
+      }
+
+      const settings = await storage.getSettings();
+      const salaryCap = settings.salaryCap || AFL_FANTASY_CLASSIC_2026.salaryCap;
+      const currentTotal = team.reduce((sum, p) => sum + p.price, 0);
+      const newTotal = currentTotal - oldPlayer.price + newPlayer.price;
+      if (newTotal > salaryCap) {
+        return res.status(400).json({ message: `Exceeds salary cap by $${((newTotal - salaryCap) / 1000).toFixed(0)}k` });
+      }
+
+      const targetPos = oldPlayer.fieldPosition!;
+      const canPlay = targetPos === "UTIL" ||
+        newPlayer.position?.toUpperCase() === targetPos ||
+        newPlayer.dualPosition?.toUpperCase() === targetPos;
+      if (!canPlay) {
+        return res.status(400).json({ message: `${newPlayer.name} cannot play ${targetPos}` });
+      }
+
+      await storage.removeFromMyTeam(myTeamPlayerId);
+      await storage.addToMyTeam({
+        playerId: newPlayerId,
+        isOnField: oldPlayer.isOnField!,
+        isCaptain: false,
+        isViceCaptain: false,
+        fieldPosition: targetPos,
+      });
+
+      res.json({ success: true, replacedWith: newPlayer.name });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.post("/api/my-team/setup-glens-team", async (_req, res) => {
     try {
       const allPlayers = await storage.getAllPlayers();

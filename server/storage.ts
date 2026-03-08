@@ -55,6 +55,7 @@ export interface IStorage {
   clearMyTeam(): Promise<void>;
   setCaptain(id: number): Promise<void>;
   setViceCaptain(id: number): Promise<void>;
+  updateMyTeamPlayer(id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void>;
 
   getTradeRecommendations(): Promise<TradeRecommendationWithPlayers[]>;
   createTradeRecommendation(rec: InsertTradeRec): Promise<TradeRecommendation>;
@@ -190,6 +191,10 @@ export class DatabaseStorage implements IStorage {
 
   async removeFromMyTeam(id: number): Promise<void> {
     await db.delete(myTeamPlayers).where(eq(myTeamPlayers.id, id));
+  }
+
+  async updateMyTeamPlayer(id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void> {
+    await db.update(myTeamPlayers).set(data).where(eq(myTeamPlayers.id, id));
   }
 
   async clearMyTeam(): Promise<void> {
