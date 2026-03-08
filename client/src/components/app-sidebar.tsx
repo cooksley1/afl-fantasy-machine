@@ -17,6 +17,7 @@ import {
   Eye,
   ClipboardCheck,
   FlaskConical,
+  Crown,
 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import {
@@ -47,6 +48,7 @@ const navGroups = [
       { title: "Season Roadmap", subtitle: "Your path to #1", url: "/roadmap", icon: Map },
       { title: "Game Day Guide", subtitle: "Step-by-step checklist", url: "/game-day", icon: ClipboardCheck },
       { title: "Team Lab", subtitle: "Build & compare teams", url: "/sandbox", icon: FlaskConical },
+      { title: "Dream Team", subtitle: "Reverse-engineer your best squad", url: "/dream", icon: Crown },
     ],
   },
   {

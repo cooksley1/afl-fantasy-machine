@@ -16,7 +16,7 @@ import {
 } from "./services/projection-engine";
 import { generateTradeRecommendations } from "./services/trade-engine";
 import { evaluateTrade } from "./services/trade-optimizer";
-import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan } from "./services/season-planner";
+import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan, buildDreamTeamReverse } from "./services/season-planner";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
@@ -490,6 +490,35 @@ export async function registerRoutes(
           teamSnapshot: JSON.parse(saved.teamSnapshot),
         },
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/dream-team/reverse-engineer", async (_req, res) => {
+    try {
+      const result = await buildDreamTeamReverse();
+      res.json(result);
+    } catch (error: any) {
+      console.error("[DreamTeam] Error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/dream-team/activate-starting", async (_req, res) => {
+    try {
+      const result = await buildDreamTeamReverse();
+      await storage.clearMyTeam();
+      for (const p of result.startingTeam) {
+        await storage.addToMyTeam({
+          playerId: p.id,
+          isOnField: p.isOnField,
+          isCaptain: false,
+          isViceCaptain: false,
+          fieldPosition: p.fieldPosition,
+        });
+      }
+      res.json({ success: true, teamSize: result.startingTeam.length, cost: result.startingTeamCost });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

@@ -602,6 +602,315 @@ export async function buildOptimalTeam(options?: { excludePlayerIds?: Set<number
   };
 }
 
+export interface DreamTeamTradeStep {
+  round: number;
+  playerOut: { id: number; name: string; team: string; position: string; price: number; avgScore: number; weeklyGain: number; role: string };
+  playerIn: { id: number; name: string; team: string; position: string; price: number; avgScore: number; role: string };
+  cashRequired: number;
+  projectedCashAvailable: number;
+  reasoning: string;
+}
+
+export interface DreamTeamResult {
+  dreamTeam: Array<Player & { fieldPosition: string; isOnField: boolean; reasoning: string }>;
+  dreamTeamCost: number;
+  startingTeam: Array<Player & { fieldPosition: string; isOnField: boolean; reasoning: string; isDreamPlayer: boolean }>;
+  startingTeamCost: number;
+  tradePath: DreamTeamTradeStep[];
+  estimatedCompletionRound: number;
+  summary: string;
+}
+
+export async function buildDreamTeamReverse(): Promise<DreamTeamResult> {
+  const allPlayers = await db.select().from(players);
+
+  const viable = allPlayers.filter(p =>
+    p.avgScore > 0 &&
+    p.selectionStatus !== "omitted" &&
+    !p.injuryStatus?.toLowerCase().includes("season") &&
+    !p.injuryStatus?.toLowerCase().includes("acl")
+  );
+
+  const byPosition: Record<string, Player[]> = { DEF: [], MID: [], RUC: [], FWD: [] };
+  for (const p of viable) {
+    const primary = getPlayerPrimaryPosition(p);
+    if (byPosition[primary]) byPosition[primary].push(p);
+  }
+  for (const pos of Object.keys(byPosition)) {
+    byPosition[pos].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+  }
+
+  const dreamSelected: Array<Player & { fieldPosition: string; isOnField: boolean; reasoning: string }> = [];
+  const dreamUsedIds = new Set<number>();
+
+  function addDreamPlayer(p: Player, position: string, isOnField: boolean, reasoning: string) {
+    if (dreamUsedIds.has(p.id)) return false;
+    dreamSelected.push({ ...p, fieldPosition: position, isOnField, reasoning });
+    dreamUsedIds.add(p.id);
+    return true;
+  }
+
+  const positionOrder = [
+    { pos: "RUC", onField: POSITION_REQS.RUC.onField, bench: POSITION_REQS.RUC.bench },
+    { pos: "MID", onField: POSITION_REQS.MID.onField, bench: POSITION_REQS.MID.bench },
+    { pos: "DEF", onField: POSITION_REQS.DEF.onField, bench: POSITION_REQS.DEF.bench },
+    { pos: "FWD", onField: POSITION_REQS.FWD.onField, bench: POSITION_REQS.FWD.bench },
+  ];
+
+  for (const { pos, onField } of positionOrder) {
+    const pool = byPosition[pos] || [];
+    let filled = 0;
+    for (const p of pool) {
+      if (filled >= onField) break;
+      if (addDreamPlayer(p, pos, true, `Best ${pos} — avg ${(p.avgScore || 0).toFixed(0)}, rank #${filled + 1}`)) filled++;
+    }
+  }
+
+  const utilCandidates = viable
+    .filter(p => !dreamUsedIds.has(p.id))
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+  for (const p of utilCandidates) {
+    if (addDreamPlayer(p, "UTIL", true, `Utility — best available scorer, avg ${(p.avgScore || 0).toFixed(0)}`)) break;
+  }
+
+  for (const { pos, bench } of positionOrder) {
+    const pool = (byPosition[pos] || []).filter(p => !dreamUsedIds.has(p.id));
+    let filled = 0;
+    for (const p of pool) {
+      if (filled >= bench) break;
+      if (addDreamPlayer(p, pos, false, `Dream bench ${pos} — avg ${(p.avgScore || 0).toFixed(0)}`)) filled++;
+    }
+  }
+
+  while (dreamSelected.length < 30) {
+    const remaining = viable.filter(p => !dreamUsedIds.has(p.id)).sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+    if (remaining.length === 0) break;
+    const p = remaining[0];
+    addDreamPlayer(p, getPlayerPrimaryPosition(p), false, "Fill to 30 players");
+  }
+
+  const dreamTeamCost = dreamSelected.reduce((s, p) => s + p.price, 0);
+
+  const dreamOnField = dreamSelected.filter(p => p.isOnField);
+  const dreamBench = dreamSelected.filter(p => !p.isOnField);
+
+  const startingSelected: Array<Player & { fieldPosition: string; isOnField: boolean; reasoning: string; isDreamPlayer: boolean }> = [];
+  const startUsedIds = new Set<number>();
+  let startCost = 0;
+
+  function addStartPlayer(p: Player, position: string, isOnField: boolean, reasoning: string, isDreamPlayer: boolean) {
+    if (startUsedIds.has(p.id)) return false;
+    if (startCost + p.price > SALARY_CAP) return false;
+    startingSelected.push({ ...p, fieldPosition: position, isOnField, reasoning, isDreamPlayer });
+    startUsedIds.add(p.id);
+    startCost += p.price;
+    return true;
+  }
+
+  const dreamOnFieldSorted = [...dreamOnField].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+  const affordableDreamPlayers: typeof dreamOnFieldSorted = [];
+  const unaffordableDreamPlayers: typeof dreamOnFieldSorted = [];
+
+  for (const dp of dreamOnFieldSorted) {
+    if (startCost + dp.price <= SALARY_CAP) {
+      affordableDreamPlayers.push(dp);
+      addStartPlayer(dp, dp.fieldPosition, true, `Dream player — lock in from Round 1`, true);
+    } else {
+      unaffordableDreamPlayers.push(dp);
+    }
+  }
+
+  const steppingStones: Array<{ dreamPlayer: typeof dreamOnFieldSorted[0]; steppingStone: Player; weeklyGain: number }> = [];
+
+  for (const dp of unaffordableDreamPlayers) {
+    const pos = dp.fieldPosition;
+    const priceBudgetLeft = SALARY_CAP - startCost;
+    const posPool = viable.filter(p =>
+      !startUsedIds.has(p.id) &&
+      !dreamUsedIds.has(p.id) &&
+      getPlayerPrimaryPosition(p) === (pos === "UTIL" ? getPlayerPrimaryPosition(dp) : pos) &&
+      p.price <= priceBudgetLeft
+    );
+
+    const cashGrowers = posPool
+      .filter(p => (p.avgScore || 0) > (p.breakEven || 999))
+      .sort((a, b) => {
+        const aGrowth = ((a.avgScore || 0) - (a.breakEven || 0));
+        const bGrowth = ((b.avgScore || 0) - (b.breakEven || 0));
+        const aCombo = aGrowth * 0.6 + (a.avgScore || 0) * 0.4;
+        const bCombo = bGrowth * 0.6 + (b.avgScore || 0) * 0.4;
+        return bCombo - aCombo;
+      });
+
+    const bestStepping = cashGrowers[0] || posPool.sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+    if (bestStepping) {
+      const weeklyGain = Math.round(((bestStepping.avgScore || 0) - (bestStepping.breakEven || 0)) * MAGIC_NUMBER / 1000) * 1000;
+      if (addStartPlayer(bestStepping, pos, true, `Stepping stone for ${dp.name} — avg ${(bestStepping.avgScore || 0).toFixed(0)}, +$${(weeklyGain / 1000).toFixed(0)}k/wk growth`, false)) {
+        steppingStones.push({ dreamPlayer: dp, steppingStone: bestStepping, weeklyGain: Math.max(weeklyGain, 0) });
+      }
+    }
+  }
+
+  for (const dp of dreamBench) {
+    if (startUsedIds.has(dp.id)) continue;
+    if (startCost + dp.price <= SALARY_CAP) {
+      addStartPlayer(dp, dp.fieldPosition, false, `Dream bench player — lock in from Round 1`, true);
+    }
+  }
+
+  const utilOnField = startingSelected.filter(p => p.fieldPosition === "UTIL" && p.isOnField).length;
+  if (utilOnField < 1) {
+    const utilPool = viable.filter(p => !startUsedIds.has(p.id))
+      .sort((a, b) => {
+        const aGrowth = ((a.avgScore || 0) - (a.breakEven || 0));
+        const bGrowth = ((b.avgScore || 0) - (b.breakEven || 0));
+        return bGrowth - aGrowth;
+      });
+    for (const p of utilPool) {
+      if (addStartPlayer(p, "UTIL", true, `Utility fill — avg ${(p.avgScore || 0).toFixed(0)}`, false)) break;
+    }
+  }
+
+  for (const { pos, onField } of positionOrder) {
+    const currentOnField = startingSelected.filter(p => p.fieldPosition === pos && p.isOnField).length;
+    if (currentOnField < onField) {
+      const needed = onField - currentOnField;
+      const pool = viable.filter(p => !startUsedIds.has(p.id) && getPlayerPrimaryPosition(p) === pos)
+        .sort((a, b) => {
+          const aGrowth = ((a.avgScore || 0) - (a.breakEven || 0));
+          const bGrowth = ((b.avgScore || 0) - (b.breakEven || 0));
+          return bGrowth - aGrowth;
+        });
+      let filled = 0;
+      for (const p of pool) {
+        if (filled >= needed) break;
+        if (addStartPlayer(p, pos, true, `On-field backfill — avg ${(p.avgScore || 0).toFixed(0)}`, false)) filled++;
+      }
+    }
+  }
+
+  for (const { pos, bench } of positionOrder) {
+    const posCount = startingSelected.filter(p => p.fieldPosition === pos).length;
+    const required = ((POSITION_REQS as any)[pos]?.total || 0);
+    if (posCount < required) {
+      const needed = required - posCount;
+      const pool = viable.filter(p =>
+        !startUsedIds.has(p.id) &&
+        getPlayerPrimaryPosition(p) === pos
+      );
+      const cashCows = pool.filter(p => isCashCow(p))
+        .sort((a, b) => {
+          const aGrowth = (a.avgScore || 0) - (a.breakEven || 0);
+          const bGrowth = (b.avgScore || 0) - (b.breakEven || 0);
+          return bGrowth - aGrowth;
+        });
+      const cheapest = pool.sort((a, b) => (a.price || 0) - (b.price || 0));
+
+      let filled = 0;
+      for (const p of cashCows) {
+        if (filled >= needed) break;
+        const wg = Math.round(((p.avgScore || 0) - (p.breakEven || 0)) * MAGIC_NUMBER / 1000) * 1000;
+        if (addStartPlayer(p, pos, false, `Cash cow bench — +$${(wg / 1000).toFixed(0)}k/wk growth`, false)) filled++;
+      }
+      for (const p of cheapest) {
+        if (filled >= needed) break;
+        if (addStartPlayer(p, pos, false, `Budget bench fill — $${(p.price / 1000).toFixed(0)}k`, false)) filled++;
+      }
+    }
+  }
+
+  while (startingSelected.length < 30) {
+    const remaining = viable.filter(p => !startUsedIds.has(p.id)).sort((a, b) => (a.price || 0) - (b.price || 0));
+    if (remaining.length === 0) break;
+    const p = remaining[0];
+    const pos = getPlayerPrimaryPosition(p);
+    if (!addStartPlayer(p, pos, false, "Budget fill to reach 30 players", false)) break;
+  }
+
+  const tradePath: DreamTeamTradeStep[] = [];
+  let runningCash = SALARY_CAP - startCost;
+
+  const sortedSteps = [...steppingStones].sort((a, b) => {
+    const aCashNeeded = a.dreamPlayer.price - a.steppingStone.price;
+    const bCashNeeded = b.dreamPlayer.price - b.steppingStone.price;
+    return aCashNeeded - bCashNeeded;
+  });
+
+  let currentRound = 1;
+  for (const step of sortedSteps) {
+    const cashNeeded = step.dreamPlayer.price - step.steppingStone.price;
+    const totalCashGen = startingSelected
+      .filter(p => !p.isDreamPlayer && p.isOnField)
+      .reduce((sum, p) => {
+        const wg = Math.round(((p.avgScore || 0) - (p.breakEven || 0)) * MAGIC_NUMBER / 1000) * 1000;
+        return sum + Math.max(wg, 0);
+      }, 0);
+
+    const benchCashGen = startingSelected
+      .filter(p => !p.isDreamPlayer && !p.isOnField)
+      .reduce((sum, p) => {
+        const wg = Math.round(((p.avgScore || 0) - (p.breakEven || 0)) * MAGIC_NUMBER / 1000) * 1000;
+        return sum + Math.max(wg, 0);
+      }, 0);
+
+    const weeklyCashGen = totalCashGen + benchCashGen;
+    let roundsNeeded = weeklyCashGen > 0 ? Math.ceil(Math.max(0, cashNeeded - runningCash) / weeklyCashGen) : 99;
+    const tradeRound = Math.max(currentRound + 1, currentRound + roundsNeeded);
+
+    const projectedCash = runningCash + (weeklyCashGen * roundsNeeded);
+
+    tradePath.push({
+      round: Math.min(tradeRound, TOTAL_ROUNDS),
+      playerOut: {
+        id: step.steppingStone.id,
+        name: step.steppingStone.name,
+        team: step.steppingStone.team,
+        position: step.steppingStone.position,
+        price: step.steppingStone.price,
+        avgScore: step.steppingStone.avgScore || 0,
+        weeklyGain: step.weeklyGain,
+        role: playerRole(step.steppingStone),
+      },
+      playerIn: {
+        id: step.dreamPlayer.id,
+        name: step.dreamPlayer.name,
+        team: step.dreamPlayer.team,
+        position: step.dreamPlayer.position,
+        price: step.dreamPlayer.price,
+        avgScore: step.dreamPlayer.avgScore || 0,
+        role: "Premium",
+      },
+      cashRequired: cashNeeded,
+      projectedCashAvailable: projectedCash,
+      reasoning: `Upgrade ${step.steppingStone.name} (avg ${(step.steppingStone.avgScore || 0).toFixed(0)}) → ${step.dreamPlayer.name} (avg ${(step.dreamPlayer.avgScore || 0).toFixed(0)}). ` +
+        `Need $${(cashNeeded / 1000).toFixed(0)}k. ${step.steppingStone.name} generates ~$${(step.weeklyGain / 1000).toFixed(0)}k/wk in price rises. ` +
+        `Points gain: +${((step.dreamPlayer.avgScore || 0) - (step.steppingStone.avgScore || 0)).toFixed(0)} per round.`,
+    });
+
+    runningCash = Math.max(0, projectedCash - cashNeeded);
+    currentRound = tradeRound;
+  }
+
+  const estimatedCompletionRound = tradePath.length > 0 ? tradePath[tradePath.length - 1].round : 1;
+  const dreamOnFieldScore = dreamOnField.reduce((s, p) => s + (p.avgScore || 0), 0);
+  const startOnFieldScore = startingSelected.filter(p => p.isOnField).reduce((s, p) => s + (p.avgScore || 0), 0);
+
+  const summary = `Dream team costs $${(dreamTeamCost / 1000000).toFixed(2)}M (${((dreamTeamCost - SALARY_CAP) / 1000000).toFixed(2)}M over cap). ` +
+    `Starting squad fits within $${(SALARY_CAP / 1000000).toFixed(2)}M cap at $${(startCost / 1000000).toFixed(2)}M. ` +
+    `${affordableDreamPlayers.length} dream players locked in from Round 1, ${steppingStones.length} stepping stones to upgrade over ${estimatedCompletionRound} rounds. ` +
+    `Starting projected score: ${startOnFieldScore.toFixed(0)} → Dream projected score: ${dreamOnFieldScore.toFixed(0)} (+${(dreamOnFieldScore - startOnFieldScore).toFixed(0)}).`;
+
+  return {
+    dreamTeam: dreamSelected,
+    dreamTeamCost,
+    startingTeam: startingSelected,
+    startingTeamCost: startCost,
+    tradePath,
+    estimatedCompletionRound,
+    summary,
+  };
+}
+
 export async function generateSeasonPlan(
   teamPlayerIds: number[],
   currentRound: number
