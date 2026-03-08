@@ -779,7 +779,7 @@ export async function registerRoutes(
       res.json(analysis);
     } catch (error: any) {
       console.error("Screenshot analysis error:", error.message);
-      res.status(500).json({ message: "Failed to analyze screenshot. Please try again with a clearer image." });
+      res.status(500).json({ message: "Failed to analyse screenshot. Please try again with a clearer image." });
     }
   });
 
@@ -1854,6 +1854,58 @@ export async function registerRoutes(
     try {
       await storage.deleteLeagueOpponent(Number(req.params.id));
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/league/import-screenshot", upload.single("screenshot"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No screenshot uploaded" });
+
+      const allowedMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+      if (!allowedMimes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: "Unsupported file type. Please upload a PNG, JPG, or WebP image." });
+      }
+
+      const base64Image = req.file.buffer.toString("base64");
+      const { analyzeLeagueScreenshot } = await import("./intel-engine");
+      const result = await analyzeLeagueScreenshot(base64Image);
+      res.json(result);
+    } catch (error: any) {
+      console.error("League screenshot import error:", error.message);
+      res.status(500).json({ message: "Failed to analyse league screenshot. Please try again with a clearer image." });
+    }
+  });
+
+  app.post("/api/league/import-bulk", async (req, res) => {
+    try {
+      const bulkImportSchema = z.object({
+        leagueName: z.string().min(1),
+        teams: z.array(z.object({
+          teamName: z.string().min(1),
+          managerName: z.string(),
+          position: z.number(),
+        })).min(1),
+      });
+      const { leagueName, teams } = bulkImportSchema.parse(req.body);
+
+      const created = [];
+      for (const team of teams) {
+        const opponentName = team.managerName
+          ? `${team.teamName} (${team.managerName})`
+          : team.teamName;
+        const opponent = await storage.createLeagueOpponent({
+          leagueName,
+          opponentName,
+          totalScore: null,
+          lastRoundScore: null,
+          notes: `Ladder position: ${team.position}`,
+        });
+        created.push(opponent);
+      }
+
+      res.json({ success: true, count: created.length, opponents: created });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

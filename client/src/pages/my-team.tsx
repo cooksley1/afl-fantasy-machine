@@ -23,13 +23,25 @@ import {
   Loader2,
   LayoutGrid,
   List,
-  MoreVertical,
+  Trash2,
   SlidersHorizontal,
   RefreshCw,
   Users,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, LeagueSettings } from "@shared/schema";
@@ -472,34 +484,58 @@ function ListViewRow({
           <p className="text-xs font-bold text-muted-foreground">AVG</p>
           <p className="text-sm font-mono font-semibold">{player.avgScore?.toFixed(1) || "0.0"}</p>
         </div>
-        <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
           <Button
             size="icon"
             variant="ghost"
-            className="h-6 w-6 sm:h-7 sm:w-7"
+            className={`h-6 w-6 sm:h-7 sm:w-7 ${player.isCaptain ? "bg-red-500/15 ring-1 ring-red-500/40" : ""}`}
             onClick={() => onSetCaptain(player.myTeamPlayerId!)}
+            title="Set as Captain"
             data-testid={`button-captain-${player.id}`}
           >
-            <Crown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${player.isCaptain ? "text-red-500" : "text-muted-foreground"}`} />
+            <span className={`text-[10px] sm:text-[11px] font-black ${player.isCaptain ? "text-red-500" : "text-muted-foreground"}`}>C</span>
           </Button>
           <Button
             size="icon"
             variant="ghost"
-            className="h-6 w-6 sm:h-7 sm:w-7"
+            className={`h-6 w-6 sm:h-7 sm:w-7 ${player.isViceCaptain ? "bg-emerald-500/15 ring-1 ring-emerald-500/40" : ""}`}
             onClick={() => onSetViceCaptain(player.myTeamPlayerId!)}
+            title="Set as Vice Captain"
             data-testid={`button-vc-${player.id}`}
           >
-            <Shield className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`} />
+            <span className={`text-[10px] sm:text-[11px] font-black ${player.isViceCaptain ? "text-emerald-500" : "text-muted-foreground"}`}>VC</span>
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 sm:h-7 sm:w-7"
-            onClick={() => onRemove(player.myTeamPlayerId!)}
-            data-testid={`button-remove-${player.id}`}
-          >
-            <MoreVertical className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 sm:h-7 sm:w-7"
+                title="Remove player"
+                data-testid={`button-remove-${player.id}`}
+              >
+                <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove {player.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will remove {player.name} from your team. You can re-add them later from the players list.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-remove">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => onRemove(player.myTeamPlayerId!)}
+                  data-testid="button-confirm-remove"
+                >
+                  Remove
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -766,11 +802,40 @@ export default function MyTeam() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/my-team/${id}`),
-    onSuccess: () => {
+    mutationFn: async (id: number) => {
+      const player = teamPlayers?.find(p => p.myTeamPlayerId === id);
+      await apiRequest("DELETE", `/api/my-team/${id}`);
+      return player;
+    },
+    onSuccess: (removedPlayer) => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
       setAnalysis(null);
-      toast({ title: "Player removed from team" });
+      if (removedPlayer) {
+        toast({
+          title: `${removedPlayer.name} removed`,
+          description: "Tap Undo to restore them to your team.",
+          action: (
+            <ToastAction
+              altText="Undo remove"
+              onClick={async () => {
+                try {
+                  await apiRequest("POST", "/api/my-team", {
+                    playerId: removedPlayer.id,
+                    fieldPosition: removedPlayer.fieldPosition || removedPlayer.position,
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+                  toast({ title: `${removedPlayer.name} restored` });
+                } catch {
+                  toast({ title: "Could not restore player", variant: "destructive" });
+                }
+              }}
+              data-testid="button-undo-remove"
+            >
+              Undo
+            </ToastAction>
+          ),
+        });
+      }
     },
   });
 

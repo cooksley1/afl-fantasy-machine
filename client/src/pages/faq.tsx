@@ -249,10 +249,10 @@ const faqItems: FAQItem[] = [
   {
     id: "team-analyzer",
     category: "Features",
-    question: "How does the team analyzer work?",
+    question: "How does the Team Upload & Analyser work?",
     answer: (
       <div className="space-y-2">
-        <p>The Team Analyzer provides a visual snapshot of your squad structure and identifies strengths, weaknesses, and areas for improvement:</p>
+        <p>The Team Upload & Analyser provides a visual snapshot of your squad structure and identifies strengths, weaknesses, and areas for improvement:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>Position breakdown:</strong> Shows scoring distribution across DEF, MID, RUC, and FWD lines.</li>
           <li><strong>Bye round coverage:</strong> Maps how many players you have across each bye round to flag potential shortfalls.</li>
@@ -347,7 +347,7 @@ const faqItems: FAQItem[] = [
           <li><strong>Go to "My Team"</strong> so your full squad is visible.</li>
           <li><strong>Tap the share icon</strong> (top-right corner of the screen).</li>
           <li><strong>Choose "Save Image"</strong> to save the team screenshot to your camera roll.</li>
-          <li><strong>Upload the screenshot</strong> using the Team Analyzer page or during onboarding (Step 3).</li>
+          <li><strong>Upload the screenshot</strong> using the Team Upload & Analyser page or during onboarding (Step 3).</li>
         </ol>
         <p>After uploading, the AI will identify your players from the image. You'll see a list of matched players with their positions. Click the <strong>"Save as My Team"</strong> button to save them as your current squad.</p>
         <p>If any players aren't matched correctly, you can manually adjust your team from the My Team page or the Players page afterwards.</p>
@@ -360,7 +360,7 @@ const faqItems: FAQItem[] = [
     question: "How do I save my team?",
     answer: (
       <div className="space-y-2">
-        <p>The quickest way to set up your team is by <strong>uploading a screenshot</strong> from the AFL Fantasy app. Use the Team Analyzer page or the onboarding wizard to upload your screenshot, then click <strong>"Save as My Team"</strong> after the analysis identifies your players.</p>
+        <p>The quickest way to set up your team is by <strong>uploading a screenshot</strong> from the AFL Fantasy app. Use the Team Upload & Analyser page or the onboarding wizard to upload your screenshot, then click <strong>"Save as My Team"</strong> after the analysis identifies your players.</p>
         <p>You can also build and manage your team manually through the My Team page:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>Add players:</strong> Search and add players from the Players page to fill your 30-player squad.</li>

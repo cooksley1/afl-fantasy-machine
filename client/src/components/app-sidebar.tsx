@@ -63,7 +63,7 @@ const navGroups = [
     label: "TOOLS",
     testId: "group-tools",
     items: [
-      { title: "Team Analyser", subtitle: "Upload & analyse", url: "/analyze", icon: Camera },
+      { title: "Team Upload & Analyser", subtitle: "Upload & analyse", url: "/analyze", icon: Camera },
       { title: "Live Scores", subtitle: "Real-time scores", url: "/live", icon: Radio, badge: "Live", badgeClass: "bg-red-500 text-white" },
       { title: "Schedule", subtitle: "Season fixtures", url: "/schedule", icon: Calendar },
     ],

@@ -208,7 +208,7 @@ export default function Trades() {
             ) : (
               <Brain className="w-4 h-4 mr-2" />
             )}
-            {aiGenerateMutation.isPending ? "Analyzing..." : "AI Analysis"}
+            {aiGenerateMutation.isPending ? "Analysing..." : "AI Analysis"}
           </Button>
         </div>
       </div>

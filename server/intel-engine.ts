@@ -462,6 +462,71 @@ Return JSON:
   }
 }
 
+export async function analyzeLeagueScreenshot(base64Image: string): Promise<{
+  teams: { teamName: string; managerName: string; position: number }[];
+}> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert at reading AFL Fantasy league ladder screenshots. You extract team names, manager/coach names, and ladder positions from screenshots of AFL Fantasy league standings.
+
+Look for:
+- A numbered list or table showing league standings
+- Team names (fantasy team names, not AFL club names)
+- Manager/coach names (the person who owns the team)
+- Position/rank on the ladder
+
+If you cannot distinguish between team name and manager name, put the most prominent name as teamName and use an empty string for managerName.
+Return ONLY valid JSON.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Extract all teams from this AFL Fantasy league ladder screenshot. Return every team visible with their ladder position.
+
+Return JSON:
+{
+  "teams": [
+    { "teamName": "Fantasy Team Name", "managerName": "Owner Name", "position": 1 },
+    { "teamName": "Another Team", "managerName": "Another Owner", "position": 2 }
+  ]
+}
+
+Extract ALL teams visible in the image. Position should be their ladder rank (1 = first place).`
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: "high" }
+          }
+        ]
+      }
+    ],
+    temperature: 0.3,
+    max_tokens: 4000,
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("No response from AI vision analysis");
+
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      teams: Array.isArray(parsed.teams) ? parsed.teams.map((t: any, i: number) => ({
+        teamName: t.teamName || `Team ${i + 1}`,
+        managerName: t.managerName || "",
+        position: t.position || i + 1,
+      })) : [],
+    };
+  } catch {
+    throw new Error("Failed to parse AI league analysis response");
+  }
+}
+
 export async function generateCaptainAdvice(): Promise<{
   vcPick: { name: string; reason: string; gameTime: string; projectedScore: number };
   captainPick: { name: string; reason: string; gameTime: string; projectedScore: number };

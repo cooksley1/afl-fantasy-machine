@@ -25,7 +25,7 @@ const KNOWN_TAG_PROFILES: {
   { team: "Port Adelaide", usesTaggers: false, tagFrequency: 0.1, primaryTagger: null, secondaryTagger: null, notes: "Port Adelaide prefer a team-based pressure approach rather than dedicated tagging." },
   { team: "Richmond", usesTaggers: true, tagFrequency: 0.4, primaryTagger: "Hugo Ralphsmith", secondaryTagger: null, notes: "Richmond deploy a run-with player selectively, especially in big games." },
   { team: "St Kilda", usesTaggers: true, tagFrequency: 0.7, primaryTagger: "Marcus Windhager", secondaryTagger: null, notes: "Windhager is one of the competition's most dedicated taggers. Regularly deployed against the number one midfielder." },
-  { team: "Sydney", usesTaggers: false, tagFrequency: 0.1, primaryTagger: null, secondaryTagger: null, notes: "Sydney rarely use a dedicated tagger. Rely on system-based defense." },
+  { team: "Sydney", usesTaggers: false, tagFrequency: 0.1, primaryTagger: null, secondaryTagger: null, notes: "Sydney rarely use a dedicated tagger. Rely on system-based defence." },
   { team: "West Coast", usesTaggers: true, tagFrequency: 0.35, primaryTagger: "Liam Duggan", secondaryTagger: null, notes: "Duggan plays a run-with role. West Coast use tagging selectively." },
   { team: "Western Bulldogs", usesTaggers: false, tagFrequency: 0.15, primaryTagger: null, secondaryTagger: null, notes: "Western Bulldogs prefer an offensive, free-flowing midfield approach." },
 ];

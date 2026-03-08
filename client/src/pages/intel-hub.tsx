@@ -544,7 +544,7 @@ export default function IntelHub() {
             ) : (
               <Brain className="w-4 h-4 mr-1.5" />
             )}
-            {generateMutation.isPending ? "Analyzing..." : "AI Analysis"}
+            {generateMutation.isPending ? "Analysing..." : "AI Analysis"}
           </Button>
         </div>
       </div>

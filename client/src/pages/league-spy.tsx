@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Eye, Plus, Trash2, Pencil, Upload, Target, Users, TrendingUp, TrendingDown, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp, X, Check } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Eye, Plus, Trash2, Pencil, Upload, Target, Users, TrendingUp, TrendingDown, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp, X, Check, ImageUp } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { LeagueOpponent } from "@shared/schema";
@@ -377,8 +378,227 @@ function OpponentCard({ opponent }: { opponent: LeagueOpponent }) {
   );
 }
 
+interface ExtractedTeam {
+  teamName: string;
+  managerName: string;
+  position: number;
+}
+
+function ImportLeagueDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [step, setStep] = useState<"upload" | "preview" | "name">("upload");
+  const [extractedTeams, setExtractedTeams] = useState<ExtractedTeam[]>([]);
+  const [leagueName, setLeagueName] = useState("");
+  const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("screenshot", file);
+      const res = await fetch("/api/league/import-screenshot", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(err.message);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { teams: ExtractedTeam[] }) => {
+      if (data.teams && data.teams.length > 0) {
+        setExtractedTeams(data.teams);
+        setRemovedIndices(new Set());
+        setStep("preview");
+      } else {
+        toast({ title: "No teams found", description: "Could not detect any teams in the screenshot. Try a clearer image.", variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => toast({ title: "Analysis failed", description: error.message, variant: "destructive" }),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const teamsToImport = extractedTeams.filter((_, i) => !removedIndices.has(i));
+      return apiRequest("POST", "/api/league/import-bulk", {
+        leagueName: leagueName.trim(),
+        teams: teamsToImport,
+      });
+    },
+    onSuccess: async (res: Response) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/league/opponents"] });
+      toast({ title: "League imported", description: `Added ${data.count} opponents to "${leagueName}"` });
+      handleClose();
+    },
+    onError: (error: Error) => toast({ title: "Import failed", description: error.message, variant: "destructive" }),
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) analyzeMutation.mutate(file);
+  };
+
+  const handleClose = () => {
+    setStep("upload");
+    setExtractedTeams([]);
+    setLeagueName("");
+    setRemovedIndices(new Set());
+    onOpenChange(false);
+  };
+
+  const toggleRemove = (index: number) => {
+    setRemovedIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const activeTeams = extractedTeams.filter((_, i) => !removedIndices.has(i));
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle data-testid="text-import-dialog-title">
+            {step === "upload" && "Import League from Screenshot"}
+            {step === "preview" && "Review Extracted Teams"}
+            {step === "name" && "Name Your League"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === "upload" && (
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground" data-testid="text-import-instructions">
+              Upload a screenshot of your league ladder. The AI will extract all team names and manager names automatically.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+              data-testid="input-import-screenshot"
+            />
+            <div className="flex flex-col items-center gap-3 py-6 border border-dashed rounded-md">
+              <ImageUp className="w-10 h-10 text-muted-foreground/40" />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={analyzeMutation.isPending}
+                data-testid="button-select-screenshot"
+              >
+                {analyzeMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Analysing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Select Screenshot
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">PNG, JPG, or WebP</p>
+            </div>
+          </div>
+        )}
+
+        {step === "preview" && (
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground" data-testid="text-preview-instructions">
+              Found {extractedTeams.length} teams. Remove any you don't want to import, then continue.
+            </p>
+            <div className="max-h-72 overflow-y-auto space-y-1">
+              {extractedTeams.map((team, i) => {
+                const isRemoved = removedIndices.has(i);
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm ${isRemoved ? "opacity-40 line-through" : "bg-muted/30"}`}
+                    data-testid={`row-extracted-team-${i}`}
+                  >
+                    <span className="text-xs text-muted-foreground w-5 shrink-0">{team.position}</span>
+                    <span className="font-medium flex-1 min-w-0 truncate" data-testid={`text-team-name-${i}`}>{team.teamName}</span>
+                    {team.managerName && (
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px]" data-testid={`text-manager-name-${i}`}>{team.managerName}</span>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => toggleRemove(i)}
+                      data-testid={`button-toggle-team-${i}`}
+                    >
+                      {isRemoved ? <Plus className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => setStep("upload")} data-testid="button-back-upload">
+                Back
+              </Button>
+              <Button
+                onClick={() => setStep("name")}
+                disabled={activeTeams.length === 0}
+                data-testid="button-continue-name"
+              >
+                Continue ({activeTeams.length} teams)
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "name" && (
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground" data-testid="text-name-instructions">
+              Give this league a name. All {activeTeams.length} teams will be added as opponents.
+            </p>
+            <Input
+              placeholder="League name (e.g. Work League)"
+              value={leagueName}
+              onChange={(e) => setLeagueName(e.target.value)}
+              autoFocus
+              data-testid="input-import-league-name"
+            />
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => setStep("preview")} data-testid="button-back-preview">
+                Back
+              </Button>
+              <Button
+                onClick={() => importMutation.mutate()}
+                disabled={!leagueName.trim() || importMutation.isPending}
+                data-testid="button-import-league"
+              >
+                {importMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 mr-2" />
+                    Import {activeTeams.length} Teams
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LeagueSpy() {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const { data: opponents, isLoading } = useQuery<LeagueOpponent[]>({
     queryKey: ["/api/league/opponents"],
@@ -406,19 +626,32 @@ export default function LeagueSpy() {
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-sm font-semibold" data-testid="text-add-section-title">Add Opponent</h2>
-            <Button
-              size="sm"
-              variant={showAddForm ? "default" : "outline"}
-              onClick={() => setShowAddForm(!showAddForm)}
-              data-testid="button-toggle-add-form"
-            >
-              {showAddForm ? <X className="w-3 h-3 mr-1.5" /> : <Plus className="w-3 h-3 mr-1.5" />}
-              {showAddForm ? "Cancel" : "New Opponent"}
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowImportDialog(true)}
+                data-testid="button-import-league"
+              >
+                <ImageUp className="w-3 h-3 mr-1.5" />
+                Import League
+              </Button>
+              <Button
+                size="sm"
+                variant={showAddForm ? "default" : "outline"}
+                onClick={() => setShowAddForm(!showAddForm)}
+                data-testid="button-toggle-add-form"
+              >
+                {showAddForm ? <X className="w-3 h-3 mr-1.5" /> : <Plus className="w-3 h-3 mr-1.5" />}
+                {showAddForm ? "Cancel" : "New Opponent"}
+              </Button>
+            </div>
           </div>
           {showAddForm && <AddOpponentForm onSuccess={() => setShowAddForm(false)} />}
         </CardContent>
       </Card>
+
+      <ImportLeagueDialog open={showImportDialog} onOpenChange={setShowImportDialog} />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

@@ -63,7 +63,7 @@ export default function TeamAnalyzer() {
         credentials: "include",
       });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ message: "Analysis failed — please try again with a clearer image" }));
         throw new Error(err.message || "Analysis failed");
       }
       return res.json() as Promise<AnalysisResult>;
@@ -132,7 +132,7 @@ export default function TeamAnalyzer() {
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-4xl mx-auto" data-testid="page-team-analyzer">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-page-title">
-          Team Analyzer
+          Team Upload & Analyser
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
           Upload a screenshot of your AFL Fantasy team for AI-powered analysis
@@ -195,12 +195,12 @@ export default function TeamAnalyzer() {
                   {analyzeMutation.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Analyzing...
+                      Analysing...
                     </>
                   ) : (
                     <>
                       <ImageIcon className="w-4 h-4 mr-2" />
-                      Analyze Team
+                      Analyse Team
                     </>
                   )}
                 </Button>

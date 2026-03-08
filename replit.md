@@ -39,12 +39,12 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Live Scores**: Tracks live match statuses and fantasy scores, with automated data fetching from Footywire.
 - **Season Schedule**: Fetches and displays the full AFL season fixture.
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
-- **Team Analyzer**: Allows users to upload team screenshots for AI analysis and saving identified players.
+- **Team Upload & Analyser**: Allows users to upload team screenshots for AI analysis and saving identified players.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
 - **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks. `buildOptimalTeam` accepts optional `excludePlayerIds` and `variationSeed` for generating distinct team variants.
 - **Team Lab (Sandbox)**: Save, create, compare, and swap between multiple team configurations. AI-built teams exclude ~40% of current premiums and use seeded scoring variation to generate genuinely different alternatives. Compare any saved team side-by-side with the active team showing player overlaps, score diffs, and value diffs. Activate any saved team to make it the main team.
 - **Game Day Guide**: Step-by-step transfer checklist for updating the official AFL Fantasy app. Lists trades (out→in), captain/VC picks, field/bench swaps needed, and numbered instructions. Copy-to-clipboard and Web Share API support. Checkable items stored in localStorage.
-- **League Spy**: Track opponents across multiple fantasy leagues. Add opponents manually, upload their team screenshots for AI analysis, then get matchup breakdowns: projected advantage, unique picks each side, captain differential tips, and weekly win strategy advice.
+- **League Spy**: Track opponents across multiple fantasy leagues. Add opponents manually or bulk-import an entire league from a ladder screenshot. Upload opponent team screenshots for AI analysis, then get matchup breakdowns: projected advantage, unique picks each side, captain differential tips, and weekly win strategy advice.
 
 ### New DB Tables (Team Lab / League Spy)
 - `saved_teams`: id, name, description, playerData (JSON), teamValue, projectedScore, isActive, source, createdAt
@@ -58,6 +58,8 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - `GET /api/saved-teams/:id/compare` — compare saved team vs active team
 - `GET/POST /api/league/opponents` — list and create league opponents
 - `PUT/DELETE /api/league/opponents/:id` — update/delete opponents
+- `POST /api/league/import-screenshot` — upload league ladder screenshot for AI extraction
+- `POST /api/league/import-bulk` — bulk-create opponents from extracted league data
 - `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
 - `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
 - `GET /api/game-day-guide` — generate game day transfer checklist
