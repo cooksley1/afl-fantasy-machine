@@ -91,6 +91,90 @@ interface TeamAnalysisResult {
   captainStrategy: string;
 }
 
+type PlayerAction = {
+  label: string;
+  color: string;
+  bg: string;
+  priority: number;
+};
+
+function getPlayerAction(player: PlayerWithTeamInfo, currentRound: number): PlayerAction {
+  const avg = player.avgScore ?? 0;
+  const be = player.breakEven ?? 0;
+  const l3 = player.last3Avg ?? avg;
+  const proj = player.projectedScore ?? avg;
+  const gp = player.gamesPlayed ?? 0;
+  const injury = player.injuryStatus;
+  const selection = player.selectionStatus;
+  const cashGen = player.cashGenPotential;
+  const captainProb = player.captainProbability ?? 0;
+  const formTrend = player.formTrend;
+  const price = player.price ?? 0;
+  const priceChange = player.priceChange ?? 0;
+
+  if (injury === "OUT" || injury === "SEASON" || injury === "LONG") {
+    return { label: "TRADE", color: "text-white", bg: "bg-red-500", priority: 1 };
+  }
+
+  if (selection === "omitted") {
+    return { label: "TRADE", color: "text-white", bg: "bg-red-500", priority: 1 };
+  }
+
+  if (injury === "TEST" || injury === "TBC") {
+    return { label: "MONITOR", color: "text-white", bg: "bg-amber-500", priority: 3 };
+  }
+
+  if (selection === "emergency") {
+    return { label: "MONITOR", color: "text-white", bg: "bg-amber-500", priority: 3 };
+  }
+
+  if (player.byeRound === currentRound) {
+    return { label: "BYE", color: "text-white", bg: "bg-slate-500", priority: 4 };
+  }
+
+  if (captainProb >= 0.15 && avg >= 100) {
+    return { label: "CAPTAIN", color: "text-white", bg: "bg-purple-600", priority: 2 };
+  }
+
+  if (gp >= 3 && be > avg * 1.3 && avg < 80) {
+    return { label: "TRADE", color: "text-white", bg: "bg-red-500", priority: 1 };
+  }
+
+  if (gp >= 3 && l3 < avg * 0.75 && formTrend === "down") {
+    return { label: "SELL", color: "text-white", bg: "bg-orange-500", priority: 2 };
+  }
+
+  if (cashGen && (cashGen === "elite" || cashGen === "high") && gp <= 6 && be < avg * 0.7) {
+    return { label: "CASH COW", color: "text-emerald-900", bg: "bg-emerald-400", priority: 5 };
+  }
+
+  if (cashGen && (cashGen === "elite" || cashGen === "high") && gp > 6 && priceChange < 0) {
+    return { label: "SELL", color: "text-white", bg: "bg-orange-500", priority: 2 };
+  }
+
+  if (avg >= 100 && l3 >= avg * 0.95 && gp >= 5) {
+    return { label: "HOLD", color: "text-emerald-900", bg: "bg-emerald-300", priority: 6 };
+  }
+
+  if (l3 > avg * 1.15 && gp >= 3) {
+    return { label: "HOT", color: "text-white", bg: "bg-sky-500", priority: 4 };
+  }
+
+  if (gp >= 3 && l3 < avg * 0.85) {
+    return { label: "WATCH", color: "text-amber-900", bg: "bg-amber-300", priority: 4 };
+  }
+
+  if (avg >= 85 && gp >= 5) {
+    return { label: "HOLD", color: "text-emerald-900", bg: "bg-emerald-300", priority: 6 };
+  }
+
+  if (gp < 3 && price < 400000) {
+    return { label: "DEVELOPING", color: "text-sky-900", bg: "bg-sky-200", priority: 7 };
+  }
+
+  return { label: "HOLD", color: "text-emerald-900", bg: "bg-emerald-300", priority: 7 };
+}
+
 function formatPrice(price: number): string {
   if (price >= 1000000) return `$${(price / 1000000).toFixed(3)}M`;
   return `$${(price / 1000).toFixed(0)}k`;
@@ -219,12 +303,14 @@ function FieldViewCard({
   visibleStats,
   isBench = false,
   hasPlayed = false,
+  currentRound = 1,
 }: {
   player: PlayerWithTeamInfo;
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
   isBench?: boolean;
   hasPlayed?: boolean;
+  currentRound?: number;
 }) {
   const teamColors = getTeamColors(player.team);
   const teamAbbr = getTeamAbbr(player.team);
@@ -321,6 +407,17 @@ function FieldViewCard({
           </div>
         )}
       </div>
+      {(() => {
+        const action = getPlayerAction(player, currentRound);
+        return (
+          <span
+            className={`mt-0.5 px-1.5 py-px rounded-full text-[7px] sm:text-[8px] font-bold uppercase leading-tight ${action.bg} ${action.color}`}
+            data-testid={`action-${player.id}`}
+          >
+            {action.label}
+          </span>
+        );
+      })()}
     </div>
   );
 }
@@ -330,11 +427,13 @@ function FieldView({
   onTapPlayer,
   visibleStats,
   playedTeams,
+  currentRound = 1,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
   playedTeams: Set<string>;
+  currentRound?: number;
 }) {
   const onFieldByPos = (pos: string) =>
     teamPlayers.filter((p) => p.fieldPosition === pos && p.isOnField);
@@ -366,13 +465,13 @@ function FieldView({
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
               {topRow.map((p) => (
-                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} />
+                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
               ))}
             </div>
             {bottomRow.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
                 {bottomRow.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} />
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
                 ))}
               </div>
             )}
@@ -390,7 +489,7 @@ function FieldView({
           </div>
           <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
             {utilPlayers.map((p) => (
-              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
+              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
             ))}
           </div>
         </div>
@@ -406,6 +505,7 @@ function ListViewRow({
   onSetCaptain,
   onSetViceCaptain,
   hasPlayed = false,
+  currentRound = 1,
 }: {
   player: PlayerWithTeamInfo;
   advice?: PlayerAdvice;
@@ -413,7 +513,9 @@ function ListViewRow({
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
   hasPlayed?: boolean;
+  currentRound?: number;
 }) {
+  const action = getPlayerAction(player, currentRound);
   return (
     <div
       className={`flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 border-b border-border/40 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors ${hasPlayed ? "bg-emerald-500/5" : ""}`}
@@ -462,6 +564,9 @@ function ListViewRow({
               <Check className="w-2.5 h-2.5 mr-0.5" />PLAYED
             </Badge>
           )}
+          <span className={`text-[8px] px-1.5 py-0 h-3.5 rounded-full font-bold inline-flex items-center ${action.bg} ${action.color}`} data-testid={`action-list-${player.id}`}>
+            {action.label}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-bold">
@@ -550,6 +655,7 @@ function ListView({
   onSetViceCaptain,
   sortBy,
   playedTeams,
+  currentRound = 1,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   analysis: TeamAnalysisResult | null;
@@ -558,6 +664,7 @@ function ListView({
   onSetViceCaptain: (id: number) => void;
   sortBy: "position" | StatKey;
   playedTeams: Set<string>;
+  currentRound?: number;
 }) {
   const getAdvice = (playerId: number) => analysis?.playerAdvice.find(a => a.playerId === playerId);
 
@@ -581,6 +688,7 @@ function ListView({
               onSetCaptain={onSetCaptain}
               onSetViceCaptain={onSetViceCaptain}
               hasPlayed={playedTeams.has(player.team)}
+              currentRound={currentRound}
             />
           ))}
         </div>
@@ -613,6 +721,7 @@ function ListView({
                   onSetCaptain={onSetCaptain}
                   onSetViceCaptain={onSetViceCaptain}
                   hasPlayed={playedTeams.has(player.team)}
+                  currentRound={currentRound}
                 />
               ))}
             </div>
@@ -1439,6 +1548,7 @@ export default function MyTeam() {
                 onTapPlayer={setSelectedPlayer}
                 visibleStats={visibleStats}
                 playedTeams={playedTeams}
+                currentRound={currentRound}
               />
             </CardContent>
           </>
@@ -1453,6 +1563,7 @@ export default function MyTeam() {
             onSetViceCaptain={(id) => viceCaptainMutation.mutate(id)}
             sortBy={sortBy}
             playedTeams={playedTeams}
+            currentRound={currentRound}
           />
         )}
       </Card>
