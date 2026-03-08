@@ -52,7 +52,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
-import type { PlayerWithTeamInfo, Player, LeagueSettings } from "@shared/schema";
+import type { PlayerWithTeamInfo, Player, LeagueSettings, Fixture } from "@shared/schema";
 
 type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price" | "last";
 
@@ -218,11 +218,13 @@ function FieldViewCard({
   onTapPlayer,
   visibleStats,
   isBench = false,
+  hasPlayed = false,
 }: {
   player: PlayerWithTeamInfo;
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
   isBench?: boolean;
+  hasPlayed?: boolean;
 }) {
   const teamColors = getTeamColors(player.team);
   const teamAbbr = getTeamAbbr(player.team);
@@ -238,7 +240,7 @@ function FieldViewCard({
     >
       <div className="relative">
         <div
-          className={`w-[72px] sm:w-[88px] rounded-lg border overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col ${isBench ? "border-border/30 grayscale-[40%]" : "border-border/60"}`}
+          className={`w-[72px] sm:w-[88px] rounded-lg border overflow-hidden shadow-sm group-hover:shadow-md transition-shadow flex flex-col ${isBench ? "border-border/30 grayscale-[40%]" : "border-border/60"} ${hasPlayed ? "ring-2 ring-emerald-500/60" : ""}`}
           style={{ background: `linear-gradient(135deg, ${teamColors.primary} 0%, ${teamColors.primary}dd 100%)` }}
         >
           <div className="relative h-[52px] sm:h-[58px] flex items-center justify-center overflow-hidden">
@@ -313,6 +315,11 @@ function FieldViewCard({
             <span className="text-[7px] font-bold text-white">OUT</span>
           </div>
         )}
+        {hasPlayed && (
+          <div className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center ring-1 ring-background" data-testid={`badge-played-${player.id}`}>
+            <Check className="w-2.5 h-2.5 text-white" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -322,10 +329,12 @@ function FieldView({
   teamPlayers,
   onTapPlayer,
   visibleStats,
+  playedTeams,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
   visibleStats: StatKey[];
+  playedTeams: Set<string>;
 }) {
   const onFieldByPos = (pos: string) =>
     teamPlayers.filter((p) => p.fieldPosition === pos && p.isOnField);
@@ -361,13 +370,13 @@ function FieldView({
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
               {topRow.map((p) => (
-                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
+                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
               ))}
             </div>
             {bottomRow.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
                 {bottomRow.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
+                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
                 ))}
               </div>
             )}
@@ -382,7 +391,7 @@ function FieldView({
                 </div>
                 <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
                   {bench.map((p) => (
-                    <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench />
+                    <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench hasPlayed={playedTeams.has(p.team)} />
                   ))}
                 </div>
               </div>
@@ -401,7 +410,7 @@ function FieldView({
           </div>
           <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
             {utilPlayers.map((p) => (
-              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} />
+              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} />
             ))}
           </div>
         </div>
@@ -416,16 +425,18 @@ function ListViewRow({
   onTapPlayer,
   onSetCaptain,
   onSetViceCaptain,
+  hasPlayed = false,
 }: {
   player: PlayerWithTeamInfo;
   advice?: PlayerAdvice;
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
+  hasPlayed?: boolean;
 }) {
   return (
     <div
-      className="flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 border-b border-border/40 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors"
+      className={`flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 border-b border-border/40 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors ${hasPlayed ? "bg-emerald-500/5" : ""}`}
       data-testid={`list-row-${player.id}`}
       onClick={() => onTapPlayer(player)}
     >
@@ -465,6 +476,11 @@ function ListViewRow({
           )}
           {!player.isOnField && (
             <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-muted text-muted-foreground shrink-0">BENCH</Badge>
+          )}
+          {hasPlayed && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shrink-0" data-testid={`badge-played-list-${player.id}`}>
+              <Check className="w-2.5 h-2.5 mr-0.5" />PLAYED
+            </Badge>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -553,6 +569,7 @@ function ListView({
   onSetCaptain,
   onSetViceCaptain,
   sortBy,
+  playedTeams,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   analysis: TeamAnalysisResult | null;
@@ -560,6 +577,7 @@ function ListView({
   onSetCaptain: (id: number) => void;
   onSetViceCaptain: (id: number) => void;
   sortBy: "position" | StatKey;
+  playedTeams: Set<string>;
 }) {
   const getAdvice = (playerId: number) => analysis?.playerAdvice.find(a => a.playerId === playerId);
 
@@ -582,6 +600,7 @@ function ListView({
               onTapPlayer={onTapPlayer}
               onSetCaptain={onSetCaptain}
               onSetViceCaptain={onSetViceCaptain}
+              hasPlayed={playedTeams.has(player.team)}
             />
           ))}
         </div>
@@ -613,6 +632,7 @@ function ListView({
                   onTapPlayer={onTapPlayer}
                   onSetCaptain={onSetCaptain}
                   onSetViceCaptain={onSetViceCaptain}
+                  hasPlayed={playedTeams.has(player.team)}
                 />
               ))}
             </div>
@@ -1148,6 +1168,25 @@ export default function MyTeam() {
     queryKey: ["/api/settings"],
   });
 
+  const currentRound = settings?.currentRound ?? 1;
+  const { data: roundFixtures } = useQuery<{ round: number; roundName: string; matches: Fixture[] }>({
+    queryKey: ["/api/fixtures", currentRound],
+    enabled: !!settings,
+  });
+
+  const playedTeams = useMemo(() => {
+    const teams = new Set<string>();
+    if (roundFixtures?.matches) {
+      for (const match of roundFixtures.matches) {
+        if (match.complete === 100) {
+          teams.add(match.homeTeam);
+          teams.add(match.awayTeam);
+        }
+      }
+    }
+    return teams;
+  }, [roundFixtures]);
+
   const setupTeamMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/my-team/setup-glens-team");
@@ -1419,6 +1458,7 @@ export default function MyTeam() {
                 teamPlayers={teamPlayers}
                 onTapPlayer={setSelectedPlayer}
                 visibleStats={visibleStats}
+                playedTeams={playedTeams}
               />
             </CardContent>
           </>
@@ -1432,6 +1472,7 @@ export default function MyTeam() {
             onSetCaptain={(id) => captainMutation.mutate(id)}
             onSetViceCaptain={(id) => viceCaptainMutation.mutate(id)}
             sortBy={sortBy}
+            playedTeams={playedTeams}
           />
         )}
       </Card>
