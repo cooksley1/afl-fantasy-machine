@@ -377,7 +377,7 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
 }
 
 export async function analyzeTeamScreenshot(base64Image: string): Promise<{
-  players: { name: string; position: string; score?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;

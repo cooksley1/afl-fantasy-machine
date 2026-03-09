@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AnalysisResult {
-  players: { name: string; position: string; score?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
@@ -78,7 +78,7 @@ export default function TeamAnalyzer() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (players: { name: string; position: string; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[]) => {
+    mutationFn: async (players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[]) => {
       const captainPlayer = players.find(p => p.isCaptain);
       const vcPlayer = players.find(p => p.isViceCaptain);
       const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", {

@@ -35,6 +35,7 @@ import {
   Search,
   X,
   Check,
+  Upload,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -1283,7 +1284,7 @@ export default function MyTeam() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
-      toast({ title: "Team loaded!", description: "The Lizards Gulch is ready to go." });
+      toast({ title: "Team loaded!", description: "Glen's team is ready to go." });
     },
     onError: (error: Error) => {
       toast({ title: "Setup failed", description: error.message, variant: "destructive" });
@@ -1361,6 +1362,14 @@ export default function MyTeam() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button
+                onClick={() => navigate("/team-analyzer")}
+                className="gap-2"
+                data-testid="button-upload-screenshot"
+              >
+                <Upload className="w-4 h-4" />
+                Upload Screenshot
+              </Button>
+              <Button
                 onClick={() => navigate("/players")}
                 variant="outline"
                 className="gap-2"
@@ -1372,6 +1381,7 @@ export default function MyTeam() {
               <Button
                 onClick={() => setupTeamMutation.mutate()}
                 disabled={setupTeamMutation.isPending}
+                variant="outline"
                 className="gap-2"
                 data-testid="button-setup-team"
               >
@@ -1380,7 +1390,7 @@ export default function MyTeam() {
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
-                {setupTeamMutation.isPending ? "Loading Team..." : "Load The Lizards Gulch"}
+                {setupTeamMutation.isPending ? "Loading Team..." : "Load Glen's Team"}
               </Button>
             </div>
           </CardContent>

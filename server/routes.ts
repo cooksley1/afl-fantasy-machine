@@ -318,8 +318,10 @@ export async function registerRoutes(
       };
 
       const missingPlayers = [
-        { name: "Will Derksen", team: "Essendon", position: "DEF", price: 230000 },
         { name: "Tom Blamires", team: "North Melbourne", position: "MID", price: 230000 },
+        { name: "Jack Lindsay", team: "West Coast", position: "DEF", price: 278000 },
+        { name: "Vince Visentini", team: "Essendon", position: "RUC", price: 395000 },
+        { name: "James Carroll", team: "St Kilda", position: "FWD", price: 332000 },
       ];
       for (const mp of missingPlayers) {
         if (!findPlayer(mp.name)) {
@@ -361,11 +363,11 @@ export async function registerRoutes(
         { name: "Samuel Grlj", price: 322000 },
         { name: "Lachlan Blakiston", price: 399000 },
         { name: "Jai Serong", price: 274000 },
-        { name: "Xavier Taylor", price: 310000 },
         { name: "Lachie Jaques", price: 230000 },
+        { name: "Jack Lindsay", price: 278000 },
         { name: "Jack Steele", price: 1006000 },
         { name: "Zak Butters", price: 1047000 },
-        { name: "Harry Sheezel", price: 1145000 },
+        { name: "Errol Gulden", price: 1073000 },
         { name: "Darcy Parish", price: 759000 },
         { name: "Cooper Lord", price: 630000 },
         { name: "Willem Duursma", price: 350000 },
@@ -375,16 +377,16 @@ export async function registerRoutes(
         { name: "Roan Steele", price: 381000 },
         { name: "Brodie Grundy", price: 1122000 },
         { name: "Lachlan McAndrew", price: 286000 },
-        { name: "Liam Reidy", price: 394000 },
-        { name: "Sam Lalor", price: 567000 },
+        { name: "Vince Visentini", price: 395000 },
+        { name: "Harry Sheezel", price: 1145000 },
         { name: "Christian Petracca", price: 948000 },
         { name: "Sam Flanders", price: 716000 },
         { name: "Mattaes Phillipou", price: 610000 },
-        { name: "Billy Dowling", price: 522000 },
+        { name: "Grady Miers", price: 984000 },
+        { name: "Conor Budarick", price: 506000 },
         { name: "Deven Robertson", price: 232000 },
-        { name: "Sullivan Robey", price: 318000 },
         { name: "Leonardo Lombard", price: 230000 },
-        { name: "Charlie Ballard", price: 384000 },
+        { name: "James Carroll", price: 332000 },
       ];
 
       for (const update of priceUpdates) {
@@ -410,11 +412,11 @@ export async function registerRoutes(
         { playerId: fp("Samuel Grlj"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Lachlan Blakiston"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Jai Serong"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Xavier Taylor"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Jack Lindsay"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Lachie Jaques"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Jack Steele"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Zak Butters"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "MID" },
+        { playerId: fp("Errol Gulden"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Darcy Parish"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Cooper Lord"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Willem Duursma"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
@@ -424,16 +426,16 @@ export async function registerRoutes(
         { playerId: fp("Roan Steele"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Brodie Grundy"), isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "RUC" },
         { playerId: fp("Lachlan McAndrew"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Liam Reidy"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Sam Lalor"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Vince Visentini"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+        { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "FWD" },
         { playerId: fp("Christian Petracca"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Sam Flanders"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Mattaes Phillipou"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Billy Dowling"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Deven Robertson"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Sullivan Robey"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Grady Miers"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Conor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Deven Robertson"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Charlie Ballard"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
+        { playerId: fp("James Carroll"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
       ];
 
       for (const entry of teamEntries) {
@@ -976,7 +978,7 @@ export async function registerRoutes(
   app.post("/api/my-team/save-from-analyzer", async (req, res) => {
     try {
       const { players: identifiedPlayers, captainName, viceCaptainName } = req.body as {
-        players: { name: string; position: string; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+        players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
         captainName?: string | null;
         viceCaptainName?: string | null;
       };
@@ -1112,6 +1114,10 @@ export async function registerRoutes(
 
         const posRaw = (ip.position || match.position || "MID").toUpperCase();
         const fieldPos = posMap[posRaw] || "MID";
+        if (ip.price && ip.price > 0) {
+          await storage.updatePlayer(match.id, { price: ip.price });
+          match.price = ip.price;
+        }
         resolvedPlayers.push({ match, fieldPos, ip });
       }
 
