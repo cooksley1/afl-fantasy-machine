@@ -1024,6 +1024,8 @@ export async function registerRoutes(
         return dp[m][n];
       };
 
+      const stripInitialDot = (s: string) => s.replace(/\.$/, "");
+
       const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers) => {
         const normalName = inputName.trim().toLowerCase();
         const exact = players.find(p => p.name.toLowerCase() === normalName);
@@ -1031,12 +1033,24 @@ export async function registerRoutes(
 
         const inputParts = normalName.split(/\s+/);
         const inputSurname = inputParts[inputParts.length - 1];
+        const inputFirst = stripInitialDot(inputParts[0]);
+        const isInitial = inputFirst.length <= 2;
 
         const surnameMatch = players.find(p => {
           const parts = p.name.toLowerCase().split(" ");
           return parts[parts.length - 1] === inputSurname;
         });
         if (surnameMatch) return surnameMatch;
+
+        if (isInitial && inputParts.length >= 2) {
+          const initialMatch = players.find(p => {
+            const pParts = p.name.toLowerCase().split(/\s+/);
+            const pSurname = pParts[pParts.length - 1];
+            const pFirst = pParts[0];
+            return pFirst.startsWith(inputFirst) && (pSurname === inputSurname || levenshtein(pSurname, inputSurname) <= 2);
+          });
+          if (initialMatch) return initialMatch;
+        }
 
         const containsMatch = players.find(p => {
           const pLower = p.name.toLowerCase();
@@ -1050,8 +1064,8 @@ export async function registerRoutes(
             const pParts = pLower.split(/\s+/);
             const pSurname = pParts[pParts.length - 1];
             const pFirst = pParts[0];
-            return (pSurname === inputSurname && pFirst.startsWith(inputParts[0].substring(0, 3))) ||
-              (inputParts[0].length >= 3 && pFirst === inputParts[0] && levenshtein(pSurname, inputSurname) <= 2);
+            return (pSurname === inputSurname && pFirst.startsWith(inputFirst.substring(0, 3))) ||
+              (inputFirst.length >= 3 && pFirst === inputFirst && levenshtein(pSurname, inputSurname) <= 2);
           });
           if (partialMatch) return partialMatch;
         }
@@ -1062,6 +1076,10 @@ export async function registerRoutes(
         });
         if (surnameMatches.length === 1) return surnameMatches[0];
         if (surnameMatches.length > 1) {
+          if (isInitial) {
+            const initialFiltered = surnameMatches.filter(p => p.name.toLowerCase().split(/\s+/)[0].startsWith(inputFirst));
+            if (initialFiltered.length === 1) return initialFiltered[0];
+          }
           const bestFullMatch = surnameMatches.reduce((best, p) => {
             const dist = levenshtein(p.name.toLowerCase(), normalName);
             return dist < best.dist ? { player: p, dist } : best;
