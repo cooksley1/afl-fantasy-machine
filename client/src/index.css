@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+[class*="agent-inbox"],
+iframe[src*="agent-inbox"],
+div[data-replit-feedback],
+#replit-feedback-button,
+.replit-ui-theme-root,
+div[style*="position: fixed"][style*="bottom"][style*="right"][style*="z-index"]:not(.toast-viewport):not([class]) {
+  display: none !important;
+}
+
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border)) transparent;
