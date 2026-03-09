@@ -18,7 +18,7 @@ import { generateTradeRecommendations } from "./services/trade-engine";
 import { evaluateTrade } from "./services/trade-optimizer";
 import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan, buildDreamTeamReverse } from "./services/season-planner";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
-import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, getRoundName } from "./services/fixture-service";
+import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, syncPlayerFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
@@ -1800,23 +1800,12 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
-  app.post("/api/players/update-fixtures", async (req, res) => {
+  app.post("/api/players/update-fixtures", isAdmin, async (req, res) => {
     try {
-      const round = req.body.round || 1;
-      const allPlayers = await storage.getAllPlayers();
-      let updated = 0;
-      for (const player of allPlayers) {
-        const fixture = getFixtureForTeam(player.team, round);
-        if (fixture) {
-          await storage.updatePlayer(player.id, {
-            nextOpponent: fixture.opponent,
-            venue: fixture.venue,
-            gameTime: fixture.time,
-          });
-          updated++;
-        }
-      }
-      res.json({ updated, round });
+      const round = parseInt(req.body.round, 10) || 1;
+      await fetchAndStoreFixtures();
+      const updated = await syncPlayerFixtures(round);
+      res.json({ updated, round, source: "squiggle" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

@@ -130,8 +130,15 @@ app.use((req, res, next) => {
     })
   ).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
 
-  const { fetchAndStoreFixtures } = await import("./services/fixture-service");
-  fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
+  const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
+  fetchAndStoreFixtures().then(async () => {
+    try {
+      const settings = await storage.getSettings("__system__");
+      await syncPlayerFixtures(settings?.currentRound ?? 1);
+    } catch {
+      await syncPlayerFixtures(1);
+    }
+  }).catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
 
   const { seedTagData } = await import("./services/tag-intelligence");
   await seedTagData();

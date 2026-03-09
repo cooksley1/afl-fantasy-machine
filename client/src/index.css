@@ -4,10 +4,11 @@
 
 [class*="agent-inbox"],
 iframe[src*="agent-inbox"],
+iframe[src*="replit"],
 div[data-replit-feedback],
 #replit-feedback-button,
 .replit-ui-theme-root,
-div[style*="position: fixed"][style*="bottom"][style*="right"][style*="z-index"]:not(.toast-viewport):not([class]) {
+body > a[href*="replit"] {
   display: none !important;
 }
 
