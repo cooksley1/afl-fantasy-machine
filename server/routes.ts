@@ -1811,6 +1811,16 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
+  app.post("/api/players/sync-prices", isAdmin, async (req, res) => {
+    try {
+      const { syncAflFantasyPrices } = await import("./expand-players");
+      const result = await syncAflFantasyPrices();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/simulate-round", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);

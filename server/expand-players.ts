@@ -69,6 +69,9 @@ interface AflFantasyPlayer {
   first_name: string;
   last_name: string;
   squad_id: number;
+  cost: number;
+  status: string;
+  positions: number[];
 }
 
 const AFL_FANTASY_SQUAD_MAP: Record<number, string> = {
@@ -89,20 +92,22 @@ function normalizeNameForMatch(name: string): string {
   return name.toLowerCase().replace(/[''`\-]/g, "").replace(/\s+/g, " ").trim();
 }
 
+async function fetchAflFantasyPlayers(): Promise<AflFantasyPlayer[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  const res = await fetch("https://fantasy.afl.com.au/data/afl/players.json", {
+    headers: { "Accept-Encoding": "gzip, deflate" },
+    signal: controller.signal,
+  });
+  clearTimeout(timeout);
+  if (!res.ok) throw new Error(`API returned ${res.status}`);
+  const data: AflFantasyPlayer[] = await res.json();
+  return data;
+}
+
 export async function syncAflFantasyIds(): Promise<number> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch("https://fantasy.afl.com.au/data/afl/players.json", {
-      headers: { "Accept-Encoding": "gzip, deflate" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) {
-      console.log(`[AflFantasySync] API returned ${res.status}, skipping photo sync`);
-      return 0;
-    }
-    const aflPlayers: AflFantasyPlayer[] = await res.json();
+    const aflPlayers = await fetchAflFantasyPlayers();
     console.log(`[AflFantasySync] Fetched ${aflPlayers.length} players from AFL Fantasy API`);
 
     const dbPlayers = await db.select({ id: players.id, name: players.name, team: players.team, aflFantasyId: players.aflFantasyId }).from(players);
@@ -144,6 +149,73 @@ export async function syncAflFantasyIds(): Promise<number> {
     console.log(`[AflFantasySync] Failed to fetch AFL Fantasy API: ${err.message}`);
     return 0;
   }
+}
+
+const AFL_FANTASY_POSITION_MAP: Record<number, string> = {
+  1: "DEF", 2: "MID", 3: "RUC", 4: "FWD",
+};
+
+export async function syncAflFantasyPrices(): Promise<{
+  updated: number;
+  priceChanges: Array<{ name: string; oldPrice: number; newPrice: number }>;
+}> {
+  const aflPlayers = await fetchAflFantasyPlayers();
+  console.log(`[AflPriceSync] Fetched ${aflPlayers.length} players from AFL Fantasy API`);
+
+  const aflById = new Map<number, AflFantasyPlayer>();
+  const aflByName = new Map<string, AflFantasyPlayer>();
+  for (const ap of aflPlayers) {
+    aflById.set(ap.id, ap);
+    const fullName = `${ap.first_name} ${ap.last_name}`;
+    aflByName.set(normalizeNameForMatch(fullName), ap);
+  }
+
+  const dbPlayers = await db.select().from(players);
+  let updated = 0;
+  const priceChanges: Array<{ name: string; oldPrice: number; newPrice: number }> = [];
+
+  for (const dbPlayer of dbPlayers) {
+    let aflPlayer: AflFantasyPlayer | undefined;
+
+    if (dbPlayer.aflFantasyId) {
+      aflPlayer = aflById.get(dbPlayer.aflFantasyId);
+    }
+    if (!aflPlayer) {
+      aflPlayer = aflByName.get(normalizeNameForMatch(dbPlayer.name));
+    }
+
+    if (aflPlayer && aflPlayer.cost > 0) {
+      const updates: Record<string, any> = {};
+
+      if (Math.abs(aflPlayer.cost - dbPlayer.price) >= 1000) {
+        updates.price = aflPlayer.cost;
+        updates.startingPrice = aflPlayer.cost;
+        priceChanges.push({
+          name: dbPlayer.name,
+          oldPrice: dbPlayer.price,
+          newPrice: aflPlayer.cost,
+        });
+      }
+
+      if (!dbPlayer.aflFantasyId && aflPlayer.id) {
+        updates.aflFantasyId = aflPlayer.id;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(players).set(updates).where(eq(players.id, dbPlayer.id));
+        updated++;
+      }
+    }
+  }
+
+  console.log(`[AflPriceSync] Updated ${updated} players, ${priceChanges.length} price changes`);
+  if (priceChanges.length > 0 && priceChanges.length <= 30) {
+    for (const pc of priceChanges) {
+      console.log(`  ${pc.name}: $${pc.oldPrice.toLocaleString()} → $${pc.newPrice.toLocaleString()}`);
+    }
+  }
+
+  return { updated, priceChanges };
 }
 
 function deriveFormTrend(l5Avg: number, regAvg: number): string {
