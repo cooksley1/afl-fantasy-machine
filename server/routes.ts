@@ -319,9 +319,6 @@ export async function registerRoutes(
 
       const missingPlayers = [
         { name: "Tom Blamires", team: "North Melbourne", position: "MID", price: 230000 },
-        { name: "Jack Lindsay", team: "West Coast", position: "DEF", price: 278000 },
-        { name: "Vince Visentini", team: "Essendon", position: "RUC", price: 395000 },
-        { name: "James Carroll", team: "St Kilda", position: "FWD", price: 332000 },
       ];
       for (const mp of missingPlayers) {
         if (!findPlayer(mp.name)) {
@@ -356,46 +353,6 @@ export async function registerRoutes(
         return p.id;
       };
 
-      const priceUpdates: Array<{ name: string; price: number }> = [
-        { name: "Connor Rozee", price: 1092000 },
-        { name: "Jack Sinclair", price: 1057000 },
-        { name: "Josh Gibcus", price: 230000 },
-        { name: "Samuel Grlj", price: 322000 },
-        { name: "Lachlan Blakiston", price: 399000 },
-        { name: "Jai Serong", price: 274000 },
-        { name: "Lachie Jaques", price: 230000 },
-        { name: "Jack Lindsay", price: 278000 },
-        { name: "Jack Steele", price: 1006000 },
-        { name: "Zak Butters", price: 1047000 },
-        { name: "Errol Gulden", price: 1073000 },
-        { name: "Darcy Parish", price: 759000 },
-        { name: "Cooper Lord", price: 630000 },
-        { name: "Willem Duursma", price: 350000 },
-        { name: "Tanner Bruhn", price: 517000 },
-        { name: "Jagga Smith", price: 230000 },
-        { name: "Tom Blamires", price: 230000 },
-        { name: "Roan Steele", price: 381000 },
-        { name: "Brodie Grundy", price: 1122000 },
-        { name: "Lachlan McAndrew", price: 286000 },
-        { name: "Vince Visentini", price: 395000 },
-        { name: "Harry Sheezel", price: 1145000 },
-        { name: "Christian Petracca", price: 948000 },
-        { name: "Sam Flanders", price: 716000 },
-        { name: "Mattaes Phillipou", price: 610000 },
-        { name: "Grady Miers", price: 984000 },
-        { name: "Conor Budarick", price: 506000 },
-        { name: "Deven Robertson", price: 232000 },
-        { name: "Leonardo Lombard", price: 230000 },
-        { name: "James Carroll", price: 332000 },
-      ];
-
-      for (const update of priceUpdates) {
-        const player = refreshed.find(pl => pl.name === update.name);
-        if (player) {
-          await storage.updatePlayer(player.id, { price: update.price });
-        }
-      }
-
       const uid = getEffectiveUserId(req);
       await storage.clearMyTeam(uid);
 
@@ -412,7 +369,7 @@ export async function registerRoutes(
         { playerId: fp("Samuel Grlj"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Lachlan Blakiston"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Jai Serong"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Jack Lindsay"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
+        { playerId: fp("Josh Lindsay"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Lachie Jaques"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Jack Steele"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Zak Butters"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
@@ -426,16 +383,16 @@ export async function registerRoutes(
         { playerId: fp("Roan Steele"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
         { playerId: fp("Brodie Grundy"), isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "RUC" },
         { playerId: fp("Lachlan McAndrew"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Vince Visentini"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
+        { playerId: fp("Vigo Visentini"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
         { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "FWD" },
         { playerId: fp("Christian Petracca"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Sam Flanders"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Mattaes Phillipou"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Grady Miers"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Conor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Gryan Miers"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
+        { playerId: fp("Connor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Deven Robertson"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("James Carroll"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
+        { playerId: fp("Jack Carroll"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
       ];
 
       for (const entry of teamEntries) {
@@ -1038,11 +995,23 @@ export async function registerRoutes(
         const inputFirst = stripInitialDot(inputParts[0]);
         const isInitial = inputFirst.length <= 2;
 
-        const surnameMatch = players.find(p => {
+        const surnameMatches = players.filter(p => {
           const parts = p.name.toLowerCase().split(" ");
           return parts[parts.length - 1] === inputSurname;
         });
-        if (surnameMatch) return surnameMatch;
+        if (surnameMatches.length === 1) return surnameMatches[0];
+        if (surnameMatches.length > 1) {
+          const firstMatch = surnameMatches.find(p => {
+            const pFirst = p.name.toLowerCase().split(/\s+/)[0];
+            return pFirst.startsWith(inputFirst.substring(0, 2)) || inputFirst.startsWith(pFirst.substring(0, 2));
+          });
+          if (firstMatch) return firstMatch;
+          const best = surnameMatches.reduce((b, p) => {
+            const d = levenshtein(p.name.toLowerCase(), normalName);
+            return d < b.dist ? { player: p, dist: d } : b;
+          }, { player: surnameMatches[0], dist: levenshtein(surnameMatches[0].name.toLowerCase(), normalName) });
+          return best.player;
+        }
 
         if (isInitial && inputParts.length >= 2) {
           const initialMatch = players.find(p => {
@@ -1072,20 +1041,20 @@ export async function registerRoutes(
           if (partialMatch) return partialMatch;
         }
 
-        const surnameMatches = players.filter(p => {
+        const fuzzySurnameMatches = players.filter(p => {
           const pSurname = p.name.toLowerCase().split(/\s+/).pop() || "";
           return levenshtein(pSurname, inputSurname) <= 2;
         });
-        if (surnameMatches.length === 1) return surnameMatches[0];
-        if (surnameMatches.length > 1) {
+        if (fuzzySurnameMatches.length === 1) return fuzzySurnameMatches[0];
+        if (fuzzySurnameMatches.length > 1) {
           if (isInitial) {
-            const initialFiltered = surnameMatches.filter(p => p.name.toLowerCase().split(/\s+/)[0].startsWith(inputFirst));
+            const initialFiltered = fuzzySurnameMatches.filter(p => p.name.toLowerCase().split(/\s+/)[0].startsWith(inputFirst));
             if (initialFiltered.length === 1) return initialFiltered[0];
           }
-          const bestFullMatch = surnameMatches.reduce((best, p) => {
+          const bestFullMatch = fuzzySurnameMatches.reduce((best, p) => {
             const dist = levenshtein(p.name.toLowerCase(), normalName);
             return dist < best.dist ? { player: p, dist } : best;
-          }, { player: surnameMatches[0], dist: levenshtein(surnameMatches[0].name.toLowerCase(), normalName) });
+          }, { player: fuzzySurnameMatches[0], dist: levenshtein(fuzzySurnameMatches[0].name.toLowerCase(), normalName) });
           if (bestFullMatch.dist <= 4) return bestFullMatch.player;
         }
 
@@ -1114,10 +1083,6 @@ export async function registerRoutes(
 
         const posRaw = (ip.position || match.position || "MID").toUpperCase();
         const fieldPos = posMap[posRaw] || "MID";
-        if (ip.price && ip.price > 0) {
-          await storage.updatePlayer(match.id, { price: ip.price });
-          match.price = ip.price;
-        }
         resolvedPlayers.push({ match, fieldPos, ip });
       }
 
