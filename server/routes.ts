@@ -1821,6 +1821,16 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
+  app.post("/api/players/sync-footywire", isAdmin, async (req, res) => {
+    try {
+      const { fetchFootywireData } = await import("./services/footywire-scraper");
+      const result = await fetchFootywireData();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/simulate-round", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
@@ -2617,7 +2627,15 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
           ? "One thing to address this week."
           : `${steps.filter(s => s.priority === "critical").length > 0 ? "Urgent action needed. " : ""}${steps.length} steps in your plan for Round ${currentRound}.`;
 
-      res.json({ steps, round: currentRound, summary, isByeRound, tradesAvailable: settings.tradesRemaining, maxTrades, seasonContext: seasonPlan?.overallStrategy?.slice(0, 200) || null });
+      const premiums = onField.filter(p => (p.price || 0) >= 700000).length + bench.filter(p => (p.price || 0) >= 700000).length;
+      const cashCows = bench.filter(p => (p.price || 0) < 350000).length;
+      const midPricers = team.length - premiums - cashCows;
+      const topPlayers = [...team].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0)).slice(0, 3);
+      const topStr = topPlayers.map(p => `${p.name} (avg ${p.avgScore?.toFixed(0)})`).join(", ");
+      const liveContext = `Your ${team.length}-player squad has ${premiums} premiums led by ${topStr}. ${cashCows} cash cows on bench. ${midPricers} mid-pricers.`;
+      const finalContext = liveContext;
+
+      res.json({ steps, round: currentRound, summary, isByeRound, tradesAvailable: settings.tradesRemaining, maxTrades, seasonContext: finalContext });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

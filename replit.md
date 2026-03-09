@@ -95,5 +95,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **AFL.com.au RSS**: Source for official AFL news.
 - **Google News RSS**: Gathers news from all 18 AFL club feeds.
 - **AFL Fantasy API**: Used for player headshot photos.
-- **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores.
+- **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores (230 top players).
+- **Footywire (footywire.com)**: Scraped for comprehensive AFL Fantasy prices (791 players). Requires browser User-Agent header. Admin route: `POST /api/players/sync-footywire`.
+- **AFL Fantasy Price Sync**: `syncAflFantasyPrices()` in `expand-players.ts` syncs prices from the AFL Fantasy API. Admin route: `POST /api/players/sync-prices`.
 - **PostgreSQL**: The primary database for all application data.

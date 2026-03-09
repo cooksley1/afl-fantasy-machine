@@ -189,7 +189,9 @@ export async function syncAflFantasyPrices(): Promise<{
 
       if (Math.abs(aflPlayer.cost - dbPlayer.price) >= 1000) {
         updates.price = aflPlayer.cost;
-        updates.startingPrice = aflPlayer.cost;
+        if (!dbPlayer.startingPrice) {
+          updates.startingPrice = aflPlayer.cost;
+        }
         priceChanges.push({
           name: dbPlayer.name,
           oldPrice: dbPlayer.price,

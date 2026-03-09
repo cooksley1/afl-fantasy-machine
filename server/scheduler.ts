@@ -25,6 +25,13 @@ async function runGather() {
     }
 
     try {
+      const { fetchFootywireData } = await import("./services/footywire-scraper");
+      await fetchFootywireData();
+    } catch (e: any) {
+      console.log(`[Scheduler] Footywire sync error: ${e.message}`);
+    }
+
+    try {
       const { fetchScoresForCompletedRounds } = await import("./services/live-scores");
       const scoreResult = await fetchScoresForCompletedRounds();
       if (scoreResult.roundsProcessed > 0) {

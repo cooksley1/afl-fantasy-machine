@@ -116,11 +116,21 @@ app.use((req, res, next) => {
   await recalculatePlayerAverages();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
-  import("./services/dtlive-scraper").then(({ fetchDTLiveData }) =>
-    fetchDTLiveData().then(() =>
-      recalculatePlayerAverages()
-    )
-  ).catch(err => console.log(`[DTLive] Background sync error: ${err.message}`));
+  (async () => {
+    try {
+      const { fetchFootywireData } = await import("./services/footywire-scraper");
+      await fetchFootywireData();
+    } catch (err: any) {
+      console.log(`[Footywire] Background sync error: ${err.message}`);
+    }
+    try {
+      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
+      await fetchDTLiveData();
+      await recalculatePlayerAverages();
+    } catch (err: any) {
+      console.log(`[DTLive] Background sync error: ${err.message}`);
+    }
+  })();
 
   import("./services/live-scores").then(({ fetchScoresForCompletedRounds }) =>
     fetchScoresForCompletedRounds().then(result => {
