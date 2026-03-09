@@ -130,6 +130,12 @@ app.use((req, res, next) => {
     } catch (err: any) {
       console.log(`[DTLive] Background sync error: ${err.message}`);
     }
+    try {
+      const { fetchAflTablesHistoricalData } = await import("./services/afltables-scraper");
+      await fetchAflTablesHistoricalData([2024, 2025]);
+    } catch (err: any) {
+      console.log(`[AflTables] Background sync error: ${err.message}`);
+    }
   })();
 
   import("./services/live-scores").then(({ fetchScoresForCompletedRounds }) =>

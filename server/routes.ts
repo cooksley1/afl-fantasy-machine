@@ -1831,6 +1831,17 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
+  app.post("/api/players/sync-afltables", isAdmin, async (req, res) => {
+    try {
+      const { fetchAflTablesHistoricalData } = await import("./services/afltables-scraper");
+      const years = req.body.years || [2024, 2025];
+      const result = await fetchAflTablesHistoricalData(years);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/simulate-round", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
