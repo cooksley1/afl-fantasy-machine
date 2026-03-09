@@ -54,7 +54,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Live Scores**: Tracks live match statuses and fantasy scores. Three-source pipeline: Footywire (detailed stats), Squiggle (supplemental), then DTLive (fantasy scores only, fills gaps). Completed round detection uses league settings (currentRound) as primary + Squiggle as supplemental. Historical round data is fetched once and stored — not re-fetched on restarts.
 - **Season Schedule**: Fetches and displays the full AFL season fixture. Completed/live matches are clickable — tapping opens an AI-generated fantasy synopsis dialog showing top performers, key observations (role changes, injuries, tagging, breakouts, busts), and a link to match highlights.
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
-- **Team Upload & Analyser**: Allows users to upload team screenshots for AI analysis and saving identified players.
+- **Team Upload & Analyser**: Allows users to upload team screenshots for AI analysis and saving identified players. OCR uses GPT-4o vision with strict prompting to avoid hallucinated players. Fuzzy matching uses Levenshtein distance with tight thresholds (max 25% of name length). A "Clear Team" button (with confirmation dialog) allows users to wipe their entire team and re-upload fresh.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
 - **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks. `buildOptimalTeam` accepts optional `excludePlayerIds` and `variationSeed` for generating distinct team variants.
 - **Dream Team Reverse Engineer**: Builds the best possible 30-player squad ignoring the salary cap, then reverse-engineers a budget-compliant starting team using stepping-stone cash cows. Generates a round-by-round trade path showing when each upgrade becomes affordable via cash generation. API: `GET /api/dream-team/reverse-engineer`, `POST /api/dream-team/activate-starting`. UI at `/dream` with three tabs: Dream Team, Starting Squad, Trade Path Timeline.
@@ -79,6 +79,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - `POST /api/league/import-bulk` — bulk-create opponents from extracted league data
 - `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
 - `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
+- `DELETE /api/my-team` — clear entire team (remove all players)
 - `GET /api/game-day-guide` — generate game day transfer checklist
 - `GET /api/weekly-plan` — synthesized weekly coaching directive with prioritized steps
 

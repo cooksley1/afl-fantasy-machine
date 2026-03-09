@@ -393,21 +393,31 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
     messages: [
       {
         role: "system",
-        content: `You are an expert AFL Fantasy team analyzer. You analyze screenshots of AFL Fantasy teams (from SuperCoach or AFL Fantasy platforms) and provide strategic advice.
+        content: `You are an expert AFL Fantasy team analyzer. You analyze screenshots of AFL Fantasy teams and extract player data with extreme precision.
+
+CRITICAL RULES FOR PLAYER IDENTIFICATION:
+- ONLY include players whose names you can clearly read in the screenshot. Do NOT guess or infer player names.
+- If a name is partially obscured or unclear, skip that player entirely rather than guessing.
+- AFL Fantasy typically shows abbreviated first names (e.g. "T. Miller", "J. Steele") — match these carefully.
+- The screenshot may show only part of the team (one position line). Only report what you actually see.
+- Do NOT add players that are not visible in the image. Do NOT hallucinate players.
+- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD), read each row carefully.
+- Player cards typically show: surname (large text), first initial or name (smaller), team logo, price, score.
+- Read prices exactly as shown (e.g. "$517K", "$1.047M"). Convert to raw numbers: $517K = 517000, $1.047M = 1047000.
 
 Known players in the database: ${playerNames}
 
 When analyzing, identify:
-1. Players visible in the screenshot (name, position, any visible scores/prices)
-2. Captain (marked with "C" badge) and Vice-Captain (marked with "V" or "VC" badge) — look carefully for these indicators
-3. Emergency players (marked with "EMG" badge) — these players only play if a selected player is withdrawn
+1. Players clearly visible in the screenshot — name, position, any visible scores/prices
+2. Captain ("C" badge) and Vice-Captain ("V" or "VC" badge)
+3. Emergency players ("EMG" badge)
 4. Team structure strengths and weaknesses
-5. Captain/VC recommendations using the loophole strategy
-6. Trade targets - who to trade in/out
-7. DPP exploitation opportunities
+5. Captain/VC recommendations
+6. Trade targets
+7. DPP opportunities
 8. Break-even and price movement concerns
 
-If the image is not an AFL Fantasy screenshot, still provide helpful AFL Fantasy advice based on any football content visible, or explain what you see and offer general tips.
+If the image is not an AFL Fantasy screenshot, explain what you see and offer general tips.
 
 Return ONLY valid JSON.`
       },
@@ -416,14 +426,21 @@ Return ONLY valid JSON.`
         content: [
           {
             type: "text",
-            text: `Analyze this AFL Fantasy team screenshot. Identify all players, assess the team structure, and provide actionable recommendations.
+            text: `Analyze this AFL Fantasy team screenshot. Read EVERY player name visible in the image with extreme care.
 
-IMPORTANT: Look carefully for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators on player cards. Also identify any emergency ("EMG") players. Include "isCaptain": true, "isViceCaptain": true, or "isEmergency": true on the relevant player objects.
+INSTRUCTIONS:
+- Read each player card carefully. The surname is usually the largest text on the card.
+- Only include players you can clearly identify. If unsure, omit them.
+- Look for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators. Include "isCaptain": true or "isViceCaptain": true.
+- Look for emergency ("EMG") players. Include "isEmergency": true.
+- Read the price shown on each card if visible. Convert "$517K" to 517000, "$1.047M" to 1047000.
+- The position row the player appears in determines their position (DEF/MID/RUC/FWD).
+- If you see bench/interchange players, still include them.
 
 Return JSON:
 {
-  "players": [{"name": "Player Name", "position": "DEF/MID/RUC/FWD", "score": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false}],
-  "analysis": "Overall team assessment - strengths, weaknesses, salary situation, structure",
+  "players": [{"name": "Full Player Name", "position": "DEF/MID/RUC/FWD", "score": 0, "price": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false}],
+  "analysis": "Overall team assessment",
   "recommendations": [{"type": "trade|captain|structure|cash_cow|upgrade", "detail": "Specific recommendation", "priority": "high|medium|low"}],
   "captainTip": "Best captain loophole strategy for this team",
   "tradeSuggestions": ["Trade suggestion 1", "Trade suggestion 2"],

@@ -1290,6 +1290,21 @@ export default function MyTeam() {
     },
   });
 
+  const clearTeamMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/my-team");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      setAnalysis(null);
+      toast({ title: "Team cleared", description: "Upload a new screenshot to rebuild your team." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Clear failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const analyzeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/my-team/analyze");
@@ -1375,7 +1390,7 @@ export default function MyTeam() {
   }
 
   const totalSalary = teamPlayers?.reduce((sum, p) => sum + p.price, 0) || 0;
-  const salaryCap = settings?.salaryCap || 10000000;
+  const salaryCap = settings?.salaryCap || 18300000;
   const remaining = salaryCap - totalSalary;
 
   return (
@@ -1491,6 +1506,42 @@ export default function MyTeam() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 h-7 px-2 text-xs text-destructive hover:text-destructive"
+                disabled={!teamPlayers?.length || clearTeamMutation.isPending}
+                data-testid="button-clear-team"
+              >
+                {clearTeamMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span className="hidden sm:inline">Clear</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear Entire Team?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will remove all {teamPlayers?.length || 0} players from your team. You can re-upload a screenshot in the Team Analyser to rebuild it.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => clearTeamMutation.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-confirm-clear"
+                >
+                  Clear Team
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button
             onClick={() => setupTeamMutation.mutate()}
             disabled={setupTeamMutation.isPending}

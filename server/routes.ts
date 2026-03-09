@@ -146,6 +146,16 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/my-team", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      await storage.clearMyTeam(uid);
+      res.json({ success: true, message: "Team cleared" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/my-team/:id/captain", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
@@ -1068,7 +1078,7 @@ export async function registerRoutes(
             bestMatch = p;
           }
         }
-        const maxAllowedDist = Math.max(3, Math.floor(normalName.length * 0.35));
+        const maxAllowedDist = Math.max(2, Math.floor(normalName.length * 0.25));
         if (bestMatch && bestDist <= maxAllowedDist) return bestMatch;
 
         return null;

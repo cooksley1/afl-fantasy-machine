@@ -279,13 +279,19 @@ export class DatabaseStorage implements IStorage {
 
   async getSettings(userId: string): Promise<LeagueSettings> {
     const [existing] = await db.select().from(leagueSettings).where(eq(leagueSettings.userId, userId));
-    if (existing) return existing;
+    if (existing) {
+      if (existing.salaryCap === 10000000) {
+        const [fixed] = await db.update(leagueSettings).set({ salaryCap: 18300000 }).where(eq(leagueSettings.id, existing.id)).returning();
+        return fixed;
+      }
+      return existing;
+    }
     const [created] = await db
       .insert(leagueSettings)
       .values({
         userId,
         teamName: "My Team",
-        salaryCap: 10000000,
+        salaryCap: 18300000,
         currentRound: 1,
         tradesRemaining: 30,
         totalTradesUsed: 0,
