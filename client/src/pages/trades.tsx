@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { useLocation } from "wouter";
 import {
   ArrowLeftRight,
   Zap,
@@ -54,12 +55,17 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
 }
 
 function PlayerPill({ player, direction }: { player: any; direction: "out" | "in" }) {
+  const [, navigate] = useLocation();
   const teamColors = getTeamColors(player.team);
   const abbr = getTeamAbbr(player.team);
   const isOut = direction === "out";
 
   return (
-    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+    <div
+      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors"
+      onClick={() => navigate(`/player/${player.id}`)}
+      data-testid={`pill-trade-player-${direction}-${player.id}`}
+    >
       <PlayerAvatar
         aflFantasyId={player.aflFantasyId}
         playerName={player.name}
@@ -74,9 +80,9 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
           >
             {isOut ? "OUT" : "IN"}
           </Badge>
-          <p className="text-sm font-semibold" data-testid={`text-trade-player-${direction}-${player.id}`}>{player.name}</p>
+          <p className="text-sm font-semibold hover:text-accent transition-colors" data-testid={`text-trade-player-${direction}-${player.id}`}>{player.name}</p>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
           <span>{player.position}</span>
           <span className="opacity-40">•</span>
           <span>Avg {player.avgScore?.toFixed(1) || "—"}</span>
@@ -88,6 +94,12 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
               <span className={player.formTrend === "up" ? "text-green-500" : player.formTrend === "down" ? "text-red-400" : ""}>
                 L3: {player.last3Avg.toFixed(1)}
               </span>
+            </>
+          )}
+          {player.breakEven != null && (
+            <>
+              <span className="opacity-40">•</span>
+              <span>BE: {player.breakEven}</span>
             </>
           )}
         </div>

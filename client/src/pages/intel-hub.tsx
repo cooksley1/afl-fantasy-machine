@@ -41,7 +41,9 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePlayerLookup } from "@/hooks/use-player-lookup";
 import { ErrorState } from "@/components/error-state";
+import { useLocation } from "wouter";
 import type { IntelReport } from "@shared/schema";
 
 const CATEGORIES = [
@@ -199,14 +201,32 @@ function SourceBadge({ source }: { source: string | null }) {
   );
 }
 
+function PlayerNameBadge({ name }: { name: string }) {
+  const { getPlayerId } = usePlayerLookup();
+  const [, navigate] = useLocation();
+  const trimmed = name.trim();
+  const playerId = getPlayerId(trimmed);
+
+  if (playerId) {
+    return (
+      <Badge
+        variant="secondary"
+        className="text-[10px] cursor-pointer hover:bg-accent/20 hover:text-accent transition-colors"
+        onClick={(e) => { e.stopPropagation(); navigate(`/player/${playerId}`); }}
+        data-testid={`badge-player-${playerId}`}
+      >
+        {trimmed}
+      </Badge>
+    );
+  }
+  return <Badge variant="secondary" className="text-[10px]">{trimmed}</Badge>;
+}
+
 function IntelCard({ report }: { report: IntelReport }) {
   const Icon = getCategoryIcon(report.category);
   const isLiveIntel = report.title?.startsWith("[Live Intel]");
   const { isStale } = getReportAge(report.createdAt);
-  const [expanded, setExpanded] = useState(false);
   const hasSourceUrl = !!(report as any).sourceUrl;
-  const contentLines = (report.content || "").split("\n").filter(Boolean);
-  const isLong = contentLines.length > 3 || (report.content || "").length > 200;
 
   return (
     <Card
@@ -229,25 +249,14 @@ function IntelCard({ report }: { report: IntelReport }) {
             </div>
             <h3 className="text-sm font-semibold leading-tight">{report.title}</h3>
 
-            <div className={`text-sm text-muted-foreground leading-relaxed ${!expanded && isLong ? "line-clamp-3" : ""}`}>
+            <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
               {report.content}
             </div>
-            {isLong && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="text-xs text-accent hover:underline"
-                data-testid={`button-expand-intel-${report.id}`}
-              >
-                {expanded ? "Show less" : "Read more"}
-              </button>
-            )}
 
             {report.playerNames && (
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
                 {report.playerNames.split(",").map((name, i) => (
-                  <Badge key={i} variant="secondary" className="text-[10px]">
-                    {name.trim()}
-                  </Badge>
+                  <PlayerNameBadge key={i} name={name} />
                 ))}
               </div>
             )}

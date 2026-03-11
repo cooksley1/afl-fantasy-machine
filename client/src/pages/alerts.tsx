@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import type { PlayerAlert } from "@shared/schema";
 
 const ALERT_TYPES = ["injury", "late_change", "selection", "role_change", "news"] as const;
@@ -223,60 +224,67 @@ export default function AlertsPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filteredAlerts.map((alert) => {
-            const config = alertTypeConfig[alert.alertType] || alertTypeConfig.news;
-            const Icon = config.icon;
-            return (
-              <Card
-                key={alert.id}
-                className={`p-3 transition-all ${!alert.isRead ? "border-accent/30 bg-accent/5" : "opacity-70"}`}
-                data-testid={`card-alert-${alert.id}`}
-              >
-                <div className="flex gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${config.color}`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-accent" data-testid={`text-alert-player-${alert.id}`}>
-                            {alert.playerName}
-                          </span>
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${config.color}`}>
-                            {config.label}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-medium truncate" data-testid={`text-alert-title-${alert.id}`}>
-                          {alert.title}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground shrink-0" data-testid={`text-alert-time-${alert.id}`}>
-                        {alert.createdAt ? timeAgo(alert.createdAt) : ""}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-alert-message-${alert.id}`}>
-                      {alert.message}
-                    </p>
-                    {!alert.isRead && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground"
-                        onClick={() => markReadMutation.mutate(alert.id)}
-                        data-testid={`button-mark-read-${alert.id}`}
-                      >
-                        <Check className="w-3 h-3 mr-1" />
-                        Mark read
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
+          {filteredAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} config={alertTypeConfig[alert.alertType] || alertTypeConfig.news} onMarkRead={() => markReadMutation.mutate(alert.id)} />)}
         </div>
       )}
     </div>
+  );
+}
+
+function AlertCard({ alert, config, onMarkRead }: { alert: PlayerAlert; config: typeof alertTypeConfig[string]; onMarkRead: () => void }) {
+  const [, navigate] = useLocation();
+  const Icon = config.icon;
+  const hasPlayer = alert.playerId != null;
+
+  return (
+    <Card
+      className={`p-3 transition-all ${!alert.isRead ? "border-accent/30 bg-accent/5" : "opacity-70"}`}
+      data-testid={`card-alert-${alert.id}`}
+    >
+      <div className="flex gap-3">
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${config.color}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-semibold text-accent ${hasPlayer ? "cursor-pointer hover:underline" : ""}`}
+                  onClick={hasPlayer ? () => navigate(`/player/${alert.playerId}`) : undefined}
+                  data-testid={`text-alert-player-${alert.id}`}
+                >
+                  {alert.playerName}
+                </span>
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${config.color}`}>
+                  {config.label}
+                </Badge>
+              </div>
+              <p className="text-sm font-medium" data-testid={`text-alert-title-${alert.id}`}>
+                {alert.title}
+              </p>
+            </div>
+            <span className="text-[10px] text-muted-foreground shrink-0" data-testid={`text-alert-time-${alert.id}`}>
+              {alert.createdAt ? timeAgo(alert.createdAt) : ""}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground" data-testid={`text-alert-message-${alert.id}`}>
+            {alert.message}
+          </p>
+          {!alert.isRead && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs text-muted-foreground"
+              onClick={onMarkRead}
+              data-testid={`button-mark-read-${alert.id}`}
+            >
+              <Check className="w-3 h-3 mr-1" />
+              Mark read
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
