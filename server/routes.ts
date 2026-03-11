@@ -1213,6 +1213,58 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/player-alerts", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const unreadOnly = req.query.unreadOnly === "true";
+      const alerts = await storage.getPlayerAlerts(uid, unreadOnly);
+      res.json(alerts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/player-alerts/count", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const count = await storage.getUnreadAlertCount(uid);
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/player-alerts/:id/read", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      await storage.markAlertRead(uid, parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/player-alerts/read-all", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      await storage.markAllAlertsRead(uid);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/player-alerts/check", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const { generatePlayerAlerts } = await import("./alert-generator");
+      const newAlerts = await generatePlayerAlerts(uid);
+      res.json({ generated: newAlerts });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/scheduler/status", async (_req, res) => {
     try {
       const { getSchedulerStatus } = await import("./scheduler");

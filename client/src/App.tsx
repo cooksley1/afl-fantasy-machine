@@ -29,6 +29,7 @@ import LeagueSpy from "@/pages/league-spy";
 import TeamSandbox from "@/pages/team-sandbox";
 import GameDayGuide from "@/pages/game-day-guide";
 import DreamTeam from "@/pages/dream-team";
+import AlertsPage from "@/pages/alerts";
 import { Loader2 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/sandbox" component={TeamSandbox} />
       <Route path="/league" component={LeagueSpy} />
       <Route path="/dream" component={DreamTeam} />
+      <Route path="/alerts" component={AlertsPage} />
       <Route component={NotFound} />
     </Switch>
   );

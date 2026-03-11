@@ -508,6 +508,14 @@ Return JSON:
     }
 
     console.log(`[DataGatherer] Processed ${processedCount} insights, ${insights.filter((i: any) => i.actionRequired).length} actionable`);
+
+    try {
+      const { generateAlertsForAllUsers } = await import("./alert-generator");
+      await generateAlertsForAllUsers();
+    } catch (alertErr) {
+      console.error("[DataGatherer] Alert generation error:", (alertErr as Error).message);
+    }
+
     return processedCount;
   } catch (e: any) {
     console.error("[DataGatherer] Processing error:", e.message);

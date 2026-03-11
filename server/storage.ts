@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, gte } from "drizzle-orm";
+import { eq, desc, asc, and, gte, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   players,
@@ -38,10 +38,13 @@ import {
   type InsertModelWeight,
   savedTeams,
   leagueOpponents,
+  playerAlerts,
   type SavedTeam,
   type InsertSavedTeam,
   type LeagueOpponent,
   type InsertLeagueOpponent,
+  type PlayerAlert,
+  type InsertPlayerAlert,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -117,6 +120,12 @@ export interface IStorage {
   createLeagueOpponent(userId: string, data: InsertLeagueOpponent): Promise<LeagueOpponent>;
   updateLeagueOpponent(userId: string, id: number, data: Partial<InsertLeagueOpponent>): Promise<LeagueOpponent>;
   deleteLeagueOpponent(userId: string, id: number): Promise<void>;
+
+  getPlayerAlerts(userId: string, unreadOnly?: boolean): Promise<PlayerAlert[]>;
+  getUnreadAlertCount(userId: string): Promise<number>;
+  createPlayerAlert(alert: InsertPlayerAlert): Promise<PlayerAlert>;
+  markAlertRead(userId: string, id: number): Promise<void>;
+  markAllAlertsRead(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -592,6 +601,41 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLeagueOpponent(userId: string, id: number): Promise<void> {
     await db.delete(leagueOpponents).where(and(eq(leagueOpponents.id, id), eq(leagueOpponents.userId, userId)));
+  }
+
+  async getPlayerAlerts(userId: string, unreadOnly?: boolean): Promise<PlayerAlert[]> {
+    if (unreadOnly) {
+      return db.select().from(playerAlerts)
+        .where(and(eq(playerAlerts.userId, userId), eq(playerAlerts.isRead, false)))
+        .orderBy(desc(playerAlerts.createdAt))
+        .limit(50);
+    }
+    return db.select().from(playerAlerts)
+      .where(eq(playerAlerts.userId, userId))
+      .orderBy(desc(playerAlerts.createdAt))
+      .limit(100);
+  }
+
+  async getUnreadAlertCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(playerAlerts)
+      .where(and(eq(playerAlerts.userId, userId), eq(playerAlerts.isRead, false)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async createPlayerAlert(alert: InsertPlayerAlert): Promise<PlayerAlert> {
+    const [created] = await db.insert(playerAlerts).values(alert).returning();
+    return created;
+  }
+
+  async markAlertRead(userId: string, id: number): Promise<void> {
+    await db.update(playerAlerts).set({ isRead: true })
+      .where(and(eq(playerAlerts.id, id), eq(playerAlerts.userId, userId)));
+  }
+
+  async markAllAlertsRead(userId: string): Promise<void> {
+    await db.update(playerAlerts).set({ isRead: true })
+      .where(and(eq(playerAlerts.userId, userId), eq(playerAlerts.isRead, false)));
   }
 }
 

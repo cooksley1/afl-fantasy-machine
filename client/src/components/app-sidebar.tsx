@@ -1,4 +1,5 @@
 import { useLocation, Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -18,6 +19,7 @@ import {
   ClipboardCheck,
   FlaskConical,
   Crown,
+  Bell,
 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import {
@@ -84,20 +86,45 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user } = useAuth();
 
+  const { data: alertCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/player-alerts/count"],
+    refetchInterval: 60000,
+    enabled: !!user,
+  });
+  const unreadAlertCount = alertCountData?.count || 0;
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/">
-          <div className="flex items-center gap-3 cursor-pointer" data-testid="link-home">
-            <img src={logoImg} alt="AFL Fantasy Machine" className="w-10 h-10 rounded-md object-contain shrink-0" data-testid="img-sidebar-logo" />
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-sidebar-foreground">
-                AFL Fantasy
-              </h1>
-              <p className="text-xs text-sidebar-foreground/60">Machine</p>
+        <div className="flex items-center justify-between">
+          <Link href="/">
+            <div className="flex items-center gap-3 cursor-pointer" data-testid="link-home">
+              <img src={logoImg} alt="AFL Fantasy Machine" className="w-10 h-10 rounded-md object-contain shrink-0" data-testid="img-sidebar-logo" />
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-sidebar-foreground">
+                  AFL Fantasy
+                </h1>
+                <p className="text-xs text-sidebar-foreground/60">Machine</p>
+              </div>
             </div>
-          </div>
-        </Link>
+          </Link>
+          <Link href="/alerts">
+            <button
+              className="relative p-2 rounded-md hover:bg-sidebar-accent transition-colors"
+              data-testid="button-alerts-bell"
+            >
+              <Bell className={`w-5 h-5 ${unreadAlertCount > 0 ? "text-accent" : "text-sidebar-foreground/60"}`} />
+              {unreadAlertCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1"
+                  data-testid="badge-alert-count"
+                >
+                  {unreadAlertCount > 99 ? "99+" : unreadAlertCount}
+                </span>
+              )}
+            </button>
+          </Link>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>

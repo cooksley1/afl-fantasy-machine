@@ -248,6 +248,22 @@ export const tagPredictionOutcomes = pgTable("tag_prediction_outcomes", {
 
 export const insertTagPredictionOutcomeSchema = createInsertSchema(tagPredictionOutcomes).omit({ id: true, createdAt: true });
 
+export const playerAlerts = pgTable("player_alerts", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  playerId: integer("player_id"),
+  playerName: text("player_name").notNull(),
+  alertType: text("alert_type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  isRead: boolean("is_read").notNull().default(false),
+  sourceReportId: integer("source_report_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPlayerAlertSchema = createInsertSchema(playerAlerts).omit({ id: true, createdAt: true });
+
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({ id: true });
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
@@ -284,6 +300,8 @@ export type Projection = typeof projections.$inferSelect;
 export type InsertProjection = z.infer<typeof insertProjectionSchema>;
 export type TagPredictionOutcome = typeof tagPredictionOutcomes.$inferSelect;
 export type InsertTagPredictionOutcome = z.infer<typeof insertTagPredictionOutcomeSchema>;
+export type PlayerAlert = typeof playerAlerts.$inferSelect;
+export type InsertPlayerAlert = z.infer<typeof insertPlayerAlertSchema>;
 
 export type PlayerWithTeamInfo = Player & {
   isOnField?: boolean;
