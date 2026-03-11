@@ -43,7 +43,7 @@ An Express.js and Node.js server manages API requests, file uploads, and service
 PostgreSQL with Drizzle ORM stores all application data, including player statistics, projections, user teams, and intelligence reports.
 
 ### AI Integration
-Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screenshot analysis, leveraging Replit AI Integrations.
+Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screenshot analysis, leveraging Replit AI Integrations. AI prompts use smart player selection (`selectRelevantPlayers`) and compact summaries (`buildCompactPlayerSummary`) to stay within the 128K token context window — only the top ~200 most relevant players (by score, form, cash cow potential, DPP, injury status) are sent rather than all 800+.
 
 ### Core Features
 - **Projection Engine**: Calculates player projections, volatility, and Trade EV using configurable weights.

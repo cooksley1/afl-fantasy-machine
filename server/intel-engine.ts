@@ -31,6 +31,59 @@ function buildPlayerSummary(players: Player[]): string {
   }).join('\n');
 }
 
+function buildCompactPlayerSummary(players: Player[]): string {
+  return players.map(p => {
+    const parts = [
+      `${p.name} (${p.team}, ${p.position}${p.dualPosition ? '/' + p.dualPosition : ''})`,
+      `Avg:${p.avgScore?.toFixed(0)} L3:${p.last3Avg?.toFixed(0)} $${(p.price/1000).toFixed(0)}K BE:${p.breakEven ?? '-'}`,
+      `Form:${p.formTrend} Own:${p.ownedByPercent?.toFixed(0)}% Bye:R${p.byeRound}`,
+    ];
+    if (p.injuryStatus) parts.push(`INJ:${p.injuryStatus}`);
+    if (p.lateChange) parts.push('LATE');
+    return parts.join(' | ');
+  }).join('\n');
+}
+
+function selectRelevantPlayers(allPlayers: Player[], myTeam: PlayerWithTeamInfo[], limit: number = 200): Player[] {
+  const teamIds = new Set(myTeam.map(p => p.id));
+  const nonTeam = allPlayers.filter(p => !teamIds.has(p.id));
+
+  const injured = nonTeam.filter(p => p.injuryStatus || p.lateChange);
+  const topScorers = nonTeam
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 80);
+  const cashCows = nonTeam
+    .filter(p => p.price <= 300000 && (p.avgScore || 0) > (p.breakEven || 999))
+    .slice(0, 30);
+  const risingForm = nonTeam
+    .filter(p => p.formTrend === 'rising' || ((p.last3Avg || 0) > (p.avgScore || 0) * 1.1))
+    .slice(0, 30);
+  const lowOwnership = nonTeam
+    .filter(p => (p.ownedByPercent || 100) < 15 && (p.avgScore || 0) > 70)
+    .slice(0, 20);
+  const dpp = nonTeam.filter(p => p.dualPosition);
+
+  const selectedIds = new Set<number>();
+  const selected: Player[] = [];
+  const addPlayers = (list: Player[]) => {
+    for (const p of list) {
+      if (!selectedIds.has(p.id) && selected.length < limit) {
+        selectedIds.add(p.id);
+        selected.push(p);
+      }
+    }
+  };
+
+  addPlayers(injured);
+  addPlayers(topScorers);
+  addPlayers(cashCows);
+  addPlayers(risingForm);
+  addPlayers(lowOwnership);
+  addPlayers(dpp);
+
+  return selected;
+}
+
 function buildTeamSummary(team: PlayerWithTeamInfo[]): string {
   return team.map(p => {
     const parts = [
@@ -87,7 +140,8 @@ export async function generateIntelReports(userId: string): Promise<void> {
   const myTeam = await storage.getMyTeam(userId);
   const settings = await storage.getSettings(userId);
 
-  const playerData = buildPlayerSummary(allPlayers);
+  const relevantPlayers = selectRelevantPlayers(allPlayers, myTeam, 200);
+  const playerData = buildCompactPlayerSummary(relevantPlayers);
   const teamData = buildTeamSummary(myTeam);
   const gameSlots = getGameSlots(myTeam);
   const byeBreakdown = getByeRoundBreakdown(myTeam);
@@ -207,7 +261,7 @@ Generate 10-14 reports. Prioritize the most impactful advice first.`;
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      max_tokens: 16000,
+      max_tokens: 8000,
       response_format: { type: "json_object" },
     });
 
@@ -283,8 +337,19 @@ export async function generateAITradeRecommendations(userId: string): Promise<vo
 
   const teamPlayerIds = new Set(myTeam.map(p => p.id));
   const availablePlayers = allPlayers.filter(p => !teamPlayerIds.has(p.id));
+  const topAvailable = availablePlayers
+    .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+    .slice(0, 100);
+  const cashCowTargets = availablePlayers
+    .filter(p => p.price <= 300000 && (p.avgScore || 0) > (p.breakEven || 999))
+    .slice(0, 30);
+  const tradeTargets = [...topAvailable];
+  const addedIds = new Set(topAvailable.map(p => p.id));
+  for (const p of cashCowTargets) {
+    if (!addedIds.has(p.id)) { tradeTargets.push(p); addedIds.add(p.id); }
+  }
   const teamData = buildTeamSummary(myTeam);
-  const availableData = buildPlayerSummary(availablePlayers);
+  const availableData = buildCompactPlayerSummary(tradeTargets);
   const byeBreakdown = getByeRoundBreakdown(myTeam);
 
   const isPreseason = settings.currentRound <= 1;
