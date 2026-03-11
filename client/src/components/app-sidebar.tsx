@@ -50,7 +50,7 @@ const navGroups = [
       { title: "Season Roadmap", subtitle: "Your path to #1", url: "/roadmap", icon: Map },
       { title: "Game Day Guide", subtitle: "Step-by-step checklist", url: "/game-day", icon: ClipboardCheck },
       { title: "Team Lab", subtitle: "Build & compare teams", url: "/sandbox", icon: FlaskConical },
-      { title: "Dream Team", subtitle: "Reverse-engineer your best squad", url: "/dream", icon: Crown },
+      { title: "Reverse Engineer", subtitle: "Build your ultimate squad", url: "/dream", icon: Crown },
     ],
   },
   {

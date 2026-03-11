@@ -37,6 +37,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -202,9 +203,16 @@ function IntelCard({ report }: { report: IntelReport }) {
   const Icon = getCategoryIcon(report.category);
   const isLiveIntel = report.title?.startsWith("[Live Intel]");
   const { isStale } = getReportAge(report.createdAt);
+  const [expanded, setExpanded] = useState(false);
+  const hasSourceUrl = !!(report as any).sourceUrl;
+  const contentLines = (report.content || "").split("\n").filter(Boolean);
+  const isLong = contentLines.length > 3 || (report.content || "").length > 200;
 
   return (
-    <Card data-testid={`card-intel-${report.id}`} className={`${isLiveIntel ? "border-primary/30" : ""} ${isStale ? "opacity-60" : ""}`}>
+    <Card
+      data-testid={`card-intel-${report.id}`}
+      className={`${isLiveIntel ? "border-primary/30" : ""} ${isStale ? "opacity-60" : ""} transition-colors`}
+    >
       <CardContent className="p-3">
         <div className="flex items-start gap-3">
           <div className={`p-2 rounded-md shrink-0 mt-0.5 ${isLiveIntel ? 'bg-primary/20' : 'bg-primary/10'}`}>
@@ -221,9 +229,18 @@ function IntelCard({ report }: { report: IntelReport }) {
             </div>
             <h3 className="text-sm font-semibold leading-tight">{report.title}</h3>
 
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <div className={`text-sm text-muted-foreground leading-relaxed ${!expanded && isLong ? "line-clamp-3" : ""}`}>
               {report.content}
-            </p>
+            </div>
+            {isLong && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="text-xs text-accent hover:underline"
+                data-testid={`button-expand-intel-${report.id}`}
+              >
+                {expanded ? "Show less" : "Read more"}
+              </button>
+            )}
 
             {report.playerNames && (
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
@@ -242,6 +259,19 @@ function IntelCard({ report }: { report: IntelReport }) {
               </span>
               <SourceBadge source={report.source} />
               <StalenessBadge createdAt={report.createdAt} />
+              {hasSourceUrl && (
+                <a
+                  href={(report as any).sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-accent hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`link-source-${report.id}`}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Read article
+                </a>
+              )}
             </div>
           </div>
         </div>

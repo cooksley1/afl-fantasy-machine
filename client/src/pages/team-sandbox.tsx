@@ -27,9 +27,20 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedTeam } from "@shared/schema";
 
+interface ComparePlayer {
+  id: number;
+  name: string;
+  position: string;
+  avgScore: number;
+  price: number;
+  isOnField: boolean;
+  fieldPosition: string;
+  isUnique: boolean;
+}
+
 interface ComparisonData {
-  currentTeam: { value: number; projectedScore: number; playerCount: number };
-  savedTeam: { value: number; projectedScore: number; playerCount: number; name: string };
+  currentTeam: { value: number; projectedScore: number; playerCount: number; players?: ComparePlayer[] };
+  savedTeam: { value: number; projectedScore: number; playerCount: number; name: string; players?: ComparePlayer[] };
   sharedPlayers: number;
   onlyInCurrent: Array<{ id: number; name: string; position: string; avgScore: number; price: number }>;
   onlyInSaved: Array<{ id: number; name: string; position: string; avgScore: number; price: number }>;
@@ -202,6 +213,54 @@ function TeamCard({
   );
 }
 
+function CompareColumn({ title, players, color }: { title: string; players: ComparePlayer[]; color: string }) {
+  const positions = ["DEF", "MID", "RUC", "FWD"];
+  const field = players.filter(p => p.isOnField);
+  const bench = players.filter(p => !p.isOnField);
+
+  const getPositionPlayers = (pos: string) => field.filter(p => p.fieldPosition === pos);
+
+  return (
+    <div className="space-y-1.5">
+      <p className={`text-xs font-bold uppercase tracking-wide ${color}`}>{title}</p>
+      {positions.map(pos => {
+        const posPlayers = getPositionPlayers(pos);
+        if (posPlayers.length === 0) return null;
+        return (
+          <div key={pos} className="space-y-0.5">
+            <p className="text-[10px] text-muted-foreground font-semibold">{pos}</p>
+            {posPlayers.map(p => (
+              <div
+                key={p.id}
+                className={`flex items-center justify-between text-[11px] px-1.5 py-1 rounded ${p.isUnique ? "bg-accent/10 border border-accent/30" : "bg-muted/20"}`}
+                data-testid={`compare-player-${p.id}`}
+              >
+                <span className={`font-medium truncate ${p.isUnique ? "text-accent" : ""}`}>{p.name}</span>
+                <span className="text-muted-foreground shrink-0 ml-1">${(p.price / 1000).toFixed(0)}k</span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {bench.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="text-[10px] text-muted-foreground font-semibold">BENCH</p>
+          {bench.map(p => (
+            <div
+              key={p.id}
+              className={`flex items-center justify-between text-[11px] px-1.5 py-1 rounded opacity-60 ${p.isUnique ? "bg-accent/10 border border-accent/30" : "bg-muted/20"}`}
+              data-testid={`compare-bench-${p.id}`}
+            >
+              <span className={`font-medium truncate ${p.isUnique ? "text-accent" : ""}`}>{p.name}</span>
+              <span className="text-muted-foreground shrink-0 ml-1">${(p.price / 1000).toFixed(0)}k</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ComparisonModal({
   open,
   onClose,
@@ -215,7 +274,7 @@ function ComparisonModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-comparison">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="dialog-comparison">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitCompareArrows className="w-5 h-5" />
@@ -232,32 +291,26 @@ function ComparisonModal({
 
         {data && !isLoading && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <Card>
                 <CardContent className="p-3 space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">Active Team</p>
+                  <p className="text-xs font-semibold text-blue-500">Active Team</p>
                   <p className="text-sm font-bold" data-testid="text-compare-current-value">
                     ${(data.currentTeam.value / 1000000).toFixed(2)}M
                   </p>
                   <p className="text-xs text-muted-foreground" data-testid="text-compare-current-score">
                     Projected: {data.currentTeam.projectedScore} pts
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {data.currentTeam.playerCount} players
-                  </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-3 space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">{data.savedTeam.name}</p>
+                  <p className="text-xs font-semibold text-amber-500">{data.savedTeam.name}</p>
                   <p className="text-sm font-bold" data-testid="text-compare-saved-value">
                     ${(data.savedTeam.value / 1000000).toFixed(2)}M
                   </p>
                   <p className="text-xs text-muted-foreground" data-testid="text-compare-saved-score">
                     Projected: {data.savedTeam.projectedScore ?? "—"} pts
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {data.savedTeam.playerCount} players
                   </p>
                 </CardContent>
               </Card>
@@ -265,13 +318,13 @@ function ComparisonModal({
 
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <p className={`text-lg font-bold ${data.scoreDiff > 0 ? "text-emerald-600" : data.scoreDiff < 0 ? "text-red-600" : ""}`} data-testid="text-score-diff">
+                <p className={`text-lg font-bold ${data.scoreDiff > 0 ? "text-emerald-500" : data.scoreDiff < 0 ? "text-red-500" : ""}`} data-testid="text-score-diff">
                   {data.scoreDiff > 0 ? "+" : ""}{data.scoreDiff} pts
                 </p>
                 <p className="text-[10px] text-muted-foreground">Score Diff</p>
               </div>
               <div>
-                <p className={`text-lg font-bold ${data.valueDiff > 0 ? "text-emerald-600" : data.valueDiff < 0 ? "text-red-600" : ""}`} data-testid="text-value-diff">
+                <p className={`text-lg font-bold ${data.valueDiff > 0 ? "text-emerald-500" : data.valueDiff < 0 ? "text-red-500" : ""}`} data-testid="text-value-diff">
                   {data.valueDiff > 0 ? "+" : ""}${(data.valueDiff / 1000).toFixed(0)}k
                 </p>
                 <p className="text-[10px] text-muted-foreground">Value Diff</p>
@@ -280,35 +333,48 @@ function ComparisonModal({
                 <p className="text-lg font-bold" data-testid="text-shared-count">
                   {data.sharedPlayers}
                 </p>
-                <p className="text-[10px] text-muted-foreground">Shared Players</p>
+                <p className="text-[10px] text-muted-foreground">Shared</p>
               </div>
             </div>
 
-            {data.onlyInCurrent.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground">Only in Active Team</p>
-                <div className="space-y-1">
-                  {data.onlyInCurrent.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md bg-muted/30" data-testid={`text-only-current-${p.id}`}>
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-muted-foreground">{p.position} · avg {p.avgScore} · ${(p.price / 1000).toFixed(0)}k</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span className="inline-block w-3 h-3 rounded border border-accent/30 bg-accent/10" />
+              <span>Highlighted = unique to that team</span>
+            </div>
 
-            {data.onlyInSaved.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground">Only in {data.savedTeam.name}</p>
-                <div className="space-y-1">
-                  {data.onlyInSaved.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md bg-muted/30" data-testid={`text-only-saved-${p.id}`}>
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-muted-foreground">{p.position} · avg {p.avgScore} · ${(p.price / 1000).toFixed(0)}k</span>
+            {data.currentTeam.players && data.savedTeam.players ? (
+              <div className="grid grid-cols-2 gap-3">
+                <CompareColumn title="Active Team" players={data.currentTeam.players} color="text-blue-500" />
+                <CompareColumn title={data.savedTeam.name} players={data.savedTeam.players} color="text-amber-500" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.onlyInCurrent.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Only in Active Team</p>
+                    <div className="space-y-1">
+                      {data.onlyInCurrent.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md bg-accent/10 border border-accent/30" data-testid={`text-only-current-${p.id}`}>
+                          <span className="font-medium text-accent">{p.name}</span>
+                          <span className="text-muted-foreground">{p.position} · avg {p.avgScore} · ${(p.price / 1000).toFixed(0)}k</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+                {data.onlyInSaved.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Only in {data.savedTeam.name}</p>
+                    <div className="space-y-1">
+                      {data.onlyInSaved.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md bg-accent/10 border border-accent/30" data-testid={`text-only-saved-${p.id}`}>
+                          <span className="font-medium text-accent">{p.name}</span>
+                          <span className="text-muted-foreground">{p.position} · avg {p.avgScore} · ${(p.price / 1000).toFixed(0)}k</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

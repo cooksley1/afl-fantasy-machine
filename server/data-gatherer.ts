@@ -480,6 +480,7 @@ Return JSON:
             priority: insight.urgency || "medium",
             playerNames: insight.playerNames || null,
             source: unprocessed[idx].sourceType,
+            sourceUrl: unprocessed[idx].sourceUrl || null,
             actionable: true,
           });
         }

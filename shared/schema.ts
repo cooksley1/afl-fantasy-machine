@@ -154,6 +154,7 @@ export const intelReports = pgTable("intel_reports", {
   priority: text("priority").notNull().default("medium"),
   playerNames: text("player_names").default(null),
   source: text("source").default(null),
+  sourceUrl: text("source_url").default(null),
   actionable: boolean("actionable").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

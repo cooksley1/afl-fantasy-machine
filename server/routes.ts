@@ -2258,12 +2258,12 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const currentIds = new Set(currentTeam.map(p => p.id));
       const savedIds = new Set(savedPlayers.map(p => p.playerId));
 
-      const shared = [...currentIds].filter(id => savedIds.has(id));
-      const onlyInCurrent = [...currentIds].filter(id => !savedIds.has(id)).map(id => {
+      const shared = Array.from(currentIds).filter(id => savedIds.has(id));
+      const onlyInCurrent = Array.from(currentIds).filter(id => !savedIds.has(id)).map(id => {
         const p = playerMap.get(id);
         return p ? { id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price } : null;
       }).filter(Boolean);
-      const onlyInSaved = [...savedIds].filter(id => !currentIds.has(id)).map(id => {
+      const onlyInSaved = Array.from(savedIds).filter(id => !currentIds.has(id)).map(id => {
         const p = playerMap.get(id);
         return p ? { id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price } : null;
       }).filter(Boolean);
@@ -2271,9 +2271,21 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const currentValue = currentTeam.reduce((sum, p) => sum + p.price, 0);
       const currentProjected = currentTeam.filter(p => p.isOnField).reduce((sum, p) => sum + (p.avgScore || 0), 0);
 
+      const currentAllPlayers = currentTeam.map(p => ({
+        id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price,
+        isOnField: p.isOnField, fieldPosition: p.fieldPosition, isUnique: !savedIds.has(p.id),
+      }));
+      const savedAllPlayers = savedPlayers.map(sp => {
+        const p = playerMap.get(sp.playerId);
+        return p ? {
+          id: p.id, name: p.name, position: p.position, avgScore: p.avgScore, price: p.price,
+          isOnField: sp.isOnField, fieldPosition: sp.fieldPosition, isUnique: !currentIds.has(p.id),
+        } : null;
+      }).filter(Boolean);
+
       res.json({
-        currentTeam: { value: currentValue, projectedScore: Math.round(currentProjected), playerCount: currentTeam.length },
-        savedTeam: { value: savedTeam.teamValue, projectedScore: savedTeam.projectedScore, playerCount: savedPlayers.length, name: savedTeam.name },
+        currentTeam: { value: currentValue, projectedScore: Math.round(currentProjected), playerCount: currentTeam.length, players: currentAllPlayers },
+        savedTeam: { value: savedTeam.teamValue, projectedScore: savedTeam.projectedScore, playerCount: savedPlayers.length, name: savedTeam.name, players: savedAllPlayers },
         sharedPlayers: shared.length,
         onlyInCurrent,
         onlyInSaved,

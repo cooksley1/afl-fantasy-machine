@@ -265,7 +265,7 @@ export default function DreamTeamPage() {
         <div className="flex items-center gap-2 mb-6">
           <Crown className="w-5 h-5 text-amber-500" />
           <h1 className="text-xl font-bold tracking-tight" data-testid="text-dream-team-title">
-            Dream Team Builder
+            Reverse Engineer
           </h1>
         </div>
 
@@ -324,7 +324,7 @@ export default function DreamTeamPage() {
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4" data-testid="page-dream-team">
         <div className="flex items-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
-          <h1 className="text-xl font-bold">Building Dream Team...</h1>
+          <h1 className="text-xl font-bold">Building your team...</h1>
         </div>
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-40 w-full" />
@@ -333,7 +333,50 @@ export default function DreamTeamPage() {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto" data-testid="page-dream-team">
+        <div className="flex items-center gap-2 mb-6">
+          <Crown className="w-5 h-5 text-amber-500" />
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-dream-team-title">
+            Reverse Engineer
+          </h1>
+        </div>
+        <Card className="overflow-hidden">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Something went wrong</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+                We couldn't load your dream team data. Try generating it again.
+              </p>
+            </div>
+            <Button
+              size="lg"
+              className="gap-2"
+              onClick={() => generateMutation.mutate()}
+              disabled={isFetching}
+              data-testid="button-build-dream-team-retry"
+            >
+              {isFetching ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Building...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Build My Dream Team
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const dreamGroups = groupByPosition(data.dreamTeam);
   const startGroups = groupByPosition(data.startingTeam);
@@ -354,7 +397,7 @@ export default function DreamTeamPage() {
         <div className="flex items-center gap-2">
           <Crown className="w-5 h-5 text-amber-500" />
           <h1 className="text-xl font-bold tracking-tight" data-testid="text-dream-team-title">
-            Dream Team Builder
+            Reverse Engineer
           </h1>
         </div>
         <Button

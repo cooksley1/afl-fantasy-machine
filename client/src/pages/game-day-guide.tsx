@@ -248,46 +248,40 @@ export default function GameDayGuide() {
                     return (
                       <div
                         key={key}
-                        className={`flex items-start gap-3 rounded-md border p-3 transition-opacity ${checks[key] ? "opacity-50" : ""}`}
+                        className={`rounded-md border p-3 transition-opacity ${checks[key] ? "opacity-50" : ""}`}
                         data-testid={`checklist-trade-${trade.step}`}
                       >
-                        <Checkbox
-                          checked={!!checks[key]}
-                          onCheckedChange={() => toggleCheck(key)}
-                          className="mt-0.5"
-                          data-testid={`checkbox-trade-${trade.step}`}
-                        />
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground font-semibold">
-                            Step {trade.step}
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">
-                                OUT
-                              </Badge>
-                              <span className="text-sm font-medium">{trade.out.name}</span>
-                              <span className="text-[11px] text-muted-foreground">
-                                ${(trade.out.price / 1000).toFixed(0)}k · avg {trade.out.avgScore}
-                              </span>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={!!checks[key]}
+                            onCheckedChange={() => toggleCheck(key)}
+                            className="mt-1"
+                            data-testid={`checkbox-trade-${trade.step}`}
+                          />
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-[10px]">Step {trade.step}</Badge>
+                              {trade.scoreDiff > 0 && (
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
+                                  +{trade.scoreDiff.toFixed(1)} pts
+                                </Badge>
+                              )}
                             </div>
-                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
-                                IN
-                              </Badge>
-                              <span className="text-sm font-medium">{trade.in.name}</span>
-                              <span className="text-[11px] text-muted-foreground">
-                                ${(trade.in.price / 1000).toFixed(0)}k · avg {trade.in.avgScore}
-                              </span>
+                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                              <div className="rounded-md bg-red-500/5 border border-red-500/15 p-2 space-y-0.5">
+                                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] mb-0.5">OUT</Badge>
+                                <p className="text-sm font-semibold">{trade.out.name}</p>
+                                <p className="text-[10px] text-muted-foreground">${(trade.out.price / 1000).toFixed(0)}k · avg {trade.out.avgScore}</p>
+                              </div>
+                              <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <div className="rounded-md bg-emerald-500/5 border border-emerald-500/15 p-2 space-y-0.5">
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] mb-0.5">IN</Badge>
+                                <p className="text-sm font-semibold">{trade.in.name}</p>
+                                <p className="text-[10px] text-muted-foreground">${(trade.in.price / 1000).toFixed(0)}k · avg {trade.in.avgScore}</p>
+                              </div>
                             </div>
+                            <p className="text-[11px] text-muted-foreground italic leading-relaxed">{trade.reason}</p>
                           </div>
-                          <p className="text-[11px] text-muted-foreground">{trade.reason}</p>
-                          {trade.scoreDiff > 0 && (
-                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
-                              +{trade.scoreDiff.toFixed(1)} pts projected
-                            </Badge>
-                          )}
                         </div>
                       </div>
                     );
@@ -387,10 +381,13 @@ export default function GameDayGuide() {
                           data-testid={`checkbox-field-move-${i}`}
                         />
                         <div className="flex-1 min-w-0 space-y-1">
-                          <p className="text-sm font-medium">
-                            {move.action}: {move.player}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">{move.reason}</p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-[10px]">
+                              {move.action}
+                            </Badge>
+                            <span className="text-sm font-semibold">{move.player}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground italic">{move.reason}</p>
                         </div>
                       </div>
                     );

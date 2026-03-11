@@ -1,8 +1,10 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertTriangle,
   Bell,
@@ -14,18 +16,35 @@ import {
   UserPlus,
   Newspaper,
   RefreshCw,
-  ArrowRight,
+  Settings,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { useLocation } from "wouter";
 import type { PlayerAlert } from "@shared/schema";
 
-const alertTypeConfig: Record<string, { icon: typeof AlertTriangle; label: string; color: string }> = {
-  injury: { icon: AlertTriangle, label: "Injury", color: "bg-red-500/10 text-red-500 border-red-500/20" },
-  late_change: { icon: UserMinus, label: "Late Change", color: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
-  selection: { icon: UserPlus, label: "Selection", color: "bg-green-500/10 text-green-500 border-green-500/20" },
-  role_change: { icon: ShieldAlert, label: "Role Change", color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-  news: { icon: Newspaper, label: "News", color: "bg-gray-500/10 text-gray-400 border-gray-500/20" },
+const ALERT_TYPES = ["injury", "late_change", "selection", "role_change", "news"] as const;
+
+const alertTypeConfig: Record<string, { icon: typeof AlertTriangle; label: string; color: string; description: string }> = {
+  injury: { icon: AlertTriangle, label: "Injury", color: "bg-red-500/10 text-red-500 border-red-500/20", description: "Hamstring, knee, concussion, etc." },
+  late_change: { icon: UserMinus, label: "Late Change", color: "bg-orange-500/10 text-orange-500 border-orange-500/20", description: "Omissions, managed, late swaps" },
+  selection: { icon: UserPlus, label: "Selection", color: "bg-green-500/10 text-green-500 border-green-500/20", description: "Named, recalled, debuts" },
+  role_change: { icon: ShieldAlert, label: "Role Change", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", description: "Position moves, tagging, vest" },
+  news: { icon: Newspaper, label: "News", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", description: "General player mentions" },
 };
+
+function getAlertPrefs(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem("afl_alert_prefs");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  const defaults: Record<string, boolean> = {};
+  for (const t of ALERT_TYPES) defaults[t] = true;
+  return defaults;
+}
+
+function saveAlertPrefs(prefs: Record<string, boolean>) {
+  localStorage.setItem("afl_alert_prefs", JSON.stringify(prefs));
+}
 
 function timeAgo(date: string | Date): string {
   const now = new Date();
@@ -41,6 +60,9 @@ function timeAgo(date: string | Date): string {
 }
 
 export default function AlertsPage() {
+  const [prefs, setPrefs] = useState(getAlertPrefs);
+  const [showSettings, setShowSettings] = useState(false);
+
   const { data: alerts = [], isLoading } = useQuery<PlayerAlert[]>({
     queryKey: ["/api/player-alerts"],
     refetchInterval: 60000,
@@ -75,6 +97,14 @@ export default function AlertsPage() {
     },
   });
 
+  const togglePref = (type: string) => {
+    const updated = { ...prefs, [type]: !prefs[type] };
+    setPrefs(updated);
+    saveAlertPrefs(updated);
+  };
+
+  const enabledTypes = new Set(Object.entries(prefs).filter(([, v]) => v).map(([k]) => k));
+  const filteredAlerts = alerts.filter((a) => enabledTypes.has(a.alertType));
   const unreadCount = countData?.count ?? alerts.filter((a) => !a.isRead).length;
 
   if (isLoading) {
@@ -109,6 +139,15 @@ export default function AlertsPage() {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setShowSettings(!showSettings)}
+            data-testid="button-alert-settings"
+          >
+            <Settings className="w-4 h-4" />
+            {showSettings ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => checkAlertsMutation.mutate()}
             disabled={checkAlertsMutation.isPending}
             data-testid="button-check-alerts"
@@ -130,26 +169,61 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {alerts.length === 0 ? (
+      {showSettings && (
+        <Card className="p-4 space-y-3" data-testid="card-alert-settings">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Alert Preferences</p>
+          <p className="text-[11px] text-muted-foreground">Choose which alert types you want to see. Disabled types are hidden from your feed.</p>
+          <div className="space-y-2">
+            {ALERT_TYPES.map((type) => {
+              const config = alertTypeConfig[type];
+              const Icon = config.icon;
+              return (
+                <div key={type} className="flex items-center justify-between py-1" data-testid={`pref-toggle-${type}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center border ${config.color}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{config.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{config.description}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={!!prefs[type]}
+                    onCheckedChange={() => togglePref(type)}
+                    data-testid={`switch-${type}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {filteredAlerts.length === 0 ? (
         <Card className="p-8 text-center space-y-3">
           <BellOff className="w-10 h-10 mx-auto text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground" data-testid="text-no-alerts">
-            No alerts yet. We'll notify you when something happens to one of your team players — injuries, late changes, selection news.
+            {alerts.length > 0
+              ? "All alerts are hidden by your preferences. Tap the settings icon to adjust."
+              : "No alerts yet. We'll notify you when something happens to one of your team players — injuries, late changes, selection news."}
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => checkAlertsMutation.mutate()}
-            disabled={checkAlertsMutation.isPending}
-            data-testid="button-check-now"
-          >
-            <RefreshCw className={`w-4 h-4 mr-1 ${checkAlertsMutation.isPending ? "animate-spin" : ""}`} />
-            Check now
-          </Button>
+          {alerts.length === 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => checkAlertsMutation.mutate()}
+              disabled={checkAlertsMutation.isPending}
+              data-testid="button-check-now"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${checkAlertsMutation.isPending ? "animate-spin" : ""}`} />
+              Check now
+            </Button>
+          )}
         </Card>
       ) : (
         <div className="space-y-2">
-          {alerts.map((alert) => {
+          {filteredAlerts.map((alert) => {
             const config = alertTypeConfig[alert.alertType] || alertTypeConfig.news;
             const Icon = config.icon;
             return (
