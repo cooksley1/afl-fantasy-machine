@@ -32,7 +32,11 @@ async function runGather() {
     }
 
     try {
-      const { fetchScoresForCompletedRounds } = await import("./services/live-scores");
+      const { fetchScoresForCompletedRounds, detectAndAdvanceRound } = await import("./services/live-scores");
+      const roundResult = await detectAndAdvanceRound();
+      if (roundResult.advanced) {
+        console.log(`[Scheduler] Round advanced from ${roundResult.previousRound} to ${roundResult.newRound}`);
+      }
       const scoreResult = await fetchScoresForCompletedRounds();
       if (scoreResult.roundsProcessed > 0) {
         const { recalculatePlayerAverages } = await import("./expand-players");

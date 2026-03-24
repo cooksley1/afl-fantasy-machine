@@ -1079,3 +1079,90 @@ export async function bulkUpdateLiveScores(
   }
   return { updated };
 }
+
+export async function detectAndAdvanceRound(): Promise<{ previousRound: number; newRound: number; advanced: boolean }> {
+  try {
+    const year = new Date().getFullYear();
+    const res = await fetch(`https://api.squiggle.com.au/?q=games;year=${year}`, {
+      headers: { "User-Agent": UA },
+    });
+    if (!res.ok) return { previousRound: 0, newRound: 0, advanced: false };
+    const data = await res.json();
+    const games = data.games || [];
+
+    const completedRounds = new Set<number>();
+    const allRounds = new Set<number>();
+
+    for (const g of games) {
+      const roundStr = (g.roundname || "").toLowerCase();
+      let roundNum: number;
+      if (roundStr.includes("opening")) {
+        roundNum = 0;
+      } else if (roundStr.startsWith("round ")) {
+        roundNum = parseInt(roundStr.replace(/\D/g, ""), 10);
+        if (isNaN(roundNum)) continue;
+      } else {
+        continue;
+      }
+      allRounds.add(roundNum);
+      if (g.complete === 100) completedRounds.add(roundNum);
+    }
+
+    const roundsArray = Array.from(allRounds).sort((a, b) => a - b);
+    let latestFullyCompleted = -1;
+    for (const r of roundsArray) {
+      const roundGames = games.filter((g: any) => {
+        const rn = (g.roundname || "").toLowerCase();
+        if (rn.includes("opening")) return r === 0;
+        if (rn.startsWith("round ")) {
+          const parsed = parseInt(rn.replace(/\D/g, ""), 10);
+          return parsed === r;
+        }
+        return false;
+      });
+      const allComplete = roundGames.every((g: any) => g.complete === 100);
+      if (allComplete && roundGames.length > 0) {
+        latestFullyCompleted = r;
+      } else {
+        break;
+      }
+    }
+
+    const nextRound = latestFullyCompleted + 1;
+
+    const allSettings = await db.select().from(leagueSettings);
+    let advanced = false;
+    let previousRound = 0;
+    let advancedCount = 0;
+
+    for (const s of allSettings) {
+      if (s.currentRound < nextRound) {
+        previousRound = s.currentRound;
+        await db.update(leagueSettings)
+          .set({ currentRound: nextRound })
+          .where(eq(leagueSettings.id, s.id));
+        advanced = true;
+        advancedCount++;
+      }
+    }
+
+    if (advanced) {
+      console.log(`[RoundAdvance] Advanced ${advancedCount} settings from round ${previousRound} to ${nextRound} (rounds 0-${latestFullyCompleted} fully completed)`);
+    } else {
+      const currentMax = allSettings.length > 0 ? Math.max(...allSettings.map(s => s.currentRound)) : 0;
+      console.log(`[RoundAdvance] No advancement needed (settings already at round ${currentMax}, detected next round ${nextRound})`);
+    }
+
+    try {
+      const { syncPlayerFixtures } = await import("./fixture-service");
+      await syncPlayerFixtures(nextRound);
+    } catch (e: any) {
+      console.log(`[RoundAdvance] Fixture sync error: ${e.message}`);
+    }
+
+    return { previousRound, newRound: nextRound, advanced };
+  } catch (e: any) {
+    console.error("[RoundAdvance] Error detecting round:", e.message);
+    return { previousRound: 0, newRound: 0, advanced: false };
+  }
+}

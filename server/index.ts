@@ -138,23 +138,16 @@ app.use((req, res, next) => {
     }
   })();
 
-  import("./services/live-scores").then(({ fetchScoresForCompletedRounds }) =>
-    fetchScoresForCompletedRounds().then(result => {
-      if (result.roundsProcessed > 0) {
-        return recalculatePlayerAverages();
-      }
-    })
-  ).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
-
-  const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
-  fetchAndStoreFixtures().then(async () => {
-    try {
-      const settings = await storage.getSettings("__system__");
-      await syncPlayerFixtures(settings?.currentRound ?? 1);
-    } catch {
-      await syncPlayerFixtures(1);
+  import("./services/live-scores").then(async ({ fetchScoresForCompletedRounds, detectAndAdvanceRound }) => {
+    const roundResult = await detectAndAdvanceRound();
+    const scoreResult = await fetchScoresForCompletedRounds();
+    if (scoreResult.roundsProcessed > 0) {
+      await recalculatePlayerAverages();
     }
-  }).catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
+  }).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
+
+  const { fetchAndStoreFixtures } = await import("./services/fixture-service");
+  fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
 
   const { seedTagData } = await import("./services/tag-intelligence");
   await seedTagData();

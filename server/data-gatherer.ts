@@ -336,8 +336,8 @@ async function isDuplicate(title: string): Promise<boolean> {
   return existing.length > 0;
 }
 
-export async function gatherIntelligence(userId: string): Promise<{ fetched: number; processed: number }> {
-  const settings = await storage.getSettings(userId);
+export async function gatherIntelligence(userId?: string): Promise<{ fetched: number; processed: number }> {
+  const settings = await storage.getSettings(userId || "__system__");
   const currentRound = settings.currentRound || 1;
 
   console.log(`[DataGatherer] Starting intelligence gathering for Round ${currentRound}...`);
