@@ -74,6 +74,16 @@ export const weeklyStats = pgTable("weekly_stats", {
   contestedPossessions: integer("contested_possessions").default(null),
   uncontestedPossessions: integer("uncontested_possessions").default(null),
   subFlag: boolean("sub_flag").notNull().default(false),
+  disposalEfficiency: real("disposal_efficiency").default(null),
+  metresGained: integer("metres_gained").default(null),
+  clearances: integer("clearances").default(null),
+  scoreInvolvements: integer("score_involvements").default(null),
+  pressureActs: integer("pressure_acts").default(null),
+  contestedMarks: integer("contested_marks").default(null),
+  interceptMarks: integer("intercept_marks").default(null),
+  groundBallGets: integer("ground_ball_gets").default(null),
+  supercoachScore: real("supercoach_score").default(null),
+  ratingPoints: real("rating_points").default(null),
 });
 
 export const teamContext = pgTable("team_context", {
@@ -86,6 +96,12 @@ export const teamContext = pgTable("team_context", {
   paceFactor: real("pace_factor").default(null),
   fantasyPointsScored: real("fantasy_points_scored").default(null),
   fantasyPointsConceded: real("fantasy_points_conceded").default(null),
+  metresGained: integer("metres_gained").default(null),
+  supercoachScore: real("supercoach_score").default(null),
+  inside50s: integer("inside_50s").default(null),
+  tackleCount: integer("tackle_count").default(null),
+  hitouts: integer("hitouts").default(null),
+  ratingPoints: real("rating_points").default(null),
 });
 
 export const positionConcessions = pgTable("position_concessions", {

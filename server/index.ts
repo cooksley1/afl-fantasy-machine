@@ -162,6 +162,12 @@ app.use((req, res, next) => {
     if (scoreResult.roundsProcessed > 0) {
       await recalculatePlayerAverages();
     }
+    try {
+      const { syncWheeloRatings } = await import("./services/wheelo-scraper");
+      await syncWheeloRatings();
+    } catch (err: any) {
+      console.log(`[Wheelo] Background sync error: ${err.message}`);
+    }
   }).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
 
   const { fetchAndStoreFixtures } = await import("./services/fixture-service");
