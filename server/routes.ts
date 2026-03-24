@@ -1693,6 +1693,30 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
     }
   });
 
+  app.get("/api/live-scores/active-windows", async (req, res) => {
+    try {
+      const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
+      const { getActiveGameWindows } = await import("./services/live-scores");
+      const data = await getActiveGameWindows(round);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/league/opponents/:id/live-matchup", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
+      const { getLiveH2HMatchup } = await import("./services/live-scores");
+      const data = await getLiveH2HMatchup(uid, Number(req.params.id), round);
+      if (!data) return res.status(404).json({ message: "Opponent not found or no squad data" });
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/my-team/risks", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);

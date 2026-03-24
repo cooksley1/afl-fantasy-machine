@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Star, Info, ChevronLeft, ChevronRight, Download, LayoutGrid, List } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, Clock, Radio, ChevronDown, ChevronUp, Star, Info, ChevronLeft, ChevronRight, Download, LayoutGrid, List, Swords, Users } from "lucide-react";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/player-avatar";
+import H2HMatchupView from "@/components/h2h-matchup";
 
 interface MatchStatus {
   id: number;
@@ -403,13 +404,44 @@ function getRoundLabel(round: number): string {
   return `Round ${round}`;
 }
 
+interface LeagueOpponent {
+  id: number;
+  opponentName: string;
+  leagueName: string;
+  playerData: string | null;
+}
+
+type LiveViewMode = "scores" | "h2h";
+
 export default function LiveScoresPage() {
   const [expandedPlayer, setExpandedPlayer] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [scoreViewMode, setScoreViewMode] = useState<ScoreViewMode>("combined");
+  const [viewMode, setViewMode] = useState<LiveViewMode>("scores");
+  const [selectedOpponentId, setSelectedOpponentId] = useState<number | null>(null);
+  const [pollInterval, setPollInterval] = useState(60000);
 
   const roundParam = selectedRound !== null ? `?round=${selectedRound}` : "";
+
+  const { data: activeWindows } = useQuery<{
+    hasActiveGames: boolean;
+    suggestedPollInterval: number;
+  }>({
+    queryKey: ["/api/live-scores/active-windows", selectedRound],
+    queryFn: async () => {
+      const res = await fetch(`/api/live-scores/active-windows${roundParam}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  useEffect(() => {
+    if (activeWindows?.suggestedPollInterval) {
+      setPollInterval(activeWindows.suggestedPollInterval);
+    }
+  }, [activeWindows?.suggestedPollInterval]);
 
   const { data, isLoading, isFetching } = useQuery<LiveRoundData>({
     queryKey: ["/api/live-scores", selectedRound],
@@ -418,8 +450,19 @@ export default function LiveScoresPage() {
       if (!res.ok) throw new Error("Failed to fetch live scores");
       return res.json();
     },
-    refetchInterval: 60000,
+    refetchInterval: pollInterval,
   });
+
+  const { data: opponents } = useQuery<LeagueOpponent[]>({
+    queryKey: ["/api/league/opponents"],
+    queryFn: async () => {
+      const res = await fetch("/api/league/opponents");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const opponentsWithSquads = (opponents || []).filter(o => o.playerData);
 
   const { toast } = useToast();
 
@@ -470,6 +513,21 @@ export default function LiveScoresPage() {
     setExpandedPlayer(null);
   };
 
+  if (viewMode === "h2h" && selectedOpponentId) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <H2HMatchupView
+          opponentId={selectedOpponentId}
+          round={selectedRound ?? undefined}
+          onBack={() => {
+            setViewMode("scores");
+            setSelectedOpponentId(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="p-4 flex items-center justify-center min-h-[50vh]">
@@ -506,6 +564,9 @@ export default function LiveScoresPage() {
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {data?.lastUpdated && `Updated ${new Date(data.lastUpdated).toLocaleTimeString()}`}
+            {activeWindows?.hasActiveGames && (
+              <span className="ml-1.5 text-green-400">· Live polling {Math.round(pollInterval / 1000)}s</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -534,6 +595,27 @@ export default function LiveScoresPage() {
           </Button>
         </div>
       </div>
+
+      {opponentsWithSquads.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1" data-testid="h2h-opponent-picker">
+          {opponentsWithSquads.map(opp => (
+            <Button
+              key={opp.id}
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-[11px] h-7 px-2.5 shrink-0 border-primary/30 hover:bg-primary/10"
+              onClick={() => {
+                setSelectedOpponentId(opp.id);
+                setViewMode("h2h");
+              }}
+              data-testid={`button-h2h-opponent-${opp.id}`}
+            >
+              <Swords className="w-3 h-3 text-primary" />
+              vs {opp.opponentName}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center justify-center gap-3" data-testid="round-navigator">
         <Button

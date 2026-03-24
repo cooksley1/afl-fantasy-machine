@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { players, weeklyStats, leagueSettings, myTeamPlayers } from "@shared/schema";
+import { players, weeklyStats, leagueSettings, myTeamPlayers, fixtures, leagueOpponents } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
 const UA = "AFL-Fantasy-Machine/1.0 (replit.app; afl-fantasy-advisor)";
@@ -1165,4 +1165,323 @@ export async function detectAndAdvanceRound(): Promise<{ previousRound: number; 
     console.error("[RoundAdvance] Error detecting round:", e.message);
     return { previousRound: 0, newRound: 0, advanced: false };
   }
+}
+
+export interface ActiveGameWindow {
+  matchId: number;
+  homeTeam: string;
+  awayTeam: string;
+  venue: string;
+  status: "live" | "just_finished" | "upcoming_soon";
+  complete: number;
+  timeStr: string | null;
+  minutesSinceEnd?: number;
+  minutesUntilStart?: number;
+  teamsInvolved: string[];
+}
+
+export async function getActiveGameWindows(round?: number): Promise<{
+  windows: ActiveGameWindow[];
+  hasActiveGames: boolean;
+  suggestedPollInterval: number;
+}> {
+  try {
+    const matches = await fetchMatchStatuses(round);
+    const now = Date.now();
+    const windows: ActiveGameWindow[] = [];
+
+    for (const m of matches) {
+      if (m.complete > 0 && m.complete < 100) {
+        windows.push({
+          matchId: m.id,
+          homeTeam: m.homeTeam,
+          awayTeam: m.awayTeam,
+          venue: m.venue,
+          status: "live",
+          complete: m.complete,
+          timeStr: m.timeStr,
+          teamsInvolved: [m.homeTeam, m.awayTeam],
+        });
+      } else if (m.complete === 100) {
+        const matchDate = new Date(m.localTime || m.date);
+        const gameDurationMs = 3 * 60 * 60 * 1000;
+        const estimatedEnd = matchDate.getTime() + gameDurationMs;
+        const msSinceEnd = now - estimatedEnd;
+        const minutesSinceEnd = Math.floor(msSinceEnd / 60000);
+
+        if (minutesSinceEnd >= 0 && minutesSinceEnd <= 15) {
+          windows.push({
+            matchId: m.id,
+            homeTeam: m.homeTeam,
+            awayTeam: m.awayTeam,
+            venue: m.venue,
+            status: "just_finished",
+            complete: 100,
+            timeStr: m.timeStr,
+            minutesSinceEnd,
+            teamsInvolved: [m.homeTeam, m.awayTeam],
+          });
+        }
+      } else if (m.complete === 0) {
+        const matchDate = new Date(m.localTime || m.date);
+        const msUntilStart = matchDate.getTime() - now;
+        const minutesUntilStart = Math.floor(msUntilStart / 60000);
+
+        if (minutesUntilStart >= 0 && minutesUntilStart <= 30) {
+          windows.push({
+            matchId: m.id,
+            homeTeam: m.homeTeam,
+            awayTeam: m.awayTeam,
+            venue: m.venue,
+            status: "upcoming_soon",
+            complete: 0,
+            timeStr: m.timeStr,
+            minutesUntilStart,
+            teamsInvolved: [m.homeTeam, m.awayTeam],
+          });
+        }
+      }
+    }
+
+    const hasActiveGames = windows.some(w => w.status === "live" || w.status === "just_finished");
+    const suggestedPollInterval = windows.some(w => w.status === "live") ? 30000 :
+      windows.some(w => w.status === "just_finished") ? 45000 :
+      windows.some(w => w.status === "upcoming_soon") ? 60000 : 120000;
+
+    return { windows, hasActiveGames, suggestedPollInterval };
+  } catch (e: any) {
+    console.error("[ActiveWindows] Error:", e.message);
+    return { windows: [], hasActiveGames: false, suggestedPollInterval: 120000 };
+  }
+}
+
+export interface H2HPlayerScore {
+  playerId: number;
+  playerName: string;
+  team: string;
+  position: string;
+  fieldPosition: string;
+  fantasyScore: number;
+  projectedScore: number;
+  avgScore: number;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  effectiveScore: number;
+  matchStatus: "live" | "complete" | "upcoming" | "bye" | "dnp";
+  isOnField: boolean;
+  opponent: string | null;
+  kicks: number;
+  handballs: number;
+  marks: number;
+  tackles: number;
+  hitouts: number;
+  goals: number;
+  behinds: number;
+  disposals: number;
+  aflFantasyId: number | null;
+  selectionStatus: string;
+}
+
+export interface H2HMatchupData {
+  opponentName: string;
+  leagueName: string;
+  round: number;
+  myTeam: H2HPlayerScore[];
+  oppTeam: H2HPlayerScore[];
+  myTotal: number;
+  oppTotal: number;
+  myProjected: number;
+  oppProjected: number;
+  myForecast: number;
+  oppForecast: number;
+  lastUpdated: string;
+  hasActiveGames: boolean;
+  suggestedPollInterval: number;
+}
+
+export async function getLiveH2HMatchup(
+  userId: string,
+  opponentId: number,
+  round?: number
+): Promise<H2HMatchupData | null> {
+  const opponent = await db.select().from(leagueOpponents)
+    .where(and(eq(leagueOpponents.userId, userId), eq(leagueOpponents.id, opponentId)))
+    .limit(1);
+
+  if (!opponent[0] || !opponent[0].playerData) return null;
+
+  const settings = await db.select().from(leagueSettings)
+    .where(eq(leagueSettings.userId, userId)).limit(1);
+  const currentRound = round ?? settings[0]?.currentRound ?? 1;
+
+  const matches = await fetchMatchStatuses(currentRound);
+  const { hasActiveGames, suggestedPollInterval } = await getActiveGameWindows(currentRound);
+
+  const getMatchStatus = (teamName: string): "live" | "complete" | "upcoming" | "bye" | "dnp" => {
+    const match = matches.find(m => m.homeTeam === teamName || m.awayTeam === teamName);
+    if (!match) return "bye";
+    if (match.complete === 100) return "complete";
+    if (match.complete > 0) return "live";
+    return "upcoming";
+  };
+
+  const getOpponent = (teamName: string): string | null => {
+    const match = matches.find(m => m.homeTeam === teamName || m.awayTeam === teamName);
+    if (!match) return null;
+    return match.homeTeam === teamName ? match.awayTeam : match.homeTeam;
+  };
+
+  const myTeamRows = await db.select().from(myTeamPlayers)
+    .where(eq(myTeamPlayers.userId, userId))
+    .innerJoin(players, eq(myTeamPlayers.playerId, players.id));
+
+  const myPlayerIds = myTeamRows.map(r => r.my_team_players.playerId);
+  let myStats: any[] = [];
+  if (myPlayerIds.length > 0) {
+    myStats = await db.select().from(weeklyStats)
+      .where(and(inArray(weeklyStats.playerId, myPlayerIds), eq(weeklyStats.round, currentRound)));
+  }
+  const myStatsMap = new Map(myStats.map(s => [s.playerId, s]));
+
+  let oppPlayers: Array<{
+    playerId?: number; name: string; position: string;
+    avgScore: number | null; price: number | null;
+    isCaptain?: boolean; isViceCaptain?: boolean;
+    isOnField?: boolean; fieldPosition?: string; team?: string;
+  }>;
+  try {
+    oppPlayers = JSON.parse(opponent[0].playerData);
+    if (!Array.isArray(oppPlayers)) return null;
+  } catch {
+    console.error("[H2H] Failed to parse opponent playerData");
+    return null;
+  }
+
+  const oppPlayerIds = oppPlayers.filter(p => p.playerId).map(p => p.playerId!);
+  let oppStats: any[] = [];
+  if (oppPlayerIds.length > 0) {
+    oppStats = await db.select().from(weeklyStats)
+      .where(and(inArray(weeklyStats.playerId, oppPlayerIds), eq(weeklyStats.round, currentRound)));
+  }
+  const oppStatsMap = new Map(oppStats.map(s => [s.playerId, s]));
+
+  const oppDbPlayers = oppPlayerIds.length > 0
+    ? await db.select().from(players).where(inArray(players.id, oppPlayerIds))
+    : [];
+  const oppDbMap = new Map(oppDbPlayers.map(p => [p.id, p]));
+
+  const buildScore = (
+    p: any, stats: any, isCaptain: boolean, isViceCaptain: boolean,
+    isOnField: boolean, fieldPos: string, isMyTeam: boolean
+  ): H2HPlayerScore => {
+    const kicks = stats?.kickCount || 0;
+    const handballs = stats?.handballCount || 0;
+    const marks = stats?.markCount || 0;
+    const tackles = stats?.tackleCount || 0;
+    const hitouts = stats?.hitouts || 0;
+    const goals = stats?.goalsKicked || 0;
+    const behinds = stats?.behindsKicked || 0;
+    const fantasyScore = stats?.fantasyScore || 0;
+    const effectiveScore = isCaptain ? fantasyScore * 2 : fantasyScore;
+    const mStatus = getMatchStatus(p.team);
+    const selStatus = p.selectionStatus || "selected";
+
+    return {
+      playerId: p.id,
+      playerName: p.name,
+      team: p.team,
+      position: p.position,
+      fieldPosition: fieldPos,
+      fantasyScore,
+      projectedScore: p.projectedScore || p.avgScore || 0,
+      avgScore: p.avgScore || 0,
+      isCaptain,
+      isViceCaptain,
+      effectiveScore,
+      matchStatus: selStatus === "omitted" ? "dnp" : mStatus,
+      isOnField,
+      opponent: getOpponent(p.team),
+      kicks, handballs, marks, tackles, hitouts, goals, behinds,
+      disposals: kicks + handballs,
+      aflFantasyId: p.aflFantasyId || null,
+      selectionStatus: selStatus,
+    };
+  };
+
+  const myTeam: H2HPlayerScore[] = myTeamRows.map(row => {
+    const tp = row.my_team_players;
+    const p = row.players;
+    const stats = myStatsMap.get(p.id);
+    return buildScore(
+      p, stats,
+      tp.isCaptain || false, tp.isViceCaptain || false,
+      tp.isOnField ?? true,
+      tp.fieldPosition || p.position?.split("/")[0] || "MID",
+      true
+    );
+  });
+
+  const oppTeam: H2HPlayerScore[] = oppPlayers.map(op => {
+    const dbP = op.playerId ? oppDbMap.get(op.playerId) : null;
+    const stats = op.playerId ? oppStatsMap.get(op.playerId) : null;
+    const team = dbP?.team || op.team || "";
+    const p = dbP || {
+      id: op.playerId || 0,
+      name: op.name,
+      team,
+      position: op.position,
+      avgScore: op.avgScore || 0,
+      projectedScore: op.avgScore || 0,
+      aflFantasyId: null,
+      selectionStatus: "selected",
+    };
+    return buildScore(
+      p, stats,
+      op.isCaptain || false, op.isViceCaptain || false,
+      op.isOnField ?? true,
+      op.fieldPosition || op.position?.split("/")[0] || "MID",
+      false
+    );
+  });
+
+  const myOnField = myTeam.filter(p => p.isOnField);
+  const oppOnField = oppTeam.filter(p => p.isOnField);
+
+  const myTotal = myOnField.reduce((s, p) => s + p.effectiveScore, 0);
+  const oppTotal = oppOnField.reduce((s, p) => s + p.effectiveScore, 0);
+
+  const calcForecast = (teamPlayers: H2HPlayerScore[]): number => {
+    return teamPlayers.filter(p => p.isOnField).reduce((sum, p) => {
+      const multiplier = p.isCaptain ? 2 : 1;
+      if (p.matchStatus === "complete" || p.matchStatus === "live") {
+        if (p.matchStatus === "live" && p.fantasyScore > 0) {
+          const liveEstimate = p.fantasyScore * 1.1;
+          return sum + Math.max(liveEstimate, p.avgScore) * multiplier;
+        }
+        return sum + p.effectiveScore;
+      }
+      if (p.matchStatus === "bye" || p.matchStatus === "dnp") return sum;
+      return sum + (p.projectedScore || p.avgScore || 0) * multiplier;
+    }, 0);
+  };
+
+  const myProjected = myOnField.reduce((s, p) => s + (p.projectedScore || p.avgScore || 0) * (p.isCaptain ? 2 : 1), 0);
+  const oppProjected = oppOnField.reduce((s, p) => s + (p.projectedScore || p.avgScore || 0) * (p.isCaptain ? 2 : 1), 0);
+
+  return {
+    opponentName: opponent[0].opponentName,
+    leagueName: opponent[0].leagueName,
+    round: currentRound,
+    myTeam,
+    oppTeam,
+    myTotal: Math.round(myTotal),
+    oppTotal: Math.round(oppTotal),
+    myProjected: Math.round(myProjected),
+    oppProjected: Math.round(oppProjected),
+    myForecast: Math.round(calcForecast(myTeam)),
+    oppForecast: Math.round(calcForecast(oppTeam)),
+    lastUpdated: new Date().toISOString(),
+    hasActiveGames,
+    suggestedPollInterval,
+  };
 }

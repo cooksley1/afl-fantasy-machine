@@ -1,9 +1,13 @@
 import { gatherIntelligence } from "./data-gatherer";
 
 let gatherInterval: NodeJS.Timeout | null = null;
+let liveScoreInterval: NodeJS.Timeout | null = null;
 let isGathering = false;
+let isFetchingLive = false;
 let lastGatherTime: Date | null = null;
+let lastLiveFetchTime: Date | null = null;
 let gatherCount = 0;
+let liveFetchCount = 0;
 
 async function runGather() {
   if (isGathering) {
@@ -53,6 +57,33 @@ async function runGather() {
   }
 }
 
+async function runLiveScoreFetch() {
+  if (isFetchingLive) return;
+  isFetchingLive = true;
+  try {
+    const { getActiveGameWindows, fetchAndStorePlayerScores } = await import("./services/live-scores");
+    const { windows, hasActiveGames } = await getActiveGameWindows();
+
+    if (hasActiveGames) {
+      const { db } = await import("./db");
+      const { leagueSettings } = await import("@shared/schema");
+      const [settings] = await db.select().from(leagueSettings).limit(1);
+      const currentRound = settings?.currentRound || 1;
+
+      const result = await fetchAndStorePlayerScores(currentRound);
+      liveFetchCount++;
+      lastLiveFetchTime = new Date();
+      if (result.updated > 0) {
+        console.log(`[LiveFetch] #${liveFetchCount}: Updated ${result.updated} player scores for round ${currentRound} (${windows.filter(w => w.status === "live").length} live games)`);
+      }
+    }
+  } catch (e: any) {
+    console.error("[LiveFetch] Error:", e.message);
+  } finally {
+    isFetchingLive = false;
+  }
+}
+
 export function startScheduler() {
   if (gatherInterval !== null) {
     console.log("[Scheduler] Already running, skipping duplicate start");
@@ -69,22 +100,33 @@ export function startScheduler() {
   gatherInterval = setInterval(() => {
     runGather();
   }, 4 * 60 * 60 * 1000);
+
+  liveScoreInterval = setInterval(() => {
+    runLiveScoreFetch();
+  }, 2 * 60 * 1000);
 }
 
 export function stopScheduler() {
   if (gatherInterval) {
     clearInterval(gatherInterval);
     gatherInterval = null;
-    console.log("[Scheduler] Stopped");
   }
+  if (liveScoreInterval) {
+    clearInterval(liveScoreInterval);
+    liveScoreInterval = null;
+  }
+  console.log("[Scheduler] Stopped");
 }
 
 export function getSchedulerStatus() {
   return {
     isRunning: gatherInterval !== null,
     isGathering,
+    isFetchingLive,
     lastGatherTime: lastGatherTime?.toISOString() || null,
+    lastLiveFetchTime: lastLiveFetchTime?.toISOString() || null,
     gatherCount,
+    liveFetchCount,
     nextGatherIn: gatherInterval ? "~4 hours" : "stopped",
   };
 }
