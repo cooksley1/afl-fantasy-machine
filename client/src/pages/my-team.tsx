@@ -528,12 +528,15 @@ function FieldView({
           <div className="flex-1 h-px bg-border/40" />
         </div>
         <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
-          {utilPlayers.map((p) => (
+          {utilPlayers.filter(p => p.isOnField).map((p) => (
             <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
           ))}
-          {utilPlayers.length === 0 && (
+          {utilPlayers.filter(p => p.isOnField).length === 0 && (
             <EmptyFieldCard position="UTIL" isBench={false} />
           )}
+          {utilPlayers.filter(p => !p.isOnField).map((p) => (
+            <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={true} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
+          ))}
         </div>
       </div>
     </div>
@@ -792,7 +795,7 @@ function ListView({
                 <EmptySlot key={`empty-field-${pos}-${i}`} position={pos} label="Empty Slot" />
               ))}
             </div>
-            {structure.bench > 0 && (
+            {(structure.bench > 0 || bench.length > 0) && (
               <>
                 <div className="bg-muted/60 px-3 py-1 border-y border-border/40">
                   <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase">Bench</span>

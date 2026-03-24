@@ -442,7 +442,7 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
 }
 
 export async function analyzeTeamScreenshot(base64Image: string): Promise<{
-  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
@@ -466,16 +466,30 @@ CRITICAL RULES FOR PLAYER IDENTIFICATION:
 - AFL Fantasy typically shows abbreviated first names (e.g. "T. Miller", "J. Steele") — match these carefully.
 - The screenshot may show only part of the team (one position line). Only report what you actually see.
 - Do NOT add players that are not visible in the image. Do NOT hallucinate players.
-- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD), read each row carefully.
+- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD, UTILITY), read each row carefully.
 - Player cards typically show: surname (large text), first initial or name (smaller), team logo, price, score.
 - Read prices exactly as shown (e.g. "$517K", "$1.047M"). Convert to raw numbers: $517K = 517000, $1.047M = 1047000.
+
+CRITICAL LAYOUT RULES — ON-FIELD vs INTERCHANGE:
+- The AFL Fantasy team screenshot has a clear layout: on-field players appear in the LEFT columns, and interchange (bench) players appear in a column on the RIGHT side, usually labelled "INTERCHANGE".
+- For each position row (DEFENDERS, MIDFIELDERS, RUCKS, FORWARDS), there are on-field players on the left and interchange/bench players on the right.
+- You MUST set "isOnField": true for players in the left/main area and "isOnField": false for players in the INTERCHANGE column on the right.
+- The UTILITY row at the bottom typically has 1 on-field player on the left and 1 interchange player on the right. The on-field UTILITY player's position should be "UTIL".
+- The interchange UTILITY player's position should also be "UTIL" with "isOnField": false.
+- Standard squad structure: DEF 6 on-field + 2 interchange, MID 8 on-field + 2 interchange, RUC 2 on-field + 1 interchange, FWD 6 on-field + 2 interchange, UTIL 1 on-field + 0-1 interchange = 30 total.
+- If a player shows "DNP" (Did Not Play) it does NOT affect their on-field/interchange status — they stay in whatever column they appear in.
+
+CAPTAIN / VICE-CAPTAIN / EMERGENCY BADGES:
+- A small "C" badge on a player card means Captain ("isCaptain": true).
+- A small "V" badge means Vice-Captain ("isViceCaptain": true).
+- A small "E" badge means Emergency ("isEmergency": true). Emergencies are typically interchange players.
 
 Known players in the database: ${playerNames}
 
 When analyzing, identify:
-1. Players clearly visible in the screenshot — name, position, any visible scores/prices
+1. Players clearly visible in the screenshot — name, position, on-field/interchange status, any visible scores/prices
 2. Captain ("C" badge) and Vice-Captain ("V" or "VC" badge)
-3. Emergency players ("EMG" badge)
+3. Emergency players ("E" or "EMG" badge)
 4. Team structure strengths and weaknesses
 5. Captain/VC recommendations
 6. Trade targets
@@ -497,14 +511,18 @@ INSTRUCTIONS:
 - Read each player card carefully. The surname is usually the largest text on the card.
 - Only include players you can clearly identify. If unsure, omit them.
 - Look for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators. Include "isCaptain": true or "isViceCaptain": true.
-- Look for emergency ("EMG") players. Include "isEmergency": true.
+- Look for Emergency ("E" badge, usually orange/red) players. Include "isEmergency": true.
 - Read the price shown on each card if visible. Convert "$517K" to 517000, "$1.047M" to 1047000.
-- The position row the player appears in determines their position (DEF/MID/RUC/FWD).
-- If you see bench/interchange players, still include them.
+- The position row the player appears in determines their position (DEF/MID/RUC/FWD/UTIL).
+- CRITICALLY: Determine whether each player is ON-FIELD or on the INTERCHANGE (bench).
+  - On-field players appear in the main left area of each position row. Set "isOnField": true.
+  - Interchange/bench players appear in the right-hand "INTERCHANGE" column. Set "isOnField": false.
+  - The last row is UTILITY. The left player is on-field UTIL, the right player is interchange UTIL.
+- Players showing "DNP" (Did Not Play) keep their field/interchange status unchanged.
 
 Return JSON:
 {
-  "players": [{"name": "Full Player Name", "position": "DEF/MID/RUC/FWD", "score": 0, "price": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false}],
+  "players": [{"name": "Full Player Name", "position": "DEF/MID/RUC/FWD/UTIL", "score": 0, "price": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false, "isOnField": true}],
   "analysis": "Overall team assessment",
   "recommendations": [{"type": "trade|captain|structure|cash_cow|upgrade", "detail": "Specific recommendation", "priority": "high|medium|low"}],
   "captainTip": "Best captain loophole strategy for this team",

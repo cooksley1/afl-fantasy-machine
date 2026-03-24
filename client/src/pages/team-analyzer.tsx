@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AnalysisResult {
-  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
@@ -78,7 +78,7 @@ export default function TeamAnalyzer() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[]) => {
+    mutationFn: async (players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[]) => {
       const captainPlayer = players.find(p => p.isCaptain);
       const vcPlayer = players.find(p => p.isViceCaptain);
       const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", {
@@ -256,7 +256,7 @@ export default function TeamAnalyzer() {
               <CardContent className="px-4 pb-4">
                 <div className="flex flex-wrap gap-1.5">
                   {result.players.map((p, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs py-1" data-testid={`badge-player-${i}`}>
+                    <Badge key={i} variant="secondary" className={`text-xs py-1 ${p.isOnField === false ? 'opacity-70' : ''}`} data-testid={`badge-player-${i}`}>
                       {p.name}
                       <span className="text-muted-foreground ml-1">{p.position}</span>
                       {p.score !== undefined && p.score > 0 && (
@@ -264,7 +264,8 @@ export default function TeamAnalyzer() {
                       )}
                       {p.isCaptain && <span className="ml-1 text-[9px] font-bold text-red-500">(C)</span>}
                       {p.isViceCaptain && <span className="ml-1 text-[9px] font-bold text-emerald-500">(VC)</span>}
-                      {p.isEmergency && <span className="ml-1 text-[9px] font-bold text-amber-500">(EMG)</span>}
+                      {p.isEmergency && <span className="ml-1 text-[9px] font-bold text-amber-500">(E)</span>}
+                      {p.isOnField === false && <span className="ml-1 text-[9px] font-medium text-muted-foreground">(Bench)</span>}
                     </Badge>
                   ))}
                 </div>

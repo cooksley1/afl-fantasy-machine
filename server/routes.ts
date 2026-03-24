@@ -935,7 +935,7 @@ export async function registerRoutes(
   app.post("/api/my-team/save-from-analyzer", async (req, res) => {
     try {
       const { players: identifiedPlayers, captainName, viceCaptainName } = req.body as {
-        players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean }[];
+        players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
         captainName?: string | null;
         viceCaptainName?: string | null;
       };
@@ -952,9 +952,12 @@ export async function registerRoutes(
         MID: "MID", MIDFIELDER: "MID",
         RUC: "RUC", RUCK: "RUC",
         FWD: "FWD", FORWARD: "FWD",
+        UTIL: "UTIL", UTILITY: "UTIL",
       };
 
       const notFound: string[] = [];
+
+      const hasAiFieldData = identifiedPlayers.some(p => p.isOnField !== undefined);
 
       const posQuotas: Record<string, { onField: number; bench: number }> = {
         DEF: { onField: 6, bench: 2 },
@@ -1086,12 +1089,18 @@ export async function registerRoutes(
         resolvedPlayers.push({ match, fieldPos, ip });
       }
 
-      resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
+      if (!hasAiFieldData) {
+        resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
+      }
 
       for (const { match, fieldPos, ip } of resolvedPlayers) {
         let isOnField = false;
         let assignedFieldPos = fieldPos;
-        if (ip.isEmergency) {
+
+        if (hasAiFieldData) {
+          isOnField = ip.isOnField !== false;
+          assignedFieldPos = fieldPos;
+        } else if (ip.isEmergency) {
           isOnField = false;
         } else if (totalOnField >= maxOnField) {
           isOnField = false;
