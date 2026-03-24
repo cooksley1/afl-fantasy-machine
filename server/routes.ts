@@ -935,7 +935,7 @@ export async function registerRoutes(
   app.post("/api/my-team/save-from-analyzer", async (req, res) => {
     try {
       const { players: identifiedPlayers, captainName, viceCaptainName } = req.body as {
-        players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
+        players: { name: string; team?: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
         captainName?: string | null;
         viceCaptainName?: string | null;
       };
@@ -988,7 +988,9 @@ export async function registerRoutes(
 
       const stripInitialDot = (s: string) => s.replace(/\.$/, "");
 
-      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers) => {
+      const normalizeTeam = (t: string) => t?.trim().toLowerCase().replace(/[^a-z]/g, "") || "";
+
+      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string) => {
         const normalName = inputName.trim().toLowerCase();
 
         const exact = players.find(p => p.name.toLowerCase() === normalName);
@@ -998,6 +1000,7 @@ export async function registerRoutes(
         const inputSurname = inputParts[inputParts.length - 1];
         const inputFirst = stripInitialDot(inputParts[0]);
         const isInitial = inputFirst.length <= 2;
+        const inputTeamNorm = normalizeTeam(inputTeam || "");
 
         const surnameMatches = players.filter(p => {
           const parts = p.name.toLowerCase().split(" ");
@@ -1007,12 +1010,21 @@ export async function registerRoutes(
         if (surnameMatches.length === 1) return surnameMatches[0];
 
         if (surnameMatches.length > 1) {
-          const firstMatch = surnameMatches.find(p => {
+          const firstMatch = surnameMatches.filter(p => {
             const pFirst = p.name.toLowerCase().split(/\s+/)[0];
             if (isInitial) return pFirst.startsWith(inputFirst);
             return pFirst.startsWith(inputFirst.substring(0, 2)) || inputFirst.startsWith(pFirst.substring(0, 2));
           });
-          if (firstMatch) return firstMatch;
+          if (firstMatch.length === 1) return firstMatch[0];
+          if (firstMatch.length > 1 && inputTeamNorm) {
+            const teamMatch = firstMatch.find(p => normalizeTeam(p.team) === inputTeamNorm || normalizeTeam(p.team).includes(inputTeamNorm) || inputTeamNorm.includes(normalizeTeam(p.team)));
+            if (teamMatch) return teamMatch;
+          }
+          if (firstMatch.length > 0) return firstMatch[0];
+          if (inputTeamNorm) {
+            const teamMatch = surnameMatches.find(p => normalizeTeam(p.team) === inputTeamNorm || normalizeTeam(p.team).includes(inputTeamNorm) || inputTeamNorm.includes(normalizeTeam(p.team)));
+            if (teamMatch) return teamMatch;
+          }
           return surnameMatches[0];
         }
 
@@ -1055,7 +1067,7 @@ export async function registerRoutes(
       };
 
       for (const ip of identifiedPlayers) {
-        const match = fuzzyMatchPlayer(ip.name, allPlayers);
+        const match = fuzzyMatchPlayer(ip.name, allPlayers, ip.team);
 
         if (!match) {
           notFound.push(ip.name);

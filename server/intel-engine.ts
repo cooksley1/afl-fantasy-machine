@@ -500,18 +500,14 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
   const allPlayers = await storage.getAllPlayers();
   const playersByPos: Record<string, string[]> = { DEF: [], MID: [], RUC: [], FWD: [] };
   for (const p of allPlayers) {
+    const entry = `${p.name} [${p.team || "?"}]`;
     const pos = p.position?.toUpperCase() || "MID";
     const positions = pos.split("/");
     for (const pp of positions) {
-      if (playersByPos[pp]) playersByPos[pp].push(p.name);
-      else {
-        for (const key of Object.keys(playersByPos)) {
-          if (key === pp) playersByPos[key].push(p.name);
-        }
-      }
+      if (playersByPos[pp]) playersByPos[pp].push(entry);
     }
     if (!positions.some(pp => playersByPos[pp])) {
-      playersByPos["MID"].push(p.name);
+      playersByPos["MID"].push(entry);
     }
   }
   const playerLookup = Object.entries(playersByPos)
@@ -526,9 +522,9 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
         content: `You are an AFL Fantasy team screenshot reader. Your ONLY job is to read player names from the image and match them to the known player database below.
 
 HOW TO IDENTIFY PLAYERS:
-1. Each player card shows a SURNAME in large text and usually a first initial (e.g. "S. Grlj", "J. Lindsay").
-2. Look up the surname in the known player list for that position row. If only one player has that surname, use their full name.
-3. If multiple players share a surname, use the first initial to pick the right one.
+1. Each player card shows a SURNAME in large text and usually a first initial (e.g. "S. Grlj", "J. Lindsay"). Cards also display the player's AFL team logo.
+2. Look up the surname in the known player list for that position row. Each entry shows "Full Name [Team]". If only one player has that surname, use their full name.
+3. If multiple players share the same surname AND first initial (e.g. two "J. Clark" or two "M. King"), use the team logo on the card to pick the correct one from the database.
 4. DNP (Did Not Play) cards still show a player name — read it and match it.
 5. Every visible card MUST be matched. A full team = 30 players. Count your output before returning.
 
@@ -565,11 +561,11 @@ STEP BY STEP:
 4. Note C/V/E badges and on-field vs interchange placement.
 5. Count your output. A complete team = 30 players (8 DEF + 10 MID + 3 RUC + 8 FWD + 1 UTIL). If fewer than 30, go back and find the missing cards.
 
-Use the EXACT full name from the known player database (e.g. if you see "S. Grlj", return "Samuel Grlj" from the database).
+Use the EXACT full name from the known player database (e.g. if you see "S. Grlj" with a Geelong logo, return "Samuel Grlj"). Include the team name for disambiguation.
 
 Return JSON:
 {
-  "players": [{"name": "Full Player Name", "position": "DEF/MID/RUC/FWD/UTIL", "score": 0, "price": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false, "isOnField": true}],
+  "players": [{"name": "Full Player Name", "team": "Team Name", "position": "DEF/MID/RUC/FWD/UTIL", "score": 0, "price": 0, "isCaptain": false, "isViceCaptain": false, "isEmergency": false, "isOnField": true}],
   "analysis": "Overall team assessment",
   "recommendations": [{"type": "trade|captain|structure|cash_cow|upgrade", "detail": "Specific recommendation", "priority": "high|medium|low"}],
   "captainTip": "Best captain loophole strategy for this team",
