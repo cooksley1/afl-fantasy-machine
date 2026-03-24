@@ -211,6 +211,23 @@ export async function syncAflFantasyPrices(): Promise<{
         updates.aflFantasyId = aflPlayer.id;
       }
 
+      const aflTeam = AFL_FANTASY_SQUAD_MAP[aflPlayer.squad_id] || "";
+      if (aflTeam && aflTeam !== dbPlayer.team) {
+        updates.team = aflTeam;
+        updates.byeRound = BYE_ROUNDS[aflTeam] || dbPlayer.byeRound;
+        updates.venue = TEAM_VENUES[aflTeam] || dbPlayer.venue;
+        console.log(`[AflPriceSync] Team change: ${dbPlayer.name} ${dbPlayer.team} → ${aflTeam}`);
+      }
+
+      const aflPrimaryPos = aflPlayer.positions.length > 0 ? (AFL_FANTASY_POSITION_MAP[aflPlayer.positions[0]] || null) : null;
+      const aflDualPos = aflPlayer.positions.length > 1 ? (AFL_FANTASY_POSITION_MAP[aflPlayer.positions[1]] || null) : null;
+      if (aflPrimaryPos && aflPrimaryPos !== dbPlayer.position) {
+        updates.position = aflPrimaryPos;
+      }
+      if (aflDualPos !== (dbPlayer.dualPosition || null)) {
+        updates.dualPosition = aflDualPos;
+      }
+
       if (Object.keys(updates).length > 0) {
         await db.update(players).set(updates).where(eq(players.id, dbPlayer.id));
         updated++;

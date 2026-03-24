@@ -1115,20 +1115,21 @@ function PlayerActionDialog({
     if (!allPlayers) return [];
     const teamIds = new Set(teamPlayers.map(p => p.id));
     const targetPos = player.fieldPosition!;
+    const isSearching = replaceSearch.length >= 2;
 
     return allPlayers
       .filter(p => {
         if (teamIds.has(p.id)) return false;
         if (!canPlayPosition(p, targetPos)) return false;
-        if (p.price > budgetAfterRemoval) return false;
-        if (replaceSearch) {
+        if (!isSearching && p.price > budgetAfterRemoval) return false;
+        if (isSearching) {
           const q = replaceSearch.toLowerCase();
-          return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
+          if (!p.name.toLowerCase().includes(q) && !p.team.toLowerCase().includes(q)) return false;
         }
         return true;
       })
       .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
-      .slice(0, 50);
+      .slice(0, isSearching ? 100 : 50);
   }, [allPlayers, teamPlayers, player, budgetAfterRemoval, replaceSearch]);
 
   const teamColors = getTeamColors(player.team);
@@ -1446,23 +1447,20 @@ function AddPlayerToSlotDialog({
   const eligiblePlayers = useMemo(() => {
     if (!allPlayers) return [];
     const teamIds = new Set(teamPlayers.map((p) => p.id));
+    const isSearching = search.length >= 2;
+    const q = search.toLowerCase();
     return allPlayers
       .filter((p) => {
         if (teamIds.has(p.id)) return false;
-        if (p.price > remainingBudget) return false;
+        if (!isSearching && p.price > remainingBudget) return false;
+        if (isSearching) {
+          if (!p.name.toLowerCase().includes(q) && !p.team.toLowerCase().includes(q)) return false;
+        }
         if (position === "UTIL") return true;
-        const positions = p.position?.split("/") || [];
-        const dual = (p as any).dualPosition?.split("/") || [];
-        const allPos = [...new Set([...positions, ...dual])];
-        return allPos.includes(position);
-      })
-      .filter((p) => {
-        if (!search) return true;
-        const q = search.toLowerCase();
-        return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
+        return canPlayPosition(p, position);
       })
       .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
-      .slice(0, 50);
+      .slice(0, isSearching ? 100 : 50);
   }, [allPlayers, teamPlayers, remainingBudget, position, search]);
 
   return (
@@ -1494,12 +1492,13 @@ function AddPlayerToSlotDialog({
         )}
         {eligiblePlayers.map((p) => {
           const colors = getTeamColors(p.team);
+          const overBudget = p.price > remainingBudget;
           return (
             <button
               key={p.id}
-              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 transition-colors text-left"
+              className={`w-full flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 transition-colors text-left ${overBudget ? "opacity-50" : ""}`}
               onClick={() => addMutation.mutate(p.id)}
-              disabled={addMutation.isPending}
+              disabled={addMutation.isPending || overBudget}
               data-testid={`add-player-option-${p.id}`}
             >
               <PlayerAvatar playerId={p.aflFantasyId} playerName={p.name} size="sm" />
@@ -1509,12 +1508,12 @@ function AddPlayerToSlotDialog({
                   <span className="text-[9px] font-bold px-1 rounded" style={{ backgroundColor: colors.primary, color: colors.secondary }}>
                     {getTeamAbbr(p.team)}
                   </span>
-                  <span className="text-[9px] text-muted-foreground">{p.position}</span>
+                  <span className="text-[9px] text-muted-foreground">{p.position}{p.dualPosition ? `/${p.dualPosition}` : ""}</span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-mono font-semibold">{(p.avgScore || 0).toFixed(0)}</p>
-                <p className="text-[9px] text-muted-foreground">${((p.price || 0) / 1000).toFixed(0)}K</p>
+                <p className={`text-[9px] ${overBudget ? "text-red-400 line-through" : "text-muted-foreground"}`}>${((p.price || 0) / 1000).toFixed(0)}K</p>
               </div>
             </button>
           );
