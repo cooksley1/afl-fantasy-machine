@@ -195,7 +195,6 @@ export async function syncWheeloRound(roundId: string, ourRound: number): Promis
         contestedMarks: playerData.ContestedMarks?.[i] ?? null,
         interceptMarks: playerData.InterceptMarks?.[i] ?? null,
         groundBallGets: playerData.GroundBallGets?.[i] ?? null,
-        supercoachScore: playerData.Supercoach?.[i] ?? null,
         ratingPoints: playerData.RatingPoints?.[i] ?? null,
       };
 
@@ -257,7 +256,6 @@ export async function syncWheeloRound(roundId: string, ourRound: number): Promis
             fantasyPointsScored: fantasyPtsScored,
             fantasyPointsConceded: fantasyPtsConceded,
             metresGained: teamData.MetresGained?.[i] != null ? Math.round(teamData.MetresGained[i]) : null,
-            supercoachScore: teamData.Supercoach?.[i] ?? null,
             inside50s: teamData.Inside50s?.[i] ?? null,
             tackleCount: teamData.Tackles?.[i] ?? null,
             hitouts: teamData.Hitouts?.[i] ?? null,

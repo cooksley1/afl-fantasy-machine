@@ -82,7 +82,6 @@ export const weeklyStats = pgTable("weekly_stats", {
   contestedMarks: integer("contested_marks").default(null),
   interceptMarks: integer("intercept_marks").default(null),
   groundBallGets: integer("ground_ball_gets").default(null),
-  supercoachScore: real("supercoach_score").default(null),
   ratingPoints: real("rating_points").default(null),
 });
 
@@ -97,7 +96,6 @@ export const teamContext = pgTable("team_context", {
   fantasyPointsScored: real("fantasy_points_scored").default(null),
   fantasyPointsConceded: real("fantasy_points_conceded").default(null),
   metresGained: integer("metres_gained").default(null),
-  supercoachScore: real("supercoach_score").default(null),
   inside50s: integer("inside_50s").default(null),
   tackleCount: integer("tackle_count").default(null),
   hitouts: integer("hitouts").default(null),

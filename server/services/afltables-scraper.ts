@@ -173,6 +173,7 @@ function estimateFantasyScore(stats: AflTablesPlayerSeason): number {
 
 async function matchPlayerToDb(
   aflPlayer: AflTablesPlayerSeason,
+  allDbPlayers?: { id: number; name: string; team: string }[],
 ): Promise<number | null> {
   const nameParts = aflPlayer.name.split(" ");
   const surname = nameParts[nameParts.length - 1];
@@ -185,7 +186,22 @@ async function matchPlayerToDb(
       sql`${players.name} ILIKE ${"%" + surname + "%"} AND ${players.team} = ${aflPlayer.team}`,
     );
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    if (allDbPlayers) {
+      const firstName = nameParts[0].toLowerCase();
+      const surnameBase = surname.toLowerCase().replace(/[ck]$/, "");
+      const fuzzy = allDbPlayers.filter(p => {
+        if (p.team !== aflPlayer.team) return false;
+        const pParts = p.name.split(" ");
+        const pSurname = pParts[pParts.length - 1].toLowerCase();
+        const pSurnameBase = pSurname.replace(/[ck]$/, "");
+        const pFirst = pParts[0].toLowerCase();
+        return pSurnameBase === surnameBase && pFirst === firstName;
+      });
+      if (fuzzy.length === 1) return fuzzy[0].id;
+    }
+    return null;
+  }
 
   const exact = candidates.find(
     (c) => c.name.toLowerCase() === aflPlayer.name.toLowerCase(),
@@ -236,13 +252,17 @@ export async function fetchAflTablesHistoricalData(
     playerMap.set(key, existing);
   }
 
+  const allDbPlayers = await db
+    .select({ id: players.id, name: players.name, team: players.team })
+    .from(players);
+
   let matched = 0;
   let updated = 0;
   const unmatched: string[] = [];
 
   for (const [key, seasons] of playerMap.entries()) {
     const latest = seasons.sort((a, b) => b.season - a.season)[0];
-    const playerId = await matchPlayerToDb(latest);
+    const playerId = await matchPlayerToDb(latest, allDbPlayers);
 
     if (!playerId) {
       if (latest.gamesPlayed >= 10) {

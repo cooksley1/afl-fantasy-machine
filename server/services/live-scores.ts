@@ -723,7 +723,7 @@ async function fetchFromSquigglePlayerStats(round: number): Promise<{ fetched: n
       const behinds = sp.behinds || 0;
       const freesAgainst = sp.freesagainst || 0;
 
-      const fantasyScore = sp.supercoach || calcFantasyScore({
+      const fantasyScore = sp.dreamteampoints || calcFantasyScore({
         kicks, handballs, marks, tackles, hitouts, goals, behinds, freesAgainst,
       });
 
