@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import {
   Camera,
   Upload,
@@ -17,12 +20,36 @@ import {
   ImageIcon,
   Save,
   CheckCircle,
+  HelpCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+interface AnalysisPlayer {
+  name: string;
+  team?: string;
+  position: string;
+  score?: number;
+  price?: number;
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
+  isEmergency?: boolean;
+  isOnField?: boolean;
+}
+
+interface AmbiguousPlayer {
+  inputName: string;
+  position: string;
+  team?: string;
+  isOnField?: boolean;
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
+  isEmergency?: boolean;
+  candidates: { id: number; name: string; team: string; position: string; avgScore: number | null; price: number | null }[];
+}
+
 interface AnalysisResult {
-  players: { name: string; position: string; score?: number; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[];
+  players: AnalysisPlayer[];
   analysis: string;
   recommendations: { type: string; detail: string; priority: string }[];
   captainTip: string;
@@ -50,6 +77,8 @@ export default function TeamAnalyzer() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [teamSaved, setTeamSaved] = useState(false);
+  const [disambiguationData, setDisambiguationData] = useState<AmbiguousPlayer[] | null>(null);
+  const [disambiguationChoices, setDisambiguationChoices] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -77,8 +106,12 @@ export default function TeamAnalyzer() {
     },
   });
 
+  function doSave(players: AnalysisPlayer[]) {
+    saveMutation.mutate(players);
+  }
+
   const saveMutation = useMutation({
-    mutationFn: async (players: { name: string; position: string; price?: number; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; isOnField?: boolean }[]) => {
+    mutationFn: async (players: AnalysisPlayer[]) => {
       const captainPlayer = players.find(p => p.isCaptain);
       const vcPlayer = players.find(p => p.isViceCaptain);
       const res = await apiRequest("POST", "/api/my-team/save-from-analyzer", {
@@ -86,9 +119,14 @@ export default function TeamAnalyzer() {
         captainName: captainPlayer?.name || result?.captainName || null,
         viceCaptainName: vcPlayer?.name || result?.viceCaptainName || null,
       });
-      return res.json() as Promise<{ success: boolean; savedCount: number; notFound: string[]; totalOnTeam: number }>;
+      return res.json() as Promise<{ success: boolean; savedCount: number; notFound: string[]; totalOnTeam: number; needsDisambiguation?: boolean; ambiguous?: AmbiguousPlayer[] }>;
     },
     onSuccess: (data) => {
+      if (data.needsDisambiguation && data.ambiguous && data.ambiguous.length > 0) {
+        setDisambiguationData(data.ambiguous);
+        setDisambiguationChoices({});
+        return;
+      }
       setTeamSaved(true);
       queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
       const msg = data.notFound.length > 0
@@ -100,6 +138,32 @@ export default function TeamAnalyzer() {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     },
   });
+
+  function handleDisambiguationConfirm() {
+    if (!result || !disambiguationData) return;
+    const updatedPlayers = [...result.players];
+    for (const amb of disambiguationData) {
+      const chosenName = disambiguationChoices[amb.inputName];
+      if (chosenName) {
+        const idx = updatedPlayers.findIndex(p => p.name === amb.inputName);
+        if (idx >= 0) {
+          updatedPlayers[idx] = { ...updatedPlayers[idx], name: chosenName };
+        } else {
+          updatedPlayers.push({
+            name: chosenName,
+            position: amb.position,
+            isOnField: amb.isOnField,
+            isCaptain: amb.isCaptain,
+            isViceCaptain: amb.isViceCaptain,
+            isEmergency: amb.isEmergency,
+          });
+        }
+      }
+    }
+    setDisambiguationData(null);
+    setResult({ ...result, players: updatedPlayers });
+    doSave(updatedPlayers);
+  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -118,6 +182,8 @@ export default function TeamAnalyzer() {
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     setResult(null);
+    setTeamSaved(false);
+    setDisambiguationData(null);
   }
 
   function clearFile() {
@@ -125,6 +191,7 @@ export default function TeamAnalyzer() {
     setPreviewUrl(null);
     setResult(null);
     setTeamSaved(false);
+    setDisambiguationData(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -239,7 +306,7 @@ export default function TeamAnalyzer() {
                   ) : (
                     <Button
                       size="sm"
-                      onClick={() => saveMutation.mutate(result.players)}
+                      onClick={() => doSave(result.players)}
                       disabled={saveMutation.isPending}
                       data-testid="button-save-team"
                     >
@@ -357,6 +424,72 @@ export default function TeamAnalyzer() {
           )}
         </>
       )}
+
+      <Dialog open={!!disambiguationData} onOpenChange={(open) => { if (!open) setDisambiguationData(null); }}>
+        <DialogContent className="max-w-md" data-testid="dialog-disambiguation">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <HelpCircle className="w-4 h-4 text-amber-500" />
+              Which player did you mean?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            {disambiguationData?.map((amb) => (
+              <div key={amb.inputName} className="space-y-2">
+                <p className="text-sm font-medium">
+                  "{amb.inputName}" <span className="text-muted-foreground">({amb.position})</span>
+                </p>
+                <RadioGroup
+                  value={disambiguationChoices[amb.inputName] || ""}
+                  onValueChange={(val) =>
+                    setDisambiguationChoices(prev => ({ ...prev, [amb.inputName]: val }))
+                  }
+                  className="space-y-1.5"
+                >
+                  {amb.candidates.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center space-x-3 rounded-md border p-3 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => setDisambiguationChoices(prev => ({ ...prev, [amb.inputName]: c.name }))}
+                      data-testid={`radio-candidate-${c.id}`}
+                    >
+                      <RadioGroupItem value={c.name} id={`candidate-${c.id}`} />
+                      <Label htmlFor={`candidate-${c.id}`} className="flex-1 cursor-pointer">
+                        <span className="font-medium text-sm">{c.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{c.team}</span>
+                        {c.avgScore !== null && (
+                          <span className="text-xs text-muted-foreground ml-2">Avg: {Math.round(c.avgScore)}</span>
+                        )}
+                        {c.price !== null && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ${c.price >= 1000000 ? (c.price / 1000000).toFixed(3) + "M" : Math.round(c.price / 1000) + "K"}
+                          </span>
+                        )}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDisambiguationData(null)}
+              data-testid="button-cancel-disambiguation"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDisambiguationConfirm}
+              disabled={disambiguationData ? disambiguationData.some(a => !disambiguationChoices[a.inputName]) : true}
+              data-testid="button-confirm-disambiguation"
+            >
+              Confirm & Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

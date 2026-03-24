@@ -945,7 +945,6 @@ export async function registerRoutes(
 
       const uid = getEffectiveUserId(req);
       const allPlayers = await storage.getAllPlayers();
-      await storage.clearMyTeam(uid);
 
       const posMap: Record<string, string> = {
         DEF: "DEF", DEFENDER: "DEF", BACK: "DEF",
@@ -990,11 +989,13 @@ export async function registerRoutes(
 
       const normalizeTeam = (t: string) => t?.trim().toLowerCase().replace(/[^a-z]/g, "") || "";
 
-      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string) => {
+      type MatchResult = { match: typeof allPlayers[0]; ambiguous?: false } | { match: typeof allPlayers[0]; ambiguous: true; candidates: typeof allPlayers };
+
+      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string): MatchResult | null => {
         const normalName = inputName.trim().toLowerCase();
 
         const exact = players.find(p => p.name.toLowerCase() === normalName);
-        if (exact) return exact;
+        if (exact) return { match: exact };
 
         const inputParts = normalName.split(/\s+/);
         const inputSurname = inputParts[inputParts.length - 1];
@@ -1002,12 +1003,21 @@ export async function registerRoutes(
         const isInitial = inputFirst.length <= 2;
         const inputTeamNorm = normalizeTeam(inputTeam || "");
 
+        const narrowByTeam = (candidates: typeof allPlayers): typeof allPlayers[0] | null => {
+          if (!inputTeamNorm || candidates.length <= 1) return null;
+          const tm = candidates.find(p => {
+            const pt = normalizeTeam(p.team);
+            return pt === inputTeamNorm || pt.includes(inputTeamNorm) || inputTeamNorm.includes(pt);
+          });
+          return tm || null;
+        };
+
         const surnameMatches = players.filter(p => {
           const parts = p.name.toLowerCase().split(" ");
           return parts[parts.length - 1] === inputSurname;
         });
 
-        if (surnameMatches.length === 1) return surnameMatches[0];
+        if (surnameMatches.length === 1) return { match: surnameMatches[0] };
 
         if (surnameMatches.length > 1) {
           const firstMatch = surnameMatches.filter(p => {
@@ -1015,41 +1025,44 @@ export async function registerRoutes(
             if (isInitial) return pFirst.startsWith(inputFirst);
             return pFirst.startsWith(inputFirst.substring(0, 2)) || inputFirst.startsWith(pFirst.substring(0, 2));
           });
-          if (firstMatch.length === 1) return firstMatch[0];
-          if (firstMatch.length > 1 && inputTeamNorm) {
-            const teamMatch = firstMatch.find(p => normalizeTeam(p.team) === inputTeamNorm || normalizeTeam(p.team).includes(inputTeamNorm) || inputTeamNorm.includes(normalizeTeam(p.team)));
-            if (teamMatch) return teamMatch;
+          if (firstMatch.length === 1) return { match: firstMatch[0] };
+          if (firstMatch.length > 1) {
+            const byTeam = narrowByTeam(firstMatch);
+            if (byTeam) return { match: byTeam };
+            return { match: firstMatch[0], ambiguous: true, candidates: firstMatch };
           }
-          if (firstMatch.length > 0) return firstMatch[0];
-          if (inputTeamNorm) {
-            const teamMatch = surnameMatches.find(p => normalizeTeam(p.team) === inputTeamNorm || normalizeTeam(p.team).includes(inputTeamNorm) || inputTeamNorm.includes(normalizeTeam(p.team)));
-            if (teamMatch) return teamMatch;
-          }
-          return surnameMatches[0];
+          const byTeam = narrowByTeam(surnameMatches);
+          if (byTeam) return { match: byTeam };
+          return { match: surnameMatches[0], ambiguous: true, candidates: surnameMatches };
         }
 
         if (isInitial && inputParts.length >= 2) {
-          const initialMatch = players.find(p => {
+          const initialMatch = players.filter(p => {
             const pParts = p.name.toLowerCase().split(/\s+/);
             const pSurname = pParts[pParts.length - 1];
             const pFirst = pParts[0];
             return pFirst.startsWith(inputFirst) && levenshtein(pSurname, inputSurname) <= 2;
           });
-          if (initialMatch) return initialMatch;
+          if (initialMatch.length === 1) return { match: initialMatch[0] };
+          if (initialMatch.length > 1) {
+            const byTeam = narrowByTeam(initialMatch);
+            if (byTeam) return { match: byTeam };
+            return { match: initialMatch[0], ambiguous: true, candidates: initialMatch };
+          }
         }
 
         const fuzzySurnameMatches = players.filter(p => {
           const pSurname = p.name.toLowerCase().split(/\s+/).pop() || "";
           return levenshtein(pSurname, inputSurname) <= 2;
         });
-        if (fuzzySurnameMatches.length === 1) return fuzzySurnameMatches[0];
+        if (fuzzySurnameMatches.length === 1) return { match: fuzzySurnameMatches[0] };
         if (fuzzySurnameMatches.length > 1) {
           const best = fuzzySurnameMatches.reduce((b, p) => {
             const pFirst = p.name.toLowerCase().split(/\s+/)[0];
             const firstScore = pFirst.startsWith(inputFirst) ? 0 : levenshtein(pFirst, inputFirst);
             return firstScore < b.dist ? { player: p, dist: firstScore } : b;
           }, { player: fuzzySurnameMatches[0], dist: Infinity });
-          return best.player;
+          return { match: best.player };
         }
 
         let bestMatch: typeof allPlayers[0] | null = null;
@@ -1061,27 +1074,62 @@ export async function registerRoutes(
             bestMatch = p;
           }
         }
-        if (bestMatch && bestDist <= Math.max(3, Math.floor(normalName.length * 0.35))) return bestMatch;
+        if (bestMatch && bestDist <= Math.max(3, Math.floor(normalName.length * 0.35))) return { match: bestMatch };
 
         return null;
       };
 
-      for (const ip of identifiedPlayers) {
-        const match = fuzzyMatchPlayer(ip.name, allPlayers, ip.team);
+      const ambiguousPlayers: { inputName: string; position: string; team?: string; isOnField?: boolean; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; candidates: { id: number; name: string; team: string; position: string; avgScore: number | null; price: number | null }[] }[] = [];
 
-        if (!match) {
+      for (const ip of identifiedPlayers) {
+        const result = fuzzyMatchPlayer(ip.name, allPlayers, ip.team);
+
+        if (!result) {
           notFound.push(ip.name);
           continue;
         }
 
-        const posRaw = (ip.position || match.position || "MID").toUpperCase();
+        if (result.ambiguous) {
+          ambiguousPlayers.push({
+            inputName: ip.name,
+            position: ip.position,
+            team: ip.team,
+            isOnField: ip.isOnField,
+            isCaptain: ip.isCaptain,
+            isViceCaptain: ip.isViceCaptain,
+            isEmergency: ip.isEmergency,
+            candidates: result.candidates.map(c => ({
+              id: c.id,
+              name: c.name,
+              team: c.team || "Unknown",
+              position: c.position || "MID",
+              avgScore: c.avgScore,
+              price: c.price,
+            })),
+          });
+          continue;
+        }
+
+        const posRaw = (ip.position || result.match.position || "MID").toUpperCase();
         const fieldPos = posMap[posRaw] || "MID";
-        resolvedPlayers.push({ match, fieldPos, ip });
+        resolvedPlayers.push({ match: result.match, fieldPos, ip });
+      }
+
+      if (ambiguousPlayers.length > 0) {
+        return res.json({
+          success: false,
+          needsDisambiguation: true,
+          ambiguous: ambiguousPlayers,
+          resolvedCount: resolvedPlayers.length,
+          notFound,
+        });
       }
 
       if (!hasAiFieldData) {
         resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
       }
+
+      await storage.clearMyTeam(uid);
 
       for (const { match, fieldPos, ip } of resolvedPlayers) {
         let isOnField = false;
