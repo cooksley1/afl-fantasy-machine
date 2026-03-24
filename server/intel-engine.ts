@@ -498,52 +498,56 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
   viceCaptainName: string | null;
 }> {
   const allPlayers = await storage.getAllPlayers();
-  const playerNames = allPlayers.map(p => p.name).join(', ');
+  const playersByPos: Record<string, string[]> = { DEF: [], MID: [], RUC: [], FWD: [] };
+  for (const p of allPlayers) {
+    const pos = p.position?.toUpperCase() || "MID";
+    const positions = pos.split("/");
+    for (const pp of positions) {
+      if (playersByPos[pp]) playersByPos[pp].push(p.name);
+      else {
+        for (const key of Object.keys(playersByPos)) {
+          if (key === pp) playersByPos[key].push(p.name);
+        }
+      }
+    }
+    if (!positions.some(pp => playersByPos[pp])) {
+      playersByPos["MID"].push(p.name);
+    }
+  }
+  const playerLookup = Object.entries(playersByPos)
+    .map(([pos, names]) => `${pos}: ${names.join(", ")}`)
+    .join("\n");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
-        content: `You are an expert AFL Fantasy team analyzer. You analyze screenshots of AFL Fantasy teams and extract player data with extreme precision.
+        content: `You are an AFL Fantasy team screenshot reader. Your ONLY job is to read player names from the image and match them to the known player database below.
 
-CRITICAL RULES FOR PLAYER IDENTIFICATION:
-- A full AFL Fantasy team has EXACTLY 30 players. You MUST identify all 30 if the screenshot shows a complete team.
-- Count the player cards in each position row. Standard layout: DEF 6+2=8, MID 8+2=10, RUC 2+1=3, FWD 6+2=8, UTIL 1 = 30 total.
-- AFL Fantasy player cards show the SURNAME in large text below the player photo, and often a first initial above or beside it.
-- Some AFL players have short or unusual surnames (e.g. "Grlj", "Ah Chee", "O'Brien", "De Goey"). These are real names — do NOT skip them.
-- If a name is difficult to read, cross-reference against the known player list provided below to find the best match. Prefer a best-guess match from the known list over skipping a player entirely.
-- Do NOT add players that are not visible in the image. Do NOT hallucinate players beyond what's shown.
-- Players showing "DNP" (Did Not Play) are still valid players — always include them with their name and position.
-- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD, UTILITY), read each row carefully, counting every card.
-- Read prices exactly as shown (e.g. "$517K", "$1.047M"). Convert to raw numbers: $517K = 517000, $1.047M = 1047000.
+HOW TO IDENTIFY PLAYERS:
+1. Each player card shows a SURNAME in large text and usually a first initial (e.g. "S. Grlj", "J. Lindsay").
+2. Look up the surname in the known player list for that position row. If only one player has that surname, use their full name.
+3. If multiple players share a surname, use the first initial to pick the right one.
+4. DNP (Did Not Play) cards still show a player name — read it and match it.
+5. Every visible card MUST be matched. A full team = 30 players. Count your output before returning.
 
-CRITICAL LAYOUT RULES — ON-FIELD vs INTERCHANGE:
-- The AFL Fantasy team screenshot has a clear layout: on-field players appear in the LEFT columns, and interchange (bench) players appear in a column on the RIGHT side, usually labelled "INTERCHANGE".
-- For each position row (DEFENDERS, MIDFIELDERS, RUCKS, FORWARDS), there are on-field players on the left and interchange/bench players on the right.
-- You MUST set "isOnField": true for players in the left/main area and "isOnField": false for players in the INTERCHANGE column on the right.
-- The UTILITY row at the bottom is always a BENCH position. Any player in the UTILITY row should have position "UTIL" and "isOnField": false. Utility is a bench-only slot that can hold any position (DEF, MID, RUC or FWD).
-- Standard squad structure: DEF 6 on-field + 2 interchange, MID 8 on-field + 2 interchange, RUC 2 on-field + 1 interchange, FWD 6 on-field + 2 interchange, UTIL 1 bench = 30 total (22 on-field + 8 bench).
-- If a player shows "DNP" (Did Not Play) it does NOT affect their on-field/interchange status — they stay in whatever column they appear in.
+KNOWN PLAYER DATABASE (match against these names):
+${playerLookup}
 
-CAPTAIN / VICE-CAPTAIN / EMERGENCY BADGES:
-- A small "C" badge on a player card means Captain ("isCaptain": true).
-- A small "V" badge means Vice-Captain ("isViceCaptain": true).
-- A small "E" badge means Emergency ("isEmergency": true). Emergencies are typically interchange players.
+LAYOUT RULES:
+- On-field players are in the LEFT columns. Interchange (bench) players are in the RIGHT column labelled "INTERCHANGE".
+- Per row: DEF 6 on-field + 2 bench, MID 8 on-field + 2 bench, RUC 2 on-field + 1 bench, FWD 6 on-field + 2 bench, UTIL 1 bench = 30 total.
+- Set "isOnField": true for left/main players, false for interchange/bench.
+- UTILITY row is always bench ("isOnField": false).
+- DNP does NOT change on-field/bench status.
 
-Known players in the database: ${playerNames}
+BADGES:
+- "C" badge = Captain ("isCaptain": true)
+- "V" badge = Vice-Captain ("isViceCaptain": true)  
+- "E" badge = Emergency ("isEmergency": true)
 
-When analyzing, identify:
-1. Players clearly visible in the screenshot — name, position, on-field/interchange status, any visible scores/prices
-2. Captain ("C" badge) and Vice-Captain ("V" or "VC" badge)
-3. Emergency players ("E" or "EMG" badge)
-4. Team structure strengths and weaknesses
-5. Captain/VC recommendations
-6. Trade targets
-7. DPP opportunities
-8. Break-even and price movement concerns
-
-If the image is not an AFL Fantasy screenshot, explain what you see and offer general tips.
+PRICES: Read exactly as shown. "$517K" = 517000, "$1.047M" = 1047000.
 
 Return ONLY valid JSON.`
       },
@@ -552,23 +556,16 @@ Return ONLY valid JSON.`
         content: [
           {
             type: "text",
-            text: `Analyze this AFL Fantasy team screenshot. Read EVERY player name visible in the image with extreme care. A complete team has 30 players — count them.
+            text: `Read this AFL Fantasy team screenshot. Match every player card to a name from the known player database.
 
-INSTRUCTIONS:
-- Read each player card carefully. The surname is usually the largest text on the card.
-- You MUST read all 30 player cards. Count: 8 DEF (6 on-field + 2 interchange), 10 MID (8+2), 3 RUC (2+1), 8 FWD (6+2), 1 UTIL = 30 total.
-- If a surname looks unusual or short (e.g. "Grlj", "Ah Chee"), cross-reference against the known player list. Do not skip it.
-- Players with "DNP" still have a name — read it and include them. DNP just means no score, not no player.
-- Look for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators. Include "isCaptain": true or "isViceCaptain": true.
-- Look for Emergency ("E" badge, usually orange/red) players. Include "isEmergency": true.
-- Read the price shown on each card if visible. Convert "$517K" to 517000, "$1.047M" to 1047000.
-- The position row the player appears in determines their position (DEF/MID/RUC/FWD/UTIL).
-- CRITICALLY: Determine whether each player is ON-FIELD or on the INTERCHANGE (bench).
-  - On-field players appear in the main left area of each position row. Set "isOnField": true.
-  - Interchange/bench players appear in the right-hand "INTERCHANGE" column. Set "isOnField": false.
-  - The last row is UTILITY — it is always bench ("isOnField": false).
-- Players showing "DNP" (Did Not Play) keep their field/interchange status unchanged.
-- BEFORE returning, count your players array. If it has fewer than 30, re-examine the screenshot for any missed cards.
+STEP BY STEP:
+1. Go through each position row: DEFENDERS, MIDFIELDERS, RUCKS, FORWARDS, UTILITY.
+2. For each card, read the surname and first initial. Look up the matching full name from the known database for that position.
+3. DNP cards still show a name — read and match them.
+4. Note C/V/E badges and on-field vs interchange placement.
+5. Count your output. A complete team = 30 players (8 DEF + 10 MID + 3 RUC + 8 FWD + 1 UTIL). If fewer than 30, go back and find the missing cards.
+
+Use the EXACT full name from the known player database (e.g. if you see "S. Grlj", return "Samuel Grlj" from the database).
 
 Return JSON:
 {
