@@ -25,7 +25,7 @@ Replit Auth (OpenID Connect) handles authentication for Google, Apple, GitHub, X
 **User details**: The `users` table captures `replitUsername`, `lastLoginAt`, `loginCount`, `lastUserAgent`, and `lastIpAddress` on login via the auth callback.
 
 ### Frontend
-Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
+Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. **Player Report** redesigned as an AFL Fantasy-style tabbed view with: Overview (price changes, averages, highest/lowest, ownership), Match Stats (expandable round-by-round detail with kicks/handballs/marks/tackles/hitouts/goals/behinds), Fixture Stats (season history table + upcoming fixtures), Opposition (avg stats vs each opponent), Venue (avg stats at each ground), and AI Report (GPT-generated verdict/analysis loaded on demand). Players are tappable from H2H matchup, My Team, and other views. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
 
 ### My Team Player Management
 Tapping any player on the My Team page opens an action dialog with:
@@ -82,6 +82,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
 - `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
 - `GET /api/league/opponents/:id/live-matchup` — live H2H matchup with scores by position
+- `GET /api/players/:id/detailed-stats` — comprehensive player stats (match history, opponent/venue breakdowns, overview metrics, upcoming fixtures)
 - `GET /api/live-scores/active-windows` — detect active/just-finished/upcoming games for smart polling
 - `DELETE /api/my-team` — clear entire team (remove all players)
 - `GET /api/game-day-guide` — generate game day transfer checklist

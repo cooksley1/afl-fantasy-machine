@@ -1153,6 +1153,129 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/players/:id/detailed-stats", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid player ID" });
+      const player = await storage.getPlayer(id);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const stats = await db.select().from(weeklyStats).where(eq(weeklyStats.playerId, id)).orderBy(weeklyStats.round);
+
+      const { fixtures: fixturesTable } = await import("@shared/schema");
+      const allFixtures = await db.select().from(fixturesTable).where(eq(fixturesTable.year, 2026)).orderBy(fixturesTable.round);
+      const teamFixtures = allFixtures.filter(f =>
+        f.homeTeam === player.team || f.awayTeam === player.team
+      );
+
+      const upcomingFixtures = teamFixtures
+        .filter(f => !f.complete)
+        .map(f => ({
+          round: f.round,
+          opponent: f.homeTeam === player.team ? f.awayTeam : f.homeTeam,
+          venue: f.venue,
+          date: f.date,
+          localTime: f.localTime,
+          isHome: f.homeTeam === player.team,
+        }));
+
+      const opponentAgg: Record<string, { games: number; totalScore: number; kicks: number; handballs: number; marks: number; tackles: number; hitouts: number; goals: number; behinds: number; freesAgainst: number }> = {};
+      const venueAgg: Record<string, { games: number; totalScore: number; kicks: number; handballs: number; marks: number; tackles: number; hitouts: number; goals: number; behinds: number; freesAgainst: number }> = {};
+
+      for (const s of stats) {
+        const opp = s.opponent || "Unknown";
+        const ven = s.venue || "Unknown";
+        for (const [key, agg] of [[opp, opponentAgg], [ven, venueAgg]] as const) {
+          if (!(agg as any)[key]) {
+            (agg as any)[key] = { games: 0, totalScore: 0, kicks: 0, handballs: 0, marks: 0, tackles: 0, hitouts: 0, goals: 0, behinds: 0, freesAgainst: 0 };
+          }
+          const a = (agg as any)[key];
+          a.games++;
+          a.totalScore += s.fantasyScore || 0;
+          a.kicks += s.kickCount || 0;
+          a.handballs += s.handballCount || 0;
+          a.marks += s.markCount || 0;
+          a.tackles += s.tackleCount || 0;
+          a.hitouts += s.hitouts || 0;
+          a.goals += s.goalsKicked || 0;
+          a.behinds += s.behindsKicked || 0;
+          a.freesAgainst += s.freesAgainst || 0;
+        }
+      }
+
+      const formatAgg = (agg: Record<string, any>) => {
+        return Object.entries(agg).map(([name, d]) => ({
+          name,
+          games: d.games,
+          avgScore: Math.round((d.totalScore / d.games) * 10) / 10,
+          kicks: Math.round((d.kicks / d.games) * 10) / 10,
+          handballs: Math.round((d.handballs / d.games) * 10) / 10,
+          marks: Math.round((d.marks / d.games) * 10) / 10,
+          tackles: Math.round((d.tackles / d.games) * 10) / 10,
+          hitouts: Math.round((d.hitouts / d.games) * 10) / 10,
+          goals: Math.round((d.goals / d.games) * 10) / 10,
+          behinds: Math.round((d.behinds / d.games) * 10) / 10,
+          freesAgainst: Math.round((d.freesAgainst / d.games) * 10) / 10,
+        })).sort((a, b) => b.avgScore - a.avgScore);
+      };
+
+      let runningTotal = 0;
+      const matchHistory = stats.map((s, i) => {
+        runningTotal += s.fantasyScore || 0;
+        const gamesPlayed = i + 1;
+        return {
+          round: s.round,
+          opponent: s.opponent,
+          venue: s.venue,
+          score: s.fantasyScore,
+          avg: Math.round((runningTotal / gamesPlayed) * 10) / 10,
+          avgSince: Math.round((runningTotal / gamesPlayed) * 10) / 10,
+          total: runningTotal,
+          tog: s.timeOnGroundPercent,
+          kicks: s.kickCount,
+          handballs: s.handballCount,
+          marks: s.markCount,
+          tackles: s.tackleCount,
+          hitouts: s.hitouts,
+          goals: s.goalsKicked,
+          behinds: s.behindsKicked,
+          freesAgainst: s.freesAgainst,
+          inside50s: s.inside50s,
+          rebound50s: s.rebound50s,
+          contestedPoss: s.contestedPossessions,
+          uncontestedPoss: s.uncontestedPossessions,
+          cba: s.centreBounceAttendancePercent,
+        };
+      });
+
+      const highestScore = stats.length > 0 ? Math.max(...stats.map(s => s.fantasyScore || 0)) : null;
+      const lowestScore = stats.length > 0 ? Math.min(...stats.map(s => s.fantasyScore || 0)) : null;
+      const totalPoints = stats.reduce((sum, s) => sum + (s.fantasyScore || 0), 0);
+      const pricePerPoint = totalPoints > 0 ? Math.round(player.price / totalPoints) : null;
+      const roundPriceChange = player.priceChange || 0;
+      const seasonPriceChange = player.startingPrice ? player.price - player.startingPrice : 0;
+
+      res.json({
+        player,
+        matchHistory,
+        upcomingFixtures,
+        opponentBreakdown: formatAgg(opponentAgg),
+        venueBreakdown: formatAgg(venueAgg),
+        overview: {
+          highestScore,
+          lowestScore,
+          totalPoints,
+          pricePerPoint,
+          roundPriceChange,
+          seasonPriceChange,
+        },
+      });
+    } catch (error: any) {
+      console.error("Player detailed stats error:", error.message);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/players/:id/report", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
