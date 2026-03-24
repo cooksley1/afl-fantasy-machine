@@ -72,7 +72,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Squiggle API**: Provides AFL fixtures, tips, and ladder data.
 - **AFL.com.au RSS**: Source for official AFL news.
 - **Google News RSS**: Gathers news from AFL club feeds.
-- **AFL Fantasy API**: Used for player headshots and price syncing.
+- **AFL Fantasy API**: Primary authoritative source for player data. Syncs team, position, dual position, and prices on every startup. Also inserts new players (debutants). ~820 players linked; ~83 unmatched players are retired/inactive and not in the AFL Fantasy system. Fuzzy ID matching with suffix stripping and surname+initial fallback.
 - **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores.
 - **Footywire (footywire.com)**: Scraped for comprehensive AFL Fantasy prices.
 - **AflTables (afltables.com)**: Scraped for historical player stats.

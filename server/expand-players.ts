@@ -105,6 +105,15 @@ async function fetchAflFantasyPlayers(): Promise<AflFantasyPlayer[]> {
   return data;
 }
 
+function normalizeSurname(name: string): string {
+  const parts = name.toLowerCase().replace(/[''`\-]/g, "").replace(/\s+/g, " ").trim().split(" ");
+  return parts[parts.length - 1];
+}
+
+function stripSuffix(name: string): string {
+  return name.replace(/\s+(jr|sr|ii|iii|iv|jnr|snr)\.?$/i, "").trim();
+}
+
 export async function syncAflFantasyIds(): Promise<number> {
   try {
     const aflPlayers = await fetchAflFantasyPlayers();
@@ -120,6 +129,7 @@ export async function syncAflFantasyIds(): Promise<number> {
 
     const aflByNameTeam = new Map<string, number>();
     const aflByName = new Map<string, number>();
+    const aflBySurnameTeam = new Map<string, { id: number; fullName: string }[]>();
     for (const ap of aflPlayers) {
       const fullName = `${ap.first_name} ${ap.last_name}`;
       const normName = normalizeNameForMatch(fullName);
@@ -128,22 +138,53 @@ export async function syncAflFantasyIds(): Promise<number> {
       if (!aflByName.has(normName)) {
         aflByName.set(normName, ap.id);
       }
+      const surname = normalizeSurname(fullName);
+      const surnameKey = `${surname}|${team}`;
+      if (!aflBySurnameTeam.has(surnameKey)) aflBySurnameTeam.set(surnameKey, []);
+      aflBySurnameTeam.get(surnameKey)!.push({ id: ap.id, fullName: normName });
     }
 
     let matched = 0;
+    const unmatched: string[] = [];
     for (const dbPlayer of playersNeedingId) {
       const normName = normalizeNameForMatch(dbPlayer.name);
       let aflId = aflByNameTeam.get(`${normName}|${dbPlayer.team}`);
+
+      if (!aflId) {
+        const strippedName = normalizeNameForMatch(stripSuffix(dbPlayer.name));
+        aflId = aflByNameTeam.get(`${strippedName}|${dbPlayer.team}`) || aflByName.get(strippedName);
+      }
+
       if (!aflId) {
         aflId = aflByName.get(normName);
       }
+
+      if (!aflId) {
+        const surname = normalizeSurname(dbPlayer.name);
+        const dbFirst = normalizeNameForMatch(dbPlayer.name).split(" ")[0];
+        const surnameMatches = aflBySurnameTeam.get(`${surname}|${dbPlayer.team}`);
+        if (surnameMatches && surnameMatches.length === 1) {
+          const aflFirst = surnameMatches[0].fullName.split(" ")[0];
+          if (aflFirst[0] === dbFirst[0]) {
+            aflId = surnameMatches[0].id;
+          }
+        }
+      }
+
       if (aflId) {
         await db.update(players).set({ aflFantasyId: aflId }).where(eq(players.id, dbPlayer.id));
         matched++;
+      } else {
+        unmatched.push(`${dbPlayer.name} (${dbPlayer.team})`);
       }
     }
 
     console.log(`[AflFantasySync] Matched ${matched}/${playersNeedingId.length} players with AFL Fantasy IDs`);
+    if (unmatched.length > 0 && unmatched.length <= 30) {
+      console.log(`[AflFantasySync] Unmatched: ${unmatched.join(", ")}`);
+    } else if (unmatched.length > 30) {
+      console.log(`[AflFantasySync] ${unmatched.length} unmatched players (not in AFL Fantasy)`);
+    }
     return matched;
   } catch (err: any) {
     console.log(`[AflFantasySync] Failed to fetch AFL Fantasy API: ${err.message}`);
