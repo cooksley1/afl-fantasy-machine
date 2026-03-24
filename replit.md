@@ -12,6 +12,13 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - Do not make changes to files in the `server/services/__tests__/` directory.
 - Do not make changes to the `vitest.config.ts` file.
 
+## Versioning Rule (MANDATORY)
+**Bump the version number with EVERY update.** The version is displayed in `client/src/components/app-sidebar.tsx` (look for `data-testid="text-app-version"`). Use semantic versioning:
+- **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
+- **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
+- **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
+Current version: **v2.6.0**. Always update this line in replit.md when bumping.
+
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
 - **Utility**: UTIL is a BENCH-ONLY position. Can hold any position (DEF/MID/RUC/FWD). Never on-field. `isOnField` always false for UTIL.
