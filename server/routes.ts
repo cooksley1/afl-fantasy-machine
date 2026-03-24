@@ -37,17 +37,39 @@ function getEffectiveUserId(req: Request): string {
   return getUserId(req);
 }
 
-function isAdmin(req: Request, res: Response, next: NextFunction) {
-  const user = req.user as any;
-  if (!user?.claims?.sub) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  db.select().from(users).where(eq(users.id, user.claims.sub)).then(([u]) => {
+async function isAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user as any;
+    if (!user?.claims?.sub) {
+      return res.status(401).json({ message: "Unauthorised" });
+    }
+    const [u] = await db.select().from(users).where(eq(users.id, user.claims.sub));
     if (!u?.isAdmin) {
       return res.status(403).json({ message: "Forbidden" });
     }
     next();
-  }).catch(() => res.status(500).json({ message: "Server error" }));
+  } catch (error) {
+    console.error("[isAdmin] Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+}
+
+class ValidationError extends Error {
+  constructor(message: string) { super(message); this.name = "ValidationError"; }
+}
+
+function parseIntParam(value: string, name: string): number {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) throw new ValidationError(`Invalid ${name}`);
+  return parsed;
+}
+
+function handleRouteError(res: Response, error: any) {
+  if (error instanceof ValidationError) {
+    return res.status(400).json({ message: error.message });
+  }
+  console.error("[Route Error]", error);
+  res.status(500).json({ message: "Something went wrong" });
 }
 
 export async function registerRoutes(
@@ -74,8 +96,7 @@ export async function registerRoutes(
     try {
       const allPlayers = await storage.getAllPlayers();
       const { calcValueGap } = await import("./services/projection-engine");
-      const { AFL_FANTASY_CLASSIC_2026 } = await import("@shared/game-rules");
-      const magicNumber = AFL_FANTASY_CLASSIC_2026.magicNumber;
+      const magicNumber = gameRules.magicNumber;
       const enriched = allPlayers.map(p => ({
         ...p,
         valueGap: calcValueGap(p.projectedScore || p.avgScore || 0, p.price, magicNumber),
@@ -89,11 +110,12 @@ export async function registerRoutes(
 
   app.get("/api/players/:id", async (req, res) => {
     try {
-      const player = await storage.getPlayer(parseInt(req.params.id));
+      const id = parseIntParam(req.params.id, "player id");
+      const player = await storage.getPlayer(id);
       if (!player) return res.status(404).json({ message: "Player not found" });
       res.json(player);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      handleRouteError(res, error);
     }
   });
 
@@ -140,10 +162,10 @@ export async function registerRoutes(
   app.delete("/api/my-team/:id", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
-      await storage.removeFromMyTeam(uid, parseInt(req.params.id));
+      await storage.removeFromMyTeam(uid, parseIntParam(req.params.id, "team player id"));
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      handleRouteError(res, error);
     }
   });
 
@@ -160,20 +182,20 @@ export async function registerRoutes(
   app.post("/api/my-team/:id/captain", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
-      await storage.setCaptain(uid, parseInt(req.params.id));
+      await storage.setCaptain(uid, parseIntParam(req.params.id, "team player id"));
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      handleRouteError(res, error);
     }
   });
 
   app.post("/api/my-team/:id/vice-captain", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
-      await storage.setViceCaptain(uid, parseInt(req.params.id));
+      await storage.setViceCaptain(uid, parseIntParam(req.params.id, "team player id"));
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      handleRouteError(res, error);
     }
   });
 
@@ -355,15 +377,8 @@ export async function registerRoutes(
       };
 
       const uid = getEffectiveUserId(req);
-      await storage.clearMyTeam(uid);
 
-      const teamEntries: Array<{
-        playerId: number;
-        isOnField: boolean;
-        isCaptain: boolean;
-        isViceCaptain: boolean;
-        fieldPosition: string;
-      }> = [
+      const teamEntries = [
         { playerId: fp("Connor Rozee"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Jack Sinclair"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
         { playerId: fp("Josh Gibcus"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
@@ -396,9 +411,7 @@ export async function registerRoutes(
         { playerId: fp("Jack Carroll"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
       ];
 
-      for (const entry of teamEntries) {
-        await storage.addToMyTeam(uid, entry);
-      }
+      await storage.replaceMyTeam(uid, teamEntries);
 
       const team = await storage.getMyTeam(uid);
       res.json({ success: true, playerCount: team.length, team });
@@ -430,7 +443,7 @@ export async function registerRoutes(
       const allPlayers = await storage.getAllPlayers();
       const settings = await storage.getSettings(uid);
       const currentRound = settings?.currentRound ?? 0;
-      const salaryCap = settings?.salaryCap || 18300000;
+      const salaryCap = settings?.salaryCap || gameRules.salaryCap;
 
       const finalTrades = generateTradeRecommendations(myTeam, allPlayers, currentRound, salaryCap);
 
@@ -561,16 +574,13 @@ export async function registerRoutes(
     try {
       const uid = getEffectiveUserId(req);
       const result = await buildOptimalTeam();
-      await storage.clearMyTeam(uid);
-      for (const p of result.teamPlayers) {
-        await storage.addToMyTeam(uid, {
-          playerId: p.id,
-          isOnField: p.isOnField,
-          isCaptain: false,
-          isViceCaptain: false,
-          fieldPosition: p.fieldPosition,
-        });
-      }
+      await storage.replaceMyTeam(uid, result.teamPlayers.map(p => ({
+        playerId: p.id,
+        isOnField: p.isOnField,
+        isCaptain: false,
+        isViceCaptain: false,
+        fieldPosition: p.fieldPosition,
+      })));
       const settings = await storage.getSettings(uid);
       const teamPlayerIds = result.teamPlayers.map(p => p.id);
       const plan = await generateSeasonPlan(teamPlayerIds, settings.currentRound);
@@ -624,16 +634,13 @@ export async function registerRoutes(
     try {
       const uid = getEffectiveUserId(req);
       const result = await buildDreamTeamReverse();
-      await storage.clearMyTeam(uid);
-      for (const p of result.startingTeam) {
-        await storage.addToMyTeam(uid, {
-          playerId: p.id,
-          isOnField: p.isOnField,
-          isCaptain: false,
-          isViceCaptain: false,
-          fieldPosition: p.fieldPosition,
-        });
-      }
+      await storage.replaceMyTeam(uid, result.startingTeam.map(p => ({
+        playerId: p.id,
+        isOnField: p.isOnField,
+        isCaptain: false,
+        isViceCaptain: false,
+        fieldPosition: p.fieldPosition,
+      })));
       res.json({ success: true, teamSize: result.startingTeam.length, cost: result.startingTeamCost });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1132,9 +1139,7 @@ export async function registerRoutes(
         resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
       }
 
-      await storage.clearMyTeam(uid);
-
-      for (const { match, fieldPos, ip } of resolvedPlayers) {
+      const teamEntriesToSave = resolvedPlayers.map(({ match, fieldPos, ip }) => {
         let isOnField = false;
         let assignedFieldPos = fieldPos;
 
@@ -1165,14 +1170,16 @@ export async function registerRoutes(
           (viceCaptainName && match.name.toLowerCase() === viceCaptainName.toLowerCase()) ||
           (viceCaptainName && match.name.toLowerCase().split(" ").pop() === viceCaptainName.toLowerCase().split(" ").pop());
 
-        await storage.addToMyTeam(uid, {
+        return {
           playerId: match.id,
           isOnField,
           isCaptain: !!playerIsCaptain,
           isViceCaptain: !!playerIsVC,
           fieldPosition: assignedFieldPos,
-        });
-      }
+        };
+      });
+
+      await storage.replaceMyTeam(uid, teamEntriesToSave);
 
       const team = await storage.getMyTeam(uid);
       res.json({
@@ -1409,10 +1416,10 @@ export async function registerRoutes(
   app.patch("/api/player-alerts/:id/read", async (req, res) => {
     try {
       const uid = getEffectiveUserId(req);
-      await storage.markAlertRead(uid, parseInt(req.params.id));
+      await storage.markAlertRead(uid, parseIntParam(req.params.id, "alert id"));
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      handleRouteError(res, error);
     }
   });
 

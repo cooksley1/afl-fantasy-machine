@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
+import { formatPrice, formatPriceChange } from "@/lib/player-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,16 +109,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "aiReport", label: "AI Report" },
 ];
 
-function formatPrice(price: number): string {
-  if (price >= 1000000) return `$${(price / 1000000).toFixed(3)}M`;
-  return `$${(price / 1000).toFixed(0)}k`;
-}
-
-function formatPriceChange(change: number): string {
-  const prefix = change >= 0 ? "+" : "";
-  if (Math.abs(change) >= 1000) return `${prefix}$${(change / 1000).toFixed(0)}k`;
-  return `${prefix}$${change}`;
-}
 
 function QuickStatBox({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

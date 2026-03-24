@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { formatPrice } from "@/lib/player-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,10 +66,6 @@ function FormTrendIcon({ trend }: { trend: string }) {
   return <Minus className="w-3.5 h-3.5 text-muted-foreground" />;
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1000000) return `$${(price / 1000000).toFixed(2)}M`;
-  return `$${(price / 1000).toFixed(0)}K`;
-}
 
 export default function Dashboard() {
   const [, navigate] = useLocation();

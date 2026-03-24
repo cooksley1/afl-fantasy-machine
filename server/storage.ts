@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, gte, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   players,
@@ -56,6 +56,7 @@ export interface IStorage {
   addToMyTeam(userId: string, entry: InsertMyTeamPlayer): Promise<MyTeamPlayer>;
   removeFromMyTeam(userId: string, id: number): Promise<void>;
   clearMyTeam(userId: string): Promise<void>;
+  replaceMyTeam(userId: string, entries: Omit<InsertMyTeamPlayer, "userId">[]): Promise<void>;
   setCaptain(userId: string, id: number): Promise<void>;
   setViceCaptain(userId: string, id: number): Promise<void>;
   updateMyTeamPlayer(userId: string, id: number, data: Partial<Pick<MyTeamPlayer, "isOnField" | "fieldPosition">>): Promise<void>;
@@ -145,36 +146,32 @@ export class DatabaseStorage implements IStorage {
 
   async getMyTeam(userId: string): Promise<PlayerWithTeamInfo[]> {
     const teamEntries = await db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
-    const result: PlayerWithTeamInfo[] = [];
+    if (teamEntries.length === 0) return [];
 
     const playerIds = teamEntries.map(e => e.playerId);
-    const lastScoreMap = new Map<number, { score: number; round: number }>();
-    if (playerIds.length > 0) {
-      const allPlayerStats = await db
-        .select({
-          playerId: weeklyStats.playerId,
-          round: weeklyStats.round,
-          fantasyScore: weeklyStats.fantasyScore,
-        })
-        .from(weeklyStats);
 
-      for (const stat of allPlayerStats) {
-        if (!playerIds.includes(stat.playerId)) continue;
-        const existing = lastScoreMap.get(stat.playerId);
-        if (!existing || stat.round > existing.round) {
-          lastScoreMap.set(stat.playerId, {
-            score: stat.fantasyScore || 0,
-            round: stat.round,
-          });
-        }
+    const [teamPlayers, teamStats] = await Promise.all([
+      db.select().from(players).where(inArray(players.id, playerIds)),
+      db.select({
+        playerId: weeklyStats.playerId,
+        round: weeklyStats.round,
+        fantasyScore: weeklyStats.fantasyScore,
+      }).from(weeklyStats).where(inArray(weeklyStats.playerId, playerIds)),
+    ]);
+
+    const playerMap = new Map(teamPlayers.map(p => [p.id, p]));
+
+    const lastScoreMap = new Map<number, { score: number; round: number }>();
+    for (const stat of teamStats) {
+      const existing = lastScoreMap.get(stat.playerId);
+      if (!existing || stat.round > existing.round) {
+        lastScoreMap.set(stat.playerId, { score: stat.fantasyScore || 0, round: stat.round });
       }
     }
 
+    const result: PlayerWithTeamInfo[] = [];
     for (const entry of teamEntries) {
-      const [player] = await db
-        .select()
-        .from(players)
-        .where(eq(players.id, entry.playerId));
+      const player = playerMap.get(entry.playerId);
       if (player) {
         const lastScore = lastScoreMap.get(player.id);
         result.push({
@@ -210,26 +207,31 @@ export class DatabaseStorage implements IStorage {
     await db.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
   }
 
+  async replaceMyTeam(userId: string, entries: Omit<InsertMyTeamPlayer, "userId">[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
+      if (entries.length > 0) {
+        await tx.insert(myTeamPlayers).values(entries.map(e => ({ ...e, userId })));
+      }
+    });
+  }
+
   async setCaptain(userId: string, id: number): Promise<void> {
-    await db
-      .update(myTeamPlayers)
-      .set({ isCaptain: false })
-      .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isCaptain, true)));
-    await db
-      .update(myTeamPlayers)
-      .set({ isCaptain: true, isViceCaptain: false })
-      .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
+    await db.transaction(async (tx) => {
+      await tx.update(myTeamPlayers).set({ isCaptain: false })
+        .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isCaptain, true)));
+      await tx.update(myTeamPlayers).set({ isCaptain: true, isViceCaptain: false })
+        .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
+    });
   }
 
   async setViceCaptain(userId: string, id: number): Promise<void> {
-    await db
-      .update(myTeamPlayers)
-      .set({ isViceCaptain: false })
-      .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isViceCaptain, true)));
-    await db
-      .update(myTeamPlayers)
-      .set({ isViceCaptain: true, isCaptain: false })
-      .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
+    await db.transaction(async (tx) => {
+      await tx.update(myTeamPlayers).set({ isViceCaptain: false })
+        .where(and(eq(myTeamPlayers.userId, userId), eq(myTeamPlayers.isViceCaptain, true)));
+      await tx.update(myTeamPlayers).set({ isViceCaptain: true, isCaptain: false })
+        .where(and(eq(myTeamPlayers.id, id), eq(myTeamPlayers.userId, userId)));
+    });
   }
 
   async getTradeRecommendations(userId: string): Promise<TradeRecommendationWithPlayers[]> {
@@ -238,17 +240,17 @@ export class DatabaseStorage implements IStorage {
       .from(tradeRecommendations)
       .where(eq(tradeRecommendations.userId, userId))
       .orderBy(desc(tradeRecommendations.confidence));
-    const result: TradeRecommendationWithPlayers[] = [];
 
+    if (recs.length === 0) return [];
+
+    const playerIds = [...new Set(recs.flatMap(r => [r.playerOutId, r.playerInId]))];
+    const referencedPlayers = await db.select().from(players).where(inArray(players.id, playerIds));
+    const playerMap = new Map(referencedPlayers.map(p => [p.id, p]));
+
+    const result: TradeRecommendationWithPlayers[] = [];
     for (const rec of recs) {
-      const [playerOut] = await db
-        .select()
-        .from(players)
-        .where(eq(players.id, rec.playerOutId));
-      const [playerIn] = await db
-        .select()
-        .from(players)
-        .where(eq(players.id, rec.playerInId));
+      const playerOut = playerMap.get(rec.playerOutId);
+      const playerIn = playerMap.get(rec.playerInId);
       if (playerOut && playerIn) {
         result.push({ ...rec, playerOut, playerIn });
       }
@@ -478,16 +480,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertModelWeight(weight: InsertModelWeight): Promise<ModelWeight> {
-    const existing = await this.getModelWeight(weight.key);
-    if (existing) {
-      const [updated] = await db.update(modelWeights)
-        .set({ value: weight.value, description: weight.description, category: weight.category })
-        .where(eq(modelWeights.key, weight.key))
-        .returning();
-      return updated;
-    }
-    const [created] = await db.insert(modelWeights).values(weight).returning();
-    return created;
+    const [result] = await db.insert(modelWeights)
+      .values(weight)
+      .onConflictDoUpdate({
+        target: modelWeights.key,
+        set: { value: weight.value, description: weight.description, category: weight.category },
+      })
+      .returning();
+    return result;
   }
 
   async deleteModelWeight(key: string): Promise<void> {
@@ -518,31 +518,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async activateSavedTeam(userId: string, id: number): Promise<void> {
-    await db.update(savedTeams).set({ isActive: false }).where(eq(savedTeams.userId, userId));
-    await db.update(savedTeams).set({ isActive: true }).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId)));
-
     const team = await this.getSavedTeam(userId, id);
     if (!team) throw new Error("Saved team not found");
 
-    const playerEntries: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }> = JSON.parse(team.playerData);
+    let playerEntries: Array<{ playerId: number; isOnField: boolean; isCaptain: boolean; isViceCaptain: boolean; fieldPosition: string }>;
+    try {
+      playerEntries = JSON.parse(team.playerData);
+    } catch {
+      throw new Error("Saved team data is corrupted");
+    }
 
-    await db.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
-    for (const entry of playerEntries) {
-      await db.insert(myTeamPlayers).values({
+    if (!Array.isArray(playerEntries) || playerEntries.length === 0) {
+      throw new Error("Saved team has no player data");
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(savedTeams).set({ isActive: false }).where(eq(savedTeams.userId, userId));
+      await tx.update(savedTeams).set({ isActive: true }).where(and(eq(savedTeams.id, id), eq(savedTeams.userId, userId)));
+      await tx.delete(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
+      await tx.insert(myTeamPlayers).values(playerEntries.map(entry => ({
         userId,
         playerId: entry.playerId,
         isOnField: entry.isOnField,
         isCaptain: entry.isCaptain,
         isViceCaptain: entry.isViceCaptain,
         fieldPosition: entry.fieldPosition,
-      });
-    }
+      })));
+    });
   }
 
   async saveCurrentTeamAsVariant(userId: string, name: string, description: string | null, source: string): Promise<SavedTeam> {
     const teamEntries = await db.select().from(myTeamPlayers).where(eq(myTeamPlayers.userId, userId));
-    const allPlayers = await db.select().from(players);
-    const playerMap = new Map(allPlayers.map(p => [p.id, p]));
+    const playerIds = teamEntries.map(e => e.playerId);
+    const teamPlayers = playerIds.length > 0
+      ? await db.select().from(players).where(inArray(players.id, playerIds))
+      : [];
+    const playerMap = new Map(teamPlayers.map(p => [p.id, p]));
 
     const playerData = teamEntries.map(e => ({
       playerId: e.playerId,

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { formatPrice } from "@/lib/player-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,10 +177,6 @@ function getPlayerAction(player: PlayerWithTeamInfo, currentRound: number): Play
   return { label: "HOLD", color: "text-emerald-900", bg: "bg-emerald-300", priority: 7 };
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1000000) return `$${(price / 1000000).toFixed(3)}M`;
-  return `$${(price / 1000).toFixed(0)}k`;
-}
 
 function positionLabel(pos: string): string {
   const map: Record<string, string> = {
@@ -455,11 +452,19 @@ function FieldView({
   playedTeams: Set<string>;
   currentRound?: number;
 }) {
-  const onFieldByPos = (pos: string) =>
-    teamPlayers.filter((p) => p.fieldPosition === pos && p.isOnField);
-  const benchByPos = (pos: string) =>
-    teamPlayers.filter((p) => p.fieldPosition === pos && !p.isOnField);
-  const utilPlayers = teamPlayers.filter((p) => p.fieldPosition === "UTIL");
+  const { grouped, utilPlayers } = useMemo(() => {
+    const byPos: Record<string, { onField: PlayerWithTeamInfo[]; bench: PlayerWithTeamInfo[] }> = {};
+    const util: PlayerWithTeamInfo[] = [];
+    for (const p of teamPlayers) {
+      if (p.fieldPosition === "UTIL") { util.push(p); continue; }
+      if (!byPos[p.fieldPosition]) byPos[p.fieldPosition] = { onField: [], bench: [] };
+      (p.isOnField ? byPos[p.fieldPosition].onField : byPos[p.fieldPosition].bench).push(p);
+    }
+    return { grouped: byPos, utilPlayers: util };
+  }, [teamPlayers]);
+
+  const onFieldByPos = (pos: string) => grouped[pos]?.onField ?? [];
+  const benchByPos = (pos: string) => grouped[pos]?.bench ?? [];
 
   const positionGroups = ["DEF", "MID", "RUC", "FWD"];
 

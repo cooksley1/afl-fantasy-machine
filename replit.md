@@ -34,7 +34,7 @@ The application features a mobile-first, responsive design with a custom navy/go
 Replit Auth (OpenID Connect) manages authentication. All API routes, except authentication endpoints, are protected. User sessions are stored in a PostgreSQL `sessions` table. User data isolation is enforced through `userId` columns in all user-scoped tables and by passing `userId` from the session to storage methods and route handlers. Admin users can impersonate other users, with the system indicating active impersonation in the frontend.
 
 ### Frontend
-Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. The **Player Report** offers a tabbed view with Overview, Match Stats, Fixture Stats, Opposition, Venue, and AI Report (GPT-generated analysis loaded on demand). Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users. The application incorporates detailed player availability and selection status logic.
+Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Shared utilities in `client/src/lib/player-utils.ts` (formatPrice, formatPriceChange, getTeamColour). Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. The **Player Report** offers a tabbed view with Overview, Match Stats, Fixture Stats, Opposition, Venue, and AI Report (GPT-generated analysis loaded on demand). Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users. The application incorporates detailed player availability and selection status logic.
 
 ### My Team Player Management
 Players on the My Team page are interactive, allowing actions like viewing reports, swapping with teammates (validating position eligibility), replacing with database players (filtered by position and budget), setting captaincy, or removing players.
@@ -43,7 +43,7 @@ Players on the My Team page are interactive, allowing actions like viewing repor
 An Express.js and Node.js server manages API requests, file uploads, and service integrations.
 
 ### Database
-PostgreSQL with Drizzle ORM stores all application data, including player statistics, projections, user teams, and intelligence reports.
+PostgreSQL with Drizzle ORM stores all application data, including player statistics, projections, user teams, and intelligence reports. Multi-step mutations (team replacement, captain/vice-captain setting, saved team activation) use database transactions via `db.transaction()`. Batch queries use `inArray` for efficient loading. `replaceMyTeam` provides atomic clear+rebuild. `upsertModelWeight` uses `onConflictDoUpdate`.
 
 ### AI Integration
 Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screenshot analysis via Replit AI Integrations. AI prompts use smart player selection and compact summaries to manage token context windows.
