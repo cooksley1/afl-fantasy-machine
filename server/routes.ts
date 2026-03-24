@@ -113,6 +113,7 @@ export async function registerRoutes(
         .object({
           playerId: z.number(),
           fieldPosition: z.string(),
+          isOnField: z.boolean().optional(),
         })
         .parse(req.body);
 
@@ -125,7 +126,7 @@ export async function registerRoutes(
 
       const entry = await storage.addToMyTeam(uid, {
         playerId: data.playerId,
-        isOnField: true,
+        isOnField: data.isOnField !== undefined ? data.isOnField : true,
         isCaptain: false,
         isViceCaptain: false,
         fieldPosition: data.fieldPosition,
@@ -992,7 +993,7 @@ export async function registerRoutes(
       type MatchResult = { match: typeof allPlayers[0]; ambiguous?: false } | { match: typeof allPlayers[0]; ambiguous: true; candidates: typeof allPlayers };
 
       const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string): MatchResult | null => {
-        const normalName = inputName.trim().toLowerCase();
+        const normalName = inputName.trim().toLowerCase().replace(/[''`]/g, "'");
 
         const exact = players.find(p => p.name.toLowerCase() === normalName);
         if (exact) return { match: exact };
@@ -1085,9 +1086,11 @@ export async function registerRoutes(
         const result = fuzzyMatchPlayer(ip.name, allPlayers, ip.team);
 
         if (!result) {
+          console.log(`[save-from-analyzer] No match found for: "${ip.name}" (team: ${ip.team || "none"})`);
           notFound.push(ip.name);
           continue;
         }
+        console.log(`[save-from-analyzer] Matched "${ip.name}" → "${result.match.name}" (${result.match.team})${result.ambiguous ? " [AMBIGUOUS]" : ""}`);
 
         if (result.ambiguous) {
           ambiguousPlayers.push({

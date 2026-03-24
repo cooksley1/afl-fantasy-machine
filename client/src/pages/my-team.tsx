@@ -423,14 +423,18 @@ function FieldViewCard({
   );
 }
 
-function EmptyFieldCard({ position, isBench }: { position: string; isBench: boolean }) {
+function EmptyFieldCard({ position, isBench, onTap }: { position: string; isBench: boolean; onTap?: () => void }) {
   return (
-    <div className="w-[68px] sm:w-[80px] opacity-30" data-testid={`empty-field-card-${position.toLowerCase()}`}>
+    <div
+      className={`w-[68px] sm:w-[80px] ${onTap ? "opacity-50 cursor-pointer hover:opacity-70 transition-opacity" : "opacity-30"}`}
+      onClick={onTap}
+      data-testid={`empty-field-card-${position.toLowerCase()}`}
+    >
       <div className="relative flex flex-col items-center">
         <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
           <UserPlus className="w-4 h-4 text-muted-foreground/50" />
         </div>
-        <span className="text-[9px] text-muted-foreground mt-0.5 italic">{isBench ? "Bench" : "Empty"}</span>
+        <span className="text-[9px] text-muted-foreground mt-0.5 italic">{onTap ? "Add" : (isBench ? "Bench" : "Empty")}</span>
       </div>
     </div>
   );
@@ -439,12 +443,14 @@ function EmptyFieldCard({ position, isBench }: { position: string; isBench: bool
 function FieldView({
   teamPlayers,
   onTapPlayer,
+  onAddToSlot,
   visibleStats,
   playedTeams,
   currentRound = 1,
 }: {
   teamPlayers: PlayerWithTeamInfo[];
   onTapPlayer: (player: PlayerWithTeamInfo) => void;
+  onAddToSlot?: (position: string, isOnField: boolean) => void;
   visibleStats: StatKey[];
   playedTeams: Set<string>;
   currentRound?: number;
@@ -494,7 +500,7 @@ function FieldView({
                   item.type === "player" ? (
                     <FieldViewCard key={item.player.myTeamPlayerId} player={item.player} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={false} hasPlayed={playedTeams.has(item.player.team)} currentRound={currentRound} />
                   ) : (
-                    <EmptyFieldCard key={item.key} position={pos} isBench={false} />
+                    <EmptyFieldCard key={item.key} position={pos} isBench={false} onTap={onAddToSlot ? () => onAddToSlot(pos, true) : undefined} />
                   )
                 )}
               </div>
@@ -504,7 +510,7 @@ function FieldView({
                     item.type === "player" ? (
                       <FieldViewCard key={item.player.myTeamPlayerId} player={item.player} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={false} hasPlayed={playedTeams.has(item.player.team)} currentRound={currentRound} />
                     ) : (
-                      <EmptyFieldCard key={item.key} position={pos} isBench={false} />
+                      <EmptyFieldCard key={item.key} position={pos} isBench={false} onTap={onAddToSlot ? () => onAddToSlot(pos, true) : undefined} />
                     )
                   )}
                 </div>
@@ -549,7 +555,7 @@ function FieldView({
                   item.type === "player" ? (
                     <FieldViewCard key={item.player.myTeamPlayerId} player={item.player} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={true} hasPlayed={playedTeams.has(item.player.team)} currentRound={currentRound} />
                   ) : (
-                    <EmptyFieldCard key={item.key} position={pos} isBench={true} />
+                    <EmptyFieldCard key={item.key} position={pos} isBench={true} onTap={onAddToSlot ? () => onAddToSlot(pos, false) : undefined} />
                   )
                 )}
               </div>
@@ -569,7 +575,7 @@ function FieldView({
               <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={true} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
             ))}
             {utilPlayers.length === 0 && (
-              <EmptyFieldCard position="UTIL" isBench={true} />
+              <EmptyFieldCard position="UTIL" isBench={true} onTap={onAddToSlot ? () => onAddToSlot("UTIL", false) : undefined} />
             )}
           </div>
         </div>
@@ -1390,6 +1396,129 @@ function PlayerActionDialog({
   );
 }
 
+function AddPlayerToSlotDialog({
+  position,
+  isOnField,
+  teamPlayers,
+  salaryCap,
+  onClose,
+}: {
+  position: string;
+  isOnField: boolean;
+  teamPlayers: PlayerWithTeamInfo[];
+  salaryCap: number;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+
+  const { data: allPlayers } = useQuery<Player[]>({
+    queryKey: ["/api/players"],
+  });
+
+  const totalSalary = teamPlayers.reduce((sum, p) => sum + p.price, 0);
+  const remainingBudget = salaryCap - totalSalary;
+
+  const addMutation = useMutation({
+    mutationFn: async (playerId: number) => {
+      const res = await apiRequest("POST", "/api/my-team", {
+        playerId,
+        fieldPosition: position === "UTIL" ? "UTIL" : position,
+        isOnField: position === "UTIL" ? false : isOnField,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: "Player added" });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to add", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const eligiblePlayers = useMemo(() => {
+    if (!allPlayers) return [];
+    const teamIds = new Set(teamPlayers.map((p) => p.id));
+    return allPlayers
+      .filter((p) => {
+        if (teamIds.has(p.id)) return false;
+        if (p.price > remainingBudget) return false;
+        if (position === "UTIL") return true;
+        const positions = p.position?.split("/") || [];
+        const dual = (p as any).dualPosition?.split("/") || [];
+        const allPos = [...new Set([...positions, ...dual])];
+        return allPos.includes(position);
+      })
+      .filter((p) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
+      })
+      .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+      .slice(0, 50);
+  }, [allPlayers, teamPlayers, remainingBudget, position, search]);
+
+  return (
+    <div className="space-y-3" data-testid="add-player-slot-dialog">
+      <p className="text-xs text-muted-foreground">
+        Add {position === "UTIL" ? "Utility" : position} player {isOnField ? "(on-field)" : "(bench)"}
+        <span className="ml-2 text-emerald-400">${(remainingBudget / 1000).toFixed(0)}K budget</span>
+      </p>
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+        <Input
+          placeholder="Search player or team..."
+          className="pl-7 h-8 text-xs"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          data-testid="input-add-player-search"
+        />
+        {search && (
+          <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setSearch("")}>
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <div className="max-h-[300px] overflow-y-auto space-y-1">
+        {eligiblePlayers.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            {search ? "No matching players" : "No eligible players"}
+          </p>
+        )}
+        {eligiblePlayers.map((p) => {
+          const colors = getTeamColors(p.team);
+          return (
+            <button
+              key={p.id}
+              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 transition-colors text-left"
+              onClick={() => addMutation.mutate(p.id)}
+              disabled={addMutation.isPending}
+              data-testid={`add-player-option-${p.id}`}
+            >
+              <PlayerAvatar playerId={p.aflFantasyId} playerName={p.name} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{p.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold px-1 rounded" style={{ backgroundColor: colors.primary, color: colors.secondary }}>
+                    {getTeamAbbr(p.team)}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground">{p.position}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-mono font-semibold">{(p.avgScore || 0).toFixed(0)}</p>
+                <p className="text-[9px] text-muted-foreground">${((p.price || 0) / 1000).toFixed(0)}K</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function MyTeam() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -1398,6 +1527,7 @@ export default function MyTeam() {
   const [visibleStats, setVisibleStats] = useState<StatKey[]>(DEFAULT_VISIBLE_STATS);
   const [sortBy, setSortBy] = useState<"position" | StatKey>("position");
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithTeamInfo | null>(null);
+  const [addSlot, setAddSlot] = useState<{ position: string; isOnField: boolean } | null>(null);
 
   const toggleStat = (key: StatKey) => {
     setVisibleStats(prev =>
@@ -1762,6 +1892,7 @@ export default function MyTeam() {
               <FieldView
                 teamPlayers={teamPlayers}
                 onTapPlayer={setSelectedPlayer}
+                onAddToSlot={(pos, onField) => setAddSlot({ position: pos, isOnField: onField })}
                 visibleStats={visibleStats}
                 playedTeams={playedTeams}
                 currentRound={currentRound}
@@ -1792,6 +1923,26 @@ export default function MyTeam() {
               teamPlayers={teamPlayers}
               salaryCap={salaryCap}
               onClose={() => setSelectedPlayer(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addSlot} onOpenChange={(open) => { if (!open) setAddSlot(null); }}>
+        <DialogContent className="max-w-sm mx-auto" data-testid="dialog-add-player-slot">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              Add Player — {addSlot?.position === "UTIL" ? "Utility" : addSlot?.position}
+            </DialogTitle>
+          </DialogHeader>
+          {addSlot && teamPlayers && (
+            <AddPlayerToSlotDialog
+              position={addSlot.position}
+              isOnField={addSlot.isOnField}
+              teamPlayers={teamPlayers}
+              salaryCap={salaryCap}
+              onClose={() => setAddSlot(null)}
             />
           )}
         </DialogContent>
