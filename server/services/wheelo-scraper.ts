@@ -48,6 +48,73 @@ function normalizeForMatch(name: string): string {
     .trim();
 }
 
+const COMMON_NAME_VARIANTS: Record<string, string[]> = {
+  "alix": ["alixzander", "alexander", "alex"],
+  "alixzander": ["alix"],
+  "sam": ["samuel"],
+  "samuel": ["sam"],
+  "chris": ["christopher"],
+  "christopher": ["chris"],
+  "will": ["william"],
+  "william": ["will"],
+  "tom": ["thomas"],
+  "thomas": ["tom"],
+  "ben": ["benjamin"],
+  "benjamin": ["ben"],
+  "josh": ["joshua"],
+  "joshua": ["josh"],
+  "matt": ["matthew"],
+  "matthew": ["matt"],
+  "nick": ["nicholas", "nicolas"],
+  "nicholas": ["nick"],
+  "dan": ["daniel"],
+  "daniel": ["dan"],
+  "max": ["maxwell"],
+  "maxwell": ["max"],
+  "jake": ["jacob"],
+  "jacob": ["jake"],
+  "joe": ["joseph"],
+  "joseph": ["joe"],
+  "jack": ["jackson", "john"],
+  "mitch": ["mitchell"],
+  "mitchell": ["mitch"],
+  "alex": ["alexander", "alixzander"],
+  "alexander": ["alex", "alix"],
+  "ed": ["edward", "edmund"],
+  "liam": ["william"],
+  "charlie": ["charles"],
+  "charles": ["charlie"],
+  "harry": ["harrison", "henry"],
+  "harrison": ["harry"],
+  "archie": ["archer", "archibald"],
+  "cal": ["callum", "caleb"],
+  "callum": ["cal"],
+  "cam": ["cameron", "campbell"],
+  "cameron": ["cam"],
+  "fin": ["finlay", "finnbar", "finn"],
+  "finlay": ["fin", "finn"],
+  "pat": ["patrick"],
+  "patrick": ["pat"],
+  "rob": ["robert"],
+  "robert": ["rob"],
+  "mike": ["michael"],
+  "michael": ["mike"],
+  "jim": ["james"],
+  "james": ["jim"],
+};
+
+function surnamesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const normalize = (s: string) => s
+    .replace(/ch$/, "c")
+    .replace(/ck$/, "c")
+    .replace(/[ck]$/, "")
+    .replace(/e$/, "");
+  const baseA = normalize(a);
+  const baseB = normalize(b);
+  return baseA === baseB && baseA.length >= 4;
+}
+
 export async function fetchAvailableRounds(year: number = new Date().getFullYear()): Promise<{ roundId: string; roundNumber: number; roundName: string }[]> {
   try {
     const res = await fetch(`${BASE_URL}/${year}.json`, {
@@ -145,7 +212,8 @@ export async function syncWheeloRound(roundId: string, ourRound: number): Promis
       if (!dbPlayer) {
         const parts = wheeloName.split(" ");
         const surname = parts[parts.length - 1].toLowerCase();
-        const initial = parts[0]?.[0]?.toLowerCase() || "";
+        const firstName = parts[0].toLowerCase();
+        const initial = firstName[0] || "";
         const candidates = lastNameTeamMap.get(`${surname}|${wheeloTeam}`) || [];
         if (candidates.length === 1) {
           dbPlayer = candidates[0];
@@ -154,11 +222,74 @@ export async function syncWheeloRound(roundId: string, ourRound: number): Promis
             c.name.split(" ")[0][0].toLowerCase() === initial
           );
         }
+
+        if (!dbPlayer) {
+          const firstNameVariants = COMMON_NAME_VARIANTS[firstName] || [];
+          const allFirstNames = [firstName, ...firstNameVariants];
+
+          const teamPlayers = allDbPlayers.filter(p => p.team === wheeloTeam);
+          for (const p of teamPlayers) {
+            const pParts = p.name.split(" ");
+            const pSurname = pParts[pParts.length - 1].toLowerCase();
+            const pFirst = pParts[0].toLowerCase();
+
+            if (surnamesMatch(surname, pSurname) && allFirstNames.includes(pFirst)) {
+              dbPlayer = p;
+              break;
+            }
+
+            const pFirstVariants = COMMON_NAME_VARIANTS[pFirst] || [];
+            if (pSurname === surname && pFirstVariants.includes(firstName)) {
+              dbPlayer = p;
+              break;
+            }
+          }
+        }
       }
 
       if (!dbPlayer) {
-        unmatched++;
-        continue;
+        const normWheelo = normalizeForMatch(wheeloName);
+        const anyTeamMatch = allDbPlayers.find(p => normalizeForMatch(p.name) === normWheelo);
+        if (anyTeamMatch) {
+          dbPlayer = anyTeamMatch;
+        } else {
+          const wheeloParts = wheeloName.split(" ");
+          const wheeloSurname = wheeloParts[wheeloParts.length - 1].toLowerCase();
+          const wheeloFirst = wheeloParts[0].toLowerCase();
+          const firstVariants = COMMON_NAME_VARIANTS[wheeloFirst] || [];
+          const allFirsts = [wheeloFirst, ...firstVariants];
+
+          const crossTeamFuzzy = allDbPlayers.find(p => {
+            const pParts = p.name.split(" ");
+            const pSurname = pParts[pParts.length - 1].toLowerCase();
+            const pFirst = pParts[0].toLowerCase();
+            if (!surnamesMatch(wheeloSurname, pSurname)) return false;
+            if (allFirsts.includes(pFirst)) return true;
+            const pVariants = COMMON_NAME_VARIANTS[pFirst] || [];
+            return pVariants.includes(wheeloFirst);
+          });
+
+          if (crossTeamFuzzy) {
+            dbPlayer = crossTeamFuzzy;
+          } else {
+            try {
+              const [inserted] = await db.insert(players).values({
+                name: wheeloName,
+                team: wheeloTeam,
+                position: "FWD",
+                price: 230000,
+                gamesPlayed: 0,
+              }).returning({ id: players.id });
+              dbPlayer = { ...inserted, name: wheeloName, team: wheeloTeam, position: "FWD", price: 230000 } as typeof allDbPlayers[0];
+              allDbPlayers.push(dbPlayer);
+              nameTeamMap.set(`${normWheelo}|${wheeloTeam}`, dbPlayer);
+              console.log(`[Wheelo] Added new player: ${wheeloName} (${wheeloTeam})`);
+            } catch (e: any) {
+              unmatched++;
+              continue;
+            }
+          }
+        }
       }
 
       matched++;

@@ -189,12 +189,13 @@ async function matchPlayerToDb(
   if (candidates.length === 0) {
     if (allDbPlayers) {
       const firstName = nameParts[0].toLowerCase();
-      const surnameBase = surname.toLowerCase().replace(/[ck]$/, "");
+      const normSurname = (s: string) => s.toLowerCase().replace(/ch$/, "c").replace(/ck$/, "c").replace(/[ck]$/, "").replace(/e$/, "");
+      const surnameBase = normSurname(surname);
       const fuzzy = allDbPlayers.filter(p => {
         if (p.team !== aflPlayer.team) return false;
         const pParts = p.name.split(" ");
         const pSurname = pParts[pParts.length - 1].toLowerCase();
-        const pSurnameBase = pSurname.replace(/[ck]$/, "");
+        const pSurnameBase = normSurname(pSurname);
         const pFirst = pParts[0].toLowerCase();
         return pSurnameBase === surnameBase && pFirst === firstName;
       });
