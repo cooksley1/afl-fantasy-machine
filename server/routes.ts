@@ -77,6 +77,16 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get("/api/data/status", async (_req, res) => {
+    try {
+      const { getSchedulerStatus } = await import("./scheduler");
+      const status = getSchedulerStatus();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.use("/api", (req, res, next) => {
     const publicPaths = ["/api/login", "/api/logout", "/api/callback", "/api/auth/user", "/api/auth/dev-login"];
     if (publicPaths.includes(req.path)) return next();
@@ -642,6 +652,16 @@ export async function registerRoutes(
         fieldPosition: p.fieldPosition,
       })));
       res.json({ success: true, teamSize: result.startingTeam.length, cost: result.startingTeamCost });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/data/refresh", async (_req, res) => {
+    try {
+      const { runManualRefresh } = await import("./scheduler");
+      const result = await runManualRefresh();
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

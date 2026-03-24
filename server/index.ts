@@ -116,10 +116,14 @@ app.use((req, res, next) => {
   await recalculatePlayerAverages();
   syncAflFantasyIds().catch(err => console.log(`[AflFantasySync] Background sync error: ${err.message}`));
 
+  const { markSourceSynced, setServerStartTime } = await import("./scheduler");
+  setServerStartTime();
+
   (async () => {
     try {
       const { syncAflFantasyPrices } = await import("./expand-players");
       const priceResult = await syncAflFantasyPrices();
+      markSourceSynced("aflFantasyPrices");
       if (priceResult.added > 0) {
         log(`AFL Fantasy sync added ${priceResult.added} new players to database`);
       }
@@ -129,6 +133,7 @@ app.use((req, res, next) => {
     try {
       const { syncDfsAustralia } = await import("./expand-players");
       const dfsResult = await syncDfsAustralia();
+      markSourceSynced("dfsAustralia");
       if (dfsResult.added > 0) {
         log(`DFS Australia sync added ${dfsResult.added} new players`);
       }
@@ -138,12 +143,14 @@ app.use((req, res, next) => {
     try {
       const { fetchFootywireData } = await import("./services/footywire-scraper");
       await fetchFootywireData();
+      markSourceSynced("footywire");
     } catch (err: any) {
       console.log(`[Footywire] Background sync error: ${err.message}`);
     }
     try {
       const { fetchDTLiveData } = await import("./services/dtlive-scraper");
       await fetchDTLiveData();
+      markSourceSynced("dtLive");
       await recalculatePlayerAverages();
     } catch (err: any) {
       console.log(`[DTLive] Background sync error: ${err.message}`);
@@ -151,6 +158,7 @@ app.use((req, res, next) => {
     try {
       const { fetchAflTablesHistoricalData } = await import("./services/afltables-scraper");
       await fetchAflTablesHistoricalData([2024, 2025]);
+      markSourceSynced("aflTables");
     } catch (err: any) {
       console.log(`[AflTables] Background sync error: ${err.message}`);
     }
@@ -159,19 +167,21 @@ app.use((req, res, next) => {
   import("./services/live-scores").then(async ({ fetchScoresForCompletedRounds, detectAndAdvanceRound }) => {
     const roundResult = await detectAndAdvanceRound();
     const scoreResult = await fetchScoresForCompletedRounds();
+    markSourceSynced("liveScores");
     if (scoreResult.roundsProcessed > 0) {
       await recalculatePlayerAverages();
     }
     try {
       const { syncWheeloRatings } = await import("./services/wheelo-scraper");
       await syncWheeloRatings();
+      markSourceSynced("wheelo");
     } catch (err: any) {
       console.log(`[Wheelo] Background sync error: ${err.message}`);
     }
   }).catch(err => console.log(`[LiveScores] Background score fetch error: ${err.message}`));
 
   const { fetchAndStoreFixtures } = await import("./services/fixture-service");
-  fetchAndStoreFixtures().catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
+  fetchAndStoreFixtures().then(() => markSourceSynced("fixtures")).catch(err => console.log(`[Fixtures] Background fetch error: ${err.message}`));
 
   const { seedTagData } = await import("./services/tag-intelligence");
   await seedTagData();

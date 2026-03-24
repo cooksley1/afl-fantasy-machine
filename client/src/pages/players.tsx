@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { LeagueSettings } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Player, PlayerWithTeamInfo } from "@shared/schema";
+import { DataStatusBar } from "@/components/data-status-bar";
 
 const AFL_TEAMS = [
   "All Teams",
@@ -457,6 +458,8 @@ export default function Players() {
           {filtered.length} players available
         </p>
       </div>
+
+      <DataStatusBar />
 
       {currentRound <= 1 && (
         <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-preseason-data">
