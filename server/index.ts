@@ -118,6 +118,15 @@ app.use((req, res, next) => {
 
   (async () => {
     try {
+      const { syncAflFantasyPrices } = await import("./expand-players");
+      const priceResult = await syncAflFantasyPrices();
+      if (priceResult.added > 0) {
+        log(`AFL Fantasy sync added ${priceResult.added} new players to database`);
+      }
+    } catch (err: any) {
+      console.log(`[AflPriceSync] Background sync error: ${err.message}`);
+    }
+    try {
       const { fetchFootywireData } = await import("./services/footywire-scraper");
       await fetchFootywireData();
     } catch (err: any) {

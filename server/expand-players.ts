@@ -157,6 +157,7 @@ const AFL_FANTASY_POSITION_MAP: Record<number, string> = {
 
 export async function syncAflFantasyPrices(): Promise<{
   updated: number;
+  added: number;
   priceChanges: Array<{ name: string; oldPrice: number; newPrice: number }>;
 }> {
   const aflPlayers = await fetchAflFantasyPlayers();
@@ -171,6 +172,13 @@ export async function syncAflFantasyPrices(): Promise<{
   }
 
   const dbPlayers = await db.select().from(players);
+  const dbByAflId = new Map<number, boolean>();
+  const dbByNormName = new Map<string, boolean>();
+  for (const p of dbPlayers) {
+    if (p.aflFantasyId) dbByAflId.set(p.aflFantasyId, true);
+    dbByNormName.set(normalizeNameForMatch(p.name), true);
+  }
+
   let updated = 0;
   const priceChanges: Array<{ name: string; oldPrice: number; newPrice: number }> = [];
 
@@ -210,14 +218,67 @@ export async function syncAflFantasyPrices(): Promise<{
     }
   }
 
-  console.log(`[AflPriceSync] Updated ${updated} players, ${priceChanges.length} price changes`);
+  let added = 0;
+  const newAflPlayers = aflPlayers.filter(ap => {
+    if (ap.cost <= 0) return false;
+    if (dbByAflId.has(ap.id)) return false;
+    const normName = normalizeNameForMatch(`${ap.first_name} ${ap.last_name}`);
+    if (dbByNormName.has(normName)) return false;
+    return true;
+  });
+
+  for (const ap of newAflPlayers) {
+    const fullName = `${ap.first_name} ${ap.last_name}`;
+    const team = AFL_FANTASY_SQUAD_MAP[ap.squad_id] || "Unknown";
+    const primaryPos = ap.positions.length > 0 ? (AFL_FANTASY_POSITION_MAP[ap.positions[0]] || "MID") : "MID";
+    const dualPos = ap.positions.length > 1 ? (AFL_FANTASY_POSITION_MAP[ap.positions[1]] || null) : null;
+    const byeRound = BYE_ROUNDS[team] || 12;
+    const venue = TEAM_VENUES[team] || "TBC";
+    const breakEven = deriveBreakEven(ap.cost, 0, 0, ap.cost);
+
+    try {
+      await db.insert(players).values({
+        name: fullName,
+        team,
+        position: primaryPos,
+        dualPosition: dualPos,
+        price: ap.cost,
+        startingPrice: ap.cost,
+        avgScore: 0,
+        last3Avg: 0,
+        last5Avg: 0,
+        seasonTotal: 0,
+        gamesPlayed: 0,
+        ownedByPercent: 0,
+        formTrend: "stable",
+        nextOpponent: null,
+        byeRound,
+        venue,
+        gameTime: null,
+        projectedScore: 0,
+        priceChange: 0,
+        breakEven,
+        ceilingScore: 0,
+        aflFantasyId: ap.id,
+      });
+      added++;
+    } catch (err: any) {
+      console.log(`[AflPriceSync] Failed to insert "${fullName}": ${err.message}`);
+    }
+  }
+
+  console.log(`[AflPriceSync] Updated ${updated} players, ${priceChanges.length} price changes, ${added} new players added`);
   if (priceChanges.length > 0 && priceChanges.length <= 30) {
     for (const pc of priceChanges) {
       console.log(`  ${pc.name}: $${pc.oldPrice.toLocaleString()} → $${pc.newPrice.toLocaleString()}`);
     }
   }
+  if (added > 0) {
+    const addedNames = newAflPlayers.slice(0, 10).map(ap => `${ap.first_name} ${ap.last_name}`);
+    console.log(`[AflPriceSync] New players: ${addedNames.join(", ")}${newAflPlayers.length > 10 ? ` +${newAflPlayers.length - 10} more` : ""}`);
+  }
 
-  return { updated, priceChanges };
+  return { updated, added, priceChanges };
 }
 
 function deriveFormTrend(l5Avg: number, regAvg: number): string {

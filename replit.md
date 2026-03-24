@@ -57,7 +57,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Player Alerts**: Generates typed alerts (injury, late_change, selection, role_change, news) when intel reports mention players on a user's team, displayed via a notification system.
 - **Live Scores**: Tracks live match statuses and fantasy scores using a three-source pipeline (Footywire, Squiggle, DTLive) with smart live polling. Includes a Head-to-Head Matchup View against league opponents.
 - **Season Schedule**: Displays the full AFL season fixture, with clickable completed/live matches providing AI-generated fantasy synopses.
-- **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
+- **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens. The AFL Fantasy API sync (`syncAflFantasyPrices`) dynamically adds new players not yet in the database on each startup, ensuring debutants and newly listed players are available for matching.
 - **Team Upload & Analyser**: Allows AI-powered analysis and saving of teams from uploaded screenshots, leveraging GPT-4o vision for OCR and fuzzy matching for player identification.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
 - **Season Planner**: Algorithmically builds optimal 30-man squads and generates 24-round strategy documents.

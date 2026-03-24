@@ -1073,6 +1073,22 @@ export async function registerRoutes(
           return { match: best.player };
         }
 
+        const teamFiltered = inputTeamNorm ? players.filter(p => {
+          const pt = normalizeTeam(p.team);
+          return pt === inputTeamNorm || pt.includes(inputTeamNorm) || inputTeamNorm.includes(pt);
+        }) : [];
+        if (teamFiltered.length > 0) {
+          let bestTeamMatch: typeof allPlayers[0] | null = null;
+          let bestTeamDist = Infinity;
+          for (const p of teamFiltered) {
+            const dist = levenshtein(p.name.toLowerCase(), normalName);
+            if (dist < bestTeamDist) { bestTeamDist = dist; bestTeamMatch = p; }
+          }
+          if (bestTeamMatch && bestTeamDist <= Math.max(4, Math.floor(normalName.length * 0.4))) {
+            return { match: bestTeamMatch };
+          }
+        }
+
         let bestMatch: typeof allPlayers[0] | null = null;
         let bestDist = Infinity;
         for (const p of players) {
