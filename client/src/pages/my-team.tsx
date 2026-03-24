@@ -55,6 +55,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, Player, LeagueSettings, Fixture } from "@shared/schema";
+import { DataStatusBar } from "@/components/data-status-bar";
 
 type StatKey = "avg" | "l3" | "be" | "proj" | "priceChange" | "price" | "last";
 
@@ -68,7 +69,7 @@ const STAT_OPTIONS: { key: StatKey; label: string; shortLabel: string }[] = [
   { key: "priceChange", label: "Price Change", shortLabel: "+/-" },
 ];
 
-const DEFAULT_VISIBLE_STATS: StatKey[] = ["last", "avg", "be"];
+const DEFAULT_VISIBLE_STATS: StatKey[] = ["last", "avg", "be", "price"];
 
 interface PlayerAdvice {
   name: string;
@@ -1685,6 +1686,8 @@ export default function MyTeam() {
           </div>
         </div>
       </div>
+
+      <DataStatusBar />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
