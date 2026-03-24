@@ -127,6 +127,15 @@ app.use((req, res, next) => {
       console.log(`[AflPriceSync] Background sync error: ${err.message}`);
     }
     try {
+      const { syncDfsAustralia } = await import("./expand-players");
+      const dfsResult = await syncDfsAustralia();
+      if (dfsResult.added > 0) {
+        log(`DFS Australia sync added ${dfsResult.added} new players`);
+      }
+    } catch (err: any) {
+      console.log(`[DfsAustralia] Background sync error: ${err.message}`);
+    }
+    try {
       const { fetchFootywireData } = await import("./services/footywire-scraper");
       await fetchFootywireData();
     } catch (err: any) {

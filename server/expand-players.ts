@@ -64,6 +64,23 @@ const TEAM_VENUES: Record<string, string> = {
   "West Coast": "Optus Stadium", "Western Bulldogs": "Marvel Stadium",
 };
 
+const DFS_TEAM_MAP: Record<string, string> = {
+  "ADE": "Adelaide", "BRL": "Brisbane Lions", "CAR": "Carlton", "COL": "Collingwood",
+  "ESS": "Essendon", "FRE": "Fremantle", "GEE": "Geelong", "GCS": "Gold Coast",
+  "GWS": "GWS Giants", "HAW": "Hawthorn", "MEL": "Melbourne", "NTH": "North Melbourne",
+  "PTA": "Port Adelaide", "RIC": "Richmond", "STK": "St Kilda", "SYD": "Sydney",
+  "WCE": "West Coast", "WBD": "Western Bulldogs",
+};
+
+function parseDfsPosition(pos: string): { primary: string; dual: string | null } {
+  if (!pos) return { primary: "MID", dual: null };
+  const parts = pos.split("/").map(p => p.trim().toUpperCase());
+  const validPositions = ["DEF", "MID", "RUC", "FWD"];
+  const primary = validPositions.includes(parts[0]) ? parts[0] : "MID";
+  const dual = parts.length > 1 && validPositions.includes(parts[1]) ? parts[1] : null;
+  return { primary, dual };
+}
+
 interface AflFantasyPlayer {
   id: number;
   first_name: string;
@@ -337,6 +354,155 @@ export async function syncAflFantasyPrices(): Promise<{
   }
 
   return { updated, added, priceChanges };
+}
+
+export async function syncDfsAustralia(): Promise<{ updated: number; added: number }> {
+  try {
+    const XLSX = await import("xlsx");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch("https://dfsaustralia.com/wp-content/uploads/file-downloads/afl-fantasy-2026.xlsx", {
+      headers: { "User-Agent": "Mozilla/5.0", "Accept-Encoding": "gzip, deflate" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`DFS Australia returned ${res.status}`);
+
+    const buffer = await res.arrayBuffer();
+    const workbook = XLSX.read(Buffer.from(buffer), { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    let headerRow = -1;
+    for (let i = 0; i < 20; i++) {
+      if (data[i] && data[i][0] === "Player") { headerRow = i; break; }
+    }
+    if (headerRow < 0) throw new Error("Could not find header row in DFS spreadsheet");
+
+    interface DfsPlayer {
+      name: string;
+      aflFantasyId: number;
+      team: string;
+      salary: number;
+      position: string;
+      owned: number;
+      gamesPlayed: number;
+      avgScore: number;
+      maxScore: number;
+      cbaPercent: number;
+      ppm: number;
+      regAvg: number;
+      l5Avg: number;
+      prev2024: number;
+      prev2023: number;
+    }
+
+    const dfsPlayers: DfsPlayer[] = [];
+    for (let i = headerRow + 1; i < data.length; i++) {
+      const r = data[i];
+      if (!r || !r[0] || !r[3]) continue;
+      const cdId = r[1] ? String(r[1]).replace("CD_I", "") : "";
+      const aflId = parseInt(cdId) || 0;
+      if (!aflId) continue;
+      const teamAbbr = String(r[3]).trim();
+      const team = DFS_TEAM_MAP[teamAbbr] || teamAbbr;
+      dfsPlayers.push({
+        name: String(r[0]).trim(),
+        aflFantasyId: aflId,
+        team,
+        salary: parseInt(r[4]) || 0,
+        position: String(r[6] || "MID").trim(),
+        owned: parseFloat(r[5]) || 0,
+        gamesPlayed: parseInt(r[7]) || 0,
+        avgScore: parseFloat(r[8]) || 0,
+        maxScore: parseInt(r[9]) || 0,
+        cbaPercent: parseFloat(r[12]) || 0,
+        ppm: parseFloat(r[13]) || 0,
+        regAvg: parseFloat(r[14]) || 0,
+        l5Avg: parseFloat(r[15]) || 0,
+        prev2024: parseFloat(r[17]) || 0,
+        prev2023: parseFloat(r[18]) || 0,
+      });
+    }
+
+    console.log(`[DfsAustralia] Parsed ${dfsPlayers.length} players from spreadsheet`);
+
+    const allDbPlayers = await db.select().from(players);
+    const dbByAflId = new Map(allDbPlayers.filter(p => p.aflFantasyId).map(p => [p.aflFantasyId!, p]));
+    const dbByName = new Map(allDbPlayers.map(p => [normalizeNameForMatch(p.name), p]));
+
+    let updated = 0;
+    let added = 0;
+
+    for (const dp of dfsPlayers) {
+      const { primary: primaryPos, dual: dualPos } = parseDfsPosition(dp.position);
+      let dbPlayer = dbByAflId.get(dp.aflFantasyId) || dbByName.get(normalizeNameForMatch(dp.name));
+
+      if (dbPlayer) {
+        const updates: Record<string, any> = {};
+        if (!dbPlayer.aflFantasyId) updates.aflFantasyId = dp.aflFantasyId;
+        if (dp.team && dp.team !== dbPlayer.team) {
+          updates.team = dp.team;
+          updates.byeRound = BYE_ROUNDS[dp.team] || dbPlayer.byeRound;
+          updates.venue = TEAM_VENUES[dp.team] || dbPlayer.venue;
+        }
+        if (primaryPos !== dbPlayer.position) updates.position = primaryPos;
+        if (dualPos !== (dbPlayer.dualPosition || null)) updates.dualPosition = dualPos;
+        if (dp.salary > 0 && Math.abs(dp.salary - dbPlayer.price) >= 1000) {
+          updates.price = dp.salary;
+          if (!dbPlayer.startingPrice) updates.startingPrice = dp.salary;
+        }
+        if (dp.owned > 0) updates.ownedByPercent = Math.round(dp.owned * 1000) / 10;
+        if (dp.ppm > 0 && !dbPlayer.ppm) updates.ppm = dp.ppm;
+
+        if (Object.keys(updates).length > 0) {
+          await db.update(players).set(updates).where(eq(players.id, dbPlayer.id));
+          updated++;
+        }
+      } else {
+        const byeRound = BYE_ROUNDS[dp.team] || 12;
+        const venue = TEAM_VENUES[dp.team] || "TBC";
+        const be = deriveBreakEven(dp.salary, dp.avgScore, dp.gamesPlayed, dp.salary);
+        try {
+          await db.insert(players).values({
+            name: dp.name,
+            team: dp.team,
+            position: primaryPos,
+            dualPosition: dualPos,
+            price: dp.salary,
+            startingPrice: dp.salary,
+            avgScore: dp.avgScore,
+            last3Avg: dp.l5Avg || dp.avgScore,
+            last5Avg: dp.l5Avg || dp.avgScore,
+            seasonTotal: Math.round(dp.avgScore * dp.gamesPlayed),
+            gamesPlayed: dp.gamesPlayed,
+            ownedByPercent: Math.round(dp.owned * 1000) / 10,
+            formTrend: deriveFormTrend(dp.l5Avg || dp.avgScore, dp.regAvg || dp.avgScore),
+            nextOpponent: null,
+            byeRound,
+            venue,
+            gameTime: null,
+            projectedScore: dp.avgScore,
+            priceChange: 0,
+            breakEven: be,
+            ceilingScore: dp.maxScore || 0,
+            aflFantasyId: dp.aflFantasyId,
+          });
+          added++;
+        } catch (err: any) {
+          if (!err.message.includes("duplicate")) {
+            console.log(`[DfsAustralia] Failed to insert "${dp.name}": ${err.message}`);
+          }
+        }
+      }
+    }
+
+    console.log(`[DfsAustralia] Updated ${updated} players, added ${added} new players`);
+    return { updated, added };
+  } catch (err: any) {
+    console.log(`[DfsAustralia] Sync failed: ${err.message}`);
+    return { updated: 0, added: 0 };
+  }
 }
 
 function deriveFormTrend(l5Avg: number, regAvg: number): string {
