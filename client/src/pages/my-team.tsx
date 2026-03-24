@@ -462,7 +462,6 @@ function FieldView({
     MID: { onField: 8, bench: 2 },
     RUC: { onField: 2, bench: 1 },
     FWD: { onField: 6, bench: 2 },
-    UTIL: { onField: 1, bench: 0 },
   };
 
   return (
@@ -522,21 +521,18 @@ function FieldView({
 
       <div className="relative" data-testid="field-group-util">
         <div className="flex items-center gap-1 mb-1.5">
-          <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider px-2">
-            UTILITY
+          <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider px-2">
+            UTILITY (Bench)
           </span>
           <div className="flex-1 h-px bg-border/40" />
         </div>
         <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
-          {utilPlayers.filter(p => p.isOnField).map((p) => (
-            <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
-          ))}
-          {utilPlayers.filter(p => p.isOnField).length === 0 && (
-            <EmptyFieldCard position="UTIL" isBench={false} />
-          )}
-          {utilPlayers.filter(p => !p.isOnField).map((p) => (
+          {utilPlayers.map((p) => (
             <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={true} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
           ))}
+          {utilPlayers.length === 0 && (
+            <EmptyFieldCard position="UTIL" isBench={true} />
+          )}
         </div>
       </div>
     </div>
@@ -760,12 +756,39 @@ function ListView({
     MID: { onField: 8, bench: 2 },
     RUC: { onField: 2, bench: 1 },
     FWD: { onField: 6, bench: 2 },
-    UTIL: { onField: 1, bench: 0 },
   };
 
   return (
     <div className="space-y-0" data-testid="view-list">
       {positionGroups.map((pos) => {
+        if (pos === "UTIL") {
+          const utilPlayers = teamPlayers.filter((p) => p.fieldPosition === "UTIL");
+          return (
+            <div key={pos}>
+              <div className="bg-muted/60 px-3 py-1.5 border-y border-border/40">
+                <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase">Utility (Bench)</span>
+              </div>
+              <div>
+                {utilPlayers.map((player) => (
+                  <ListViewRow
+                    key={player.myTeamPlayerId}
+                    player={player}
+                    advice={getAdvice(player.id)}
+                    onTapPlayer={onTapPlayer}
+                    onSetCaptain={onSetCaptain}
+                    onSetViceCaptain={onSetViceCaptain}
+                    hasPlayed={playedTeams.has(player.team)}
+                    currentRound={currentRound}
+                  />
+                ))}
+                {utilPlayers.length === 0 && (
+                  <EmptySlot position="UTIL" label="Empty Utility Slot" />
+                )}
+              </div>
+            </div>
+          );
+        }
+
         const players = teamPlayers.filter((p) => p.fieldPosition === pos);
         const onField = players.filter((p) => p.isOnField);
         const bench = players.filter((p) => !p.isOnField);

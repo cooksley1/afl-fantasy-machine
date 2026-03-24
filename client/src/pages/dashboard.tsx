@@ -166,10 +166,11 @@ export default function Dashboard() {
   const unknownSelectionCount = onFieldPlayers.filter(
     (p) => p.selectionStatus === "unknown"
   ).length;
-  const byeRounds = gameRules?.byeRounds || [12, 13, 14];
-  const isByeRound = byeRounds.includes(currentRound);
+  const regularByeRounds = gameRules?.regularByeRounds || [12, 13, 14];
+  const earlyByeRounds = gameRules?.earlyByeRounds || [2, 3, 4];
+  const isByeRoundNow = regularByeRounds.includes(currentRound) || earlyByeRounds.includes(currentRound);
   const tradesThisRound = settings?.tradesRemaining || 0;
-  const maxTradesThisRound = currentRound < (gameRules?.trades?.startFromRound || 2) ? 0 : isByeRound ? (gameRules?.trades?.perByeRound || 3) : (gameRules?.trades?.perRound || 2);
+  const maxTradesThisRound = currentRound < (gameRules?.trades?.startFromRound || 2) ? 0 : regularByeRounds.includes(currentRound) ? (gameRules?.trades?.perRegularByeRound || 3) : (gameRules?.trades?.perRound || 2);
 
   const coldPlayers = onFieldPlayers
     .filter((p) => (p.gamesPlayed ?? 0) >= 3 && (p.formTrend === "down" || (p.last3Avg || 0) < (p.avgScore || 0) * 0.85))
@@ -306,7 +307,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
             <Badge variant="outline" className="text-xs" data-testid="badge-round">
               <CircleDot className="w-3 h-3 mr-1" />
-              R{currentRound}{isByeRound ? " (Bye)" : ""}
+              R{currentRound}{isByeRoundNow ? " (Bye)" : ""}
             </Badge>
             <span className="text-sm font-semibold" data-testid="text-team-name">{settings?.teamName || "My Team"}</span>
             <div className="flex items-center gap-1.5 ml-auto flex-wrap">

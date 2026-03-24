@@ -1,7 +1,7 @@
 # AFL Fantasy Machine
 
 ## Overview
-A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade recommendations, and strategic intelligence for managing fantasy football teams. Its core purpose is to enhance user decision-making through features like captain loophole strategies, DPP exploitation, break-even analysis, volatility-based projections, Trade EV calculations, late change monitoring, and AI-driven team analysis and scouting reports, automating live data gathering and supporting rolling lockout decision trees.
+A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade recommendations, and strategic intelligence for managing fantasy football teams. Its core purpose is to enhance user decision-making through features like captain loophole strategies, DPP exploitation, break-even analysis, volatility-based projections, Trade EV calculations, late change monitoring, and AI-driven team analysis and scouting reports. The project aims to automate live data gathering and support rolling lockout decision trees, offering a significant market advantage by providing comprehensive, AI-powered fantasy football management tools.
 
 ## User Preferences
 - I prefer clear and concise explanations.
@@ -12,29 +12,32 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - Do not make changes to files in the `server/services/__tests__/` directory.
 - Do not make changes to the `vitest.config.ts` file.
 
+## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
+- **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
+- **Utility**: UTIL is a BENCH-ONLY position. Can hold any position (DEF/MID/RUC/FWD). Never on-field. `isOnField` always false for UTIL.
+- **Scoring**: Kick 3, Handball 2, Mark 3, Tackle 4, Hitout 1, Goal 6, Behind 1, Free For 1, Free Against -3.
+- **Trades**: Standard rounds 2, Early Bye rounds (R2-R4) 2, Regular Bye rounds (R12-R14) 3. Starts Round 2.
+- **Bye Rounds**: Early Byes R2-R4, Regular Byes R12-R14. Both use Best-18 scoring (top 18 on-field scores count).
+- **TOG Threshold**: 50% — below may be replaced by higher-scoring emergency. Captain below 50%: doubled score = higher of Captain/VC. Emergencies never doubled.
+- **Positions**: SPP (single), DPP (dual, permanent), TPP (triple, new 2026, permanent).
+- **Rolling Lockout**: Players lock at real match start. Unlocked players remain tradeable.
+- **Opening Round (R0)**: Not a Fantasy round. No lockouts, no scores count. Contributes to first price change.
+- **Price Changes**: After Round 1. Recent performance weighted more. Opening Round contributes.
+- **Leagues H2H**: Win 4pts, Tie 2pts, Loss 0pts.
+- **Advanced Trade-Editing**: Revise/reverse saved trades. Rollback available pre-lockout. No player traded out and back in same round.
+- **Salary Cap**: $18.3M.
+
 ## System Architecture
 The application features a mobile-first, responsive design with a custom navy/gold AFL-themed color scheme and dark mode support.
 
 ### Authentication & User Isolation
-Replit Auth (OpenID Connect) handles authentication for Google, Apple, GitHub, X, and email/password. All API routes, except authentication endpoints, are protected. User sessions are stored in a PostgreSQL `sessions` table.
-
-**User data isolation**: All user-scoped tables (`my_team_players`, `trade_recommendations`, `league_settings`, `saved_teams`, `league_opponents`) include a `userId` column. All storage methods and route handlers pass `userId` from the session to ensure each user's data is isolated.
-
-**Admin impersonation**: Admin users can impersonate other users via `POST /api/admin/impersonate/:id` and `POST /api/admin/stop-impersonation`. The impersonated userId is stored in `req.session.impersonateUserId`. Routes use `getEffectiveUserId(req)` which returns the impersonated user if set, otherwise the real user. An amber banner is shown in the frontend when impersonation is active.
-
-**User details**: The `users` table captures `replitUsername`, `lastLoginAt`, `loginCount`, `lastUserAgent`, and `lastIpAddress` on login via the auth callback.
+Replit Auth (OpenID Connect) manages authentication. All API routes, except authentication endpoints, are protected. User sessions are stored in a PostgreSQL `sessions` table. User data isolation is enforced through `userId` columns in all user-scoped tables and by passing `userId` from the session to storage methods and route handlers. Admin users can impersonate other users, with the system indicating active impersonation in the frontend.
 
 ### Frontend
-Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. **Player Report** redesigned as an AFL Fantasy-style tabbed view with: Overview (price changes, averages, highest/lowest, ownership), Match Stats (expandable round-by-round detail with kicks/handballs/marks/tackles/hitouts/goals/behinds), Fixture Stats (season history table + upcoming fixtures), Opposition (avg stats vs each opponent), Venue (avg stats at each ground), and AI Report (GPT-generated verdict/analysis loaded on demand). Players are tappable from H2H matchup, My Team, and other views. A 3-step onboarding wizard guides new users through welcome, league settings, and team import options. The application incorporates detailed player availability and selection status logic, providing alerts for injuries, omissions, and emergencies.
+Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. The **Player Report** offers a tabbed view with Overview, Match Stats, Fixture Stats, Opposition, Venue, and AI Report (GPT-generated analysis loaded on demand). Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users. The application incorporates detailed player availability and selection status logic.
 
 ### My Team Player Management
-Tapping any player on the My Team page opens an action dialog with:
-- **View Report** — navigate to full player analysis
-- **Swap with Teammate** — swap positions/field-bench status with an eligible teammate (validates position eligibility via player.position and dualPosition)
-- **Replace with Database Player** — replace with any eligible player from the full database (filtered by position and salary cap budget)
-- **Set Captain / Vice Captain** — assign captaincy roles
-- **Remove from Team** — delete player with confirmation
-API routes: `PATCH /api/my-team/:id`, `POST /api/my-team/swap`, `POST /api/my-team/:id/replace`. Storage method: `updateMyTeamPlayer(id, data)`.
+Players on the My Team page are interactive, allowing actions like viewing reports, swapping with teammates (validating position eligibility), replacing with database players (filtered by position and budget), setting captaincy, or removing players.
 
 ### Backend
 An Express.js and Node.js server manages API requests, file uploads, and service integrations.
@@ -43,64 +46,34 @@ An Express.js and Node.js server manages API requests, file uploads, and service
 PostgreSQL with Drizzle ORM stores all application data, including player statistics, projections, user teams, and intelligence reports.
 
 ### AI Integration
-Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screenshot analysis, leveraging Replit AI Integrations. AI prompts use smart player selection (`selectRelevantPlayers`) and compact summaries (`buildCompactPlayerSummary`) to stay within the 128K token context window — only the top ~200 most relevant players (by score, form, cash cow potential, DPP, injury status) are sent rather than all 800+.
+Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screenshot analysis via Replit AI Integrations. AI prompts use smart player selection and compact summaries to manage token context windows.
 
 ### Core Features
-- **Projection Engine**: Calculates player projections, volatility, and Trade EV using configurable weights.
+- **Projection Engine**: Calculates player projections, volatility, and Trade EV.
 - **Simulation Engine**: Provides Monte Carlo simulations for round scores.
-- **Trade Engine**: Offers comprehensive trade recommendations based on various factors and phase-specific strategies.
-- **Tag Intelligence System**: Provides evidence-based tag warnings by analyzing team tag profiles and historical matchup data.
-- **Fixture Sync**: On startup, fetches real fixtures from Squiggle API, stores in `fixtures` table, then syncs all player records (nextOpponent, venue, gameTime) from Squiggle data. Team name mapping handles Squiggle→app differences (e.g. "Greater Western Sydney"→"GWS Giants"). Venue names normalised (e.g. "M.C.G."→"MCG", "Docklands"→"Marvel Stadium").
-- **Player Alerts**: Cross-references intel reports against users' team players. When an intel report mentions a player on your team (by name matching), generates a typed alert (injury/late_change/selection/role_change/news). Alerts are generated after every intel processing cycle. Frontend shows a notification bell in the sidebar header with unread count badge; tapping opens the `/alerts` page. Alerts auto-refresh every 60 seconds. Table: `player_alerts`. Routes: `GET /api/player-alerts`, `GET /api/player-alerts/count`, `PATCH /api/player-alerts/:id/read`, `POST /api/player-alerts/read-all`, `POST /api/player-alerts/check`. Backend: `server/alert-generator.ts`.
-- **Data Gathering**: Automates fetching live data from Squiggle API, AFL.com.au, and AFL club news feeds.
-- **Live Scores**: Tracks live match statuses and fantasy scores. Three-source pipeline: Footywire (detailed stats), Squiggle (supplemental), then DTLive (fantasy scores only, fills gaps). Completed round detection uses league settings (currentRound) as primary + Squiggle as supplemental. Historical round data is fetched once and stored — not re-fetched on restarts. **Smart live polling**: `getActiveGameWindows()` detects live/just-finished/upcoming-soon games; frontend poll interval adjusts dynamically (30s live, 45s just finished, 60s upcoming soon, 120s idle). Server-side scheduler auto-fetches player scores every 2 minutes when games are active (including 15 minutes post-game). **H2H Matchup View**: Head-to-head live comparison against league opponents, showing both teams side-by-side by position (DEF/MID/RUC/FWD/Bench/Utility) with live scores, projected totals, and forecast totals. Accessible from Live Scores page via opponent buttons.
-- **Season Schedule**: Fetches and displays the full AFL season fixture. Completed/live matches are clickable — tapping opens an AI-generated fantasy synopsis dialog showing top performers, key observations (role changes, injuries, tagging, breakouts, busts), and a link to match highlights.
+- **Trade Engine**: Offers comprehensive trade recommendations.
+- **Tag Intelligence System**: Provides evidence-based tag warnings.
+- **Fixture Sync**: Fetches and syncs real fixtures and player data from Squiggle API.
+- **Player Alerts**: Generates typed alerts (injury, late_change, selection, role_change, news) when intel reports mention players on a user's team, displayed via a notification system.
+- **Live Scores**: Tracks live match statuses and fantasy scores using a three-source pipeline (Footywire, Squiggle, DTLive) with smart live polling. Includes a Head-to-Head Matchup View against league opponents.
+- **Season Schedule**: Displays the full AFL season fixture, with clickable completed/live matches providing AI-generated fantasy synopses.
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens.
-- **Team Upload & Analyser**: Allows users to upload team screenshots for AI analysis and saving identified players. OCR uses GPT-4o vision with strict prompting to avoid hallucinated players. The AI extracts on-field vs interchange (bench) status, Captain (C), Vice-Captain (V), Emergency (E) badges, and UTIL position directly from the screenshot layout. The save route respects the AI's field/bench assignment when available — if AI provides `isOnField` data, positions are saved exactly as shown in the screenshot rather than being guessed by average score. Fuzzy matching uses Levenshtein distance with tight thresholds (max 25% of name length), with improved disambiguation for duplicate surnames (e.g. two Carrolls, two Lindsays) by matching first-name initials before falling back to full-name Levenshtein. DB prices are the source of truth — screenshot prices are not used to override DB values. A "Clear Team" button (with confirmation dialog) allows users to wipe their entire team and re-upload fresh. "Load Glen's Team" loads a preset squad ($17.611M) matching the user's current AFL Fantasy Classic team.
+- **Team Upload & Analyser**: Allows AI-powered analysis and saving of teams from uploaded screenshots, leveraging GPT-4o vision for OCR and fuzzy matching for player identification.
 - **Trade Optimizer**: Evaluates trades based on Points EV, Price EV, and Strategic EV.
-- **Season Planner**: Algorithmically builds optimal 30-man squads and generates comprehensive 24-round strategy documents with player narratives, trade reasoning, and winner benchmarks. `buildOptimalTeam` accepts optional `excludePlayerIds` and `variationSeed` for generating distinct team variants.
-- **Dream Team Reverse Engineer**: Builds the best possible 30-player squad ignoring the salary cap, then reverse-engineers a budget-compliant starting team using stepping-stone cash cows. Generates a round-by-round trade path showing when each upgrade becomes affordable via cash generation. API: `GET /api/dream-team/reverse-engineer`, `POST /api/dream-team/activate-starting`. UI at `/dream` with three tabs: Dream Team, Starting Squad, Trade Path Timeline.
-- **Team Lab (Sandbox)**: Save, create, compare, and swap between multiple team configurations. AI-built teams exclude ~40% of current premiums and use seeded scoring variation to generate genuinely different alternatives. Compare any saved team side-by-side with the active team showing player overlaps, score diffs, and value diffs. Activate any saved team to make it the main team.
-- **Game Day Guide**: Step-by-step transfer checklist for updating the official AFL Fantasy app. Lists trades (out→in), captain/VC picks, field/bench swaps needed, and numbered instructions. Copy-to-clipboard and Web Share API support. Checkable items stored in localStorage.
-- **League Spy**: Track opponents across multiple fantasy leagues. Add opponents manually or bulk-import an entire league from a ladder screenshot. Upload opponent team screenshots for AI analysis, then get matchup breakdowns: projected advantage, unique picks each side, captain differential tips, and weekly win strategy advice. Includes a league ladder view with positions, total scores, last round scores, and the user's own team highlighted.
-- **PWA Support**: Installable as a mobile app via manifest.json and service worker. Supports "Add to Home Screen" on iOS and Android. Static assets cached for offline use; API calls are never cached.
-
-### New DB Tables (Team Lab / League Spy)
-- `saved_teams`: id, name, description, playerData (JSON), teamValue, projectedScore, isActive, source, createdAt
-- `league_opponents`: id, leagueName, opponentName, playerData (JSON), totalScore, lastRoundScore, notes, createdAt
-
-### New API Routes
-- `GET/POST /api/saved-teams` — list and create saved teams
-- `POST /api/saved-teams/from-wizard` — AI-build a new team variant without changing active team
-- `PUT/DELETE /api/saved-teams/:id` — update/delete saved teams
-- `POST /api/saved-teams/:id/activate` — activate a saved team (loads into my_team_players)
-- `GET /api/saved-teams/:id/compare` — compare saved team vs active team
-- `GET/POST /api/league/opponents` — list and create league opponents
-- `PUT/DELETE /api/league/opponents/:id` — update/delete opponents
-- `POST /api/league/import-screenshot` — upload league ladder screenshot for AI extraction
-- `POST /api/league/import-bulk` — bulk-create opponents from extracted league data
-- `POST /api/league/opponents/:id/analyze-screenshot` — upload opponent team screenshot
-- `GET /api/league/opponents/:id/matchup` — matchup analysis vs your team
-- `GET /api/league/opponents/:id/live-matchup` — live H2H matchup with scores by position
-- `GET /api/players/:id/detailed-stats` — comprehensive player stats (match history, opponent/venue breakdowns, overview metrics, upcoming fixtures)
-- `GET /api/live-scores/active-windows` — detect active/just-finished/upcoming games for smart polling
-- `DELETE /api/my-team` — clear entire team (remove all players)
-- `GET /api/game-day-guide` — generate game day transfer checklist
-- `GET /api/weekly-plan` — synthesized weekly coaching directive with prioritized steps
-
-### New Frontend Pages
-- `/sandbox` — Team Lab (saved teams management, comparison, activation)
-- `/game-day` — Game Day Guide (transfer checklist with copy/share)
-- `/league` — League Spy (opponent tracking, screenshot upload, matchup analysis)
+- **Season Planner**: Algorithmically builds optimal 30-man squads and generates 24-round strategy documents.
+- **Dream Team Reverse Engineer**: Builds optimal 30-player squads ignoring salary cap, then reverse-engineers a budget-compliant starting team with round-by-round trade paths.
+- **Team Lab (Sandbox)**: Allows users to save, create, compare, and swap between multiple team configurations.
+- **Game Day Guide**: Provides a step-by-step transfer checklist for updating the official AFL Fantasy app.
+- **League Spy**: Enables tracking opponents across multiple fantasy leagues, including AI-powered analysis of opponent team screenshots and matchup breakdowns.
+- **PWA Support**: Installable as a mobile app with offline caching of static assets.
 
 ## External Dependencies
-- **OpenAI API**: For GPT-4o-mini (text analysis) and GPT-4o (vision/screenshot analysis).
+- **OpenAI API**: For GPT-4o-mini and GPT-4o.
 - **Squiggle API**: Provides AFL fixtures, tips, and ladder data.
 - **AFL.com.au RSS**: Source for official AFL news.
-- **Google News RSS**: Gathers news from all 18 AFL club feeds.
-- **AFL Fantasy API**: Used for player headshot photos.
-- **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores (230 top players).
-- **Footywire (footywire.com)**: Scraped for comprehensive AFL Fantasy prices (791 players). Requires browser User-Agent header. Admin route: `POST /api/players/sync-footywire`.
-- **AFL Fantasy Price Sync**: `syncAflFantasyPrices()` in `expand-players.ts` syncs prices from the AFL Fantasy API. Admin route: `POST /api/players/sync-prices`.
-- **AflTables (afltables.com)**: Scraped for historical player stats (2024-2025 seasons). Provides games played, time on ground, disposals, tackles, clearances, goals, marks, durability scores, and years of experience. Admin route: `POST /api/players/sync-afltables`.
-- **PostgreSQL**: The primary database for all application data.
+- **Google News RSS**: Gathers news from AFL club feeds.
+- **AFL Fantasy API**: Used for player headshots and price syncing.
+- **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores.
+- **Footywire (footywire.com)**: Scraped for comprehensive AFL Fantasy prices.
+- **AflTables (afltables.com)**: Scraped for historical player stats.
+- **PostgreSQL**: The primary database.

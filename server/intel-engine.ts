@@ -474,9 +474,8 @@ CRITICAL LAYOUT RULES — ON-FIELD vs INTERCHANGE:
 - The AFL Fantasy team screenshot has a clear layout: on-field players appear in the LEFT columns, and interchange (bench) players appear in a column on the RIGHT side, usually labelled "INTERCHANGE".
 - For each position row (DEFENDERS, MIDFIELDERS, RUCKS, FORWARDS), there are on-field players on the left and interchange/bench players on the right.
 - You MUST set "isOnField": true for players in the left/main area and "isOnField": false for players in the INTERCHANGE column on the right.
-- The UTILITY row at the bottom typically has 1 on-field player on the left and 1 interchange player on the right. The on-field UTILITY player's position should be "UTIL".
-- The interchange UTILITY player's position should also be "UTIL" with "isOnField": false.
-- Standard squad structure: DEF 6 on-field + 2 interchange, MID 8 on-field + 2 interchange, RUC 2 on-field + 1 interchange, FWD 6 on-field + 2 interchange, UTIL 1 on-field + 0-1 interchange = 30 total.
+- The UTILITY row at the bottom is always a BENCH position. Any player in the UTILITY row should have position "UTIL" and "isOnField": false. Utility is a bench-only slot that can hold any position (DEF, MID, RUC or FWD).
+- Standard squad structure: DEF 6 on-field + 2 interchange, MID 8 on-field + 2 interchange, RUC 2 on-field + 1 interchange, FWD 6 on-field + 2 interchange, UTIL 1 bench = 30 total (22 on-field + 8 bench).
 - If a player shows "DNP" (Did Not Play) it does NOT affect their on-field/interchange status — they stay in whatever column they appear in.
 
 CAPTAIN / VICE-CAPTAIN / EMERGENCY BADGES:

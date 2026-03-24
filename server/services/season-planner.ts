@@ -6,7 +6,7 @@ import { AFL_FANTASY_CLASSIC_2026, getSeasonPhase, getTradesForRound } from "../
 
 const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
 const POSITION_REQS = AFL_FANTASY_CLASSIC_2026.squad.positions;
-const BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.byeRounds;
+const BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.regularByeRounds;
 const MAGIC_NUMBER = AFL_FANTASY_CLASSIC_2026.magicNumber;
 const TOTAL_ROUNDS = 24;
 
@@ -758,7 +758,7 @@ export async function buildDreamTeamReverse(): Promise<DreamTeamResult> {
     }
   }
 
-  const utilOnField = startingSelected.filter(p => p.fieldPosition === "UTIL" && p.isOnField).length;
+  const utilOnField = startingSelected.filter(p => p.fieldPosition === "UTIL").length;
   if (utilOnField < 1) {
     const utilPool = viable.filter(p => !startUsedIds.has(p.id))
       .sort((a, b) => {

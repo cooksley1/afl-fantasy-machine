@@ -644,7 +644,7 @@ export function scoreTradeIn(
       evBonus += 10;
       if (category === "upgrade") category = "structure";
     }
-    for (const byeRound of AFL_FANTASY_CLASSIC_2026.byeRounds) {
+    for (const byeRound of AFL_FANTASY_CLASSIC_2026.regularByeRounds) {
       if (pIn.byeRound !== byeRound && pOut.byeRound === byeRound) {
         const count = ctx.teamByeCounts[byeRound] || 0;
         if (count > 7) {
@@ -789,7 +789,7 @@ export function generateTradeRecommendations(
     (p) => !teamPlayerIds.has(p.id) && !p.injuryStatus
   );
 
-  const isBye = AFL_FANTASY_CLASSIC_2026.byeRounds.includes(currentRound);
+  const isBye = AFL_FANTASY_CLASSIC_2026.regularByeRounds.includes(currentRound) || AFL_FANTASY_CLASSIC_2026.earlyByeRounds.includes(currentRound);
   const isRound0 = currentRound === 0;
   const isEarlySeasons = currentRound <= 3;
   const isMidSeason = currentRound >= 8 && currentRound <= 16;

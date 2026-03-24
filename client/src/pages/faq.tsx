@@ -241,8 +241,9 @@ const faqItems: FAQItem[] = [
             <p className="text-xs text-muted-foreground">8 total: 6 on field, 2 bench</p>
           </div>
         </div>
-        <p className="mt-2">There is also 1 UTIL (Utility) spot on field that can be filled by any position.</p>
-        <p><strong>Dual Position Players (DPP):</strong> Some players are eligible in two positions (e.g., MID/FWD). This adds flexibility — you can play a high-scoring midfielder in your forward line. DPP eligibility can change mid-season based on where a player spends time on the field.</p>
+        <p className="mt-2">There is also 1 UTIL (Utility) bench spot that can hold a player from any position (DEF, MID, RUC or FWD). A player can be moved into Utility via substitutions or DPP/TPP swaps.</p>
+        <p><strong>Dual Position Players (DPP):</strong> Some players are eligible in two positions (e.g., MID/FWD). This adds flexibility — you can play a high-scoring midfielder in your forward line. DPP eligibility can change mid-season.</p>
+        <p><strong>Triple Position Players (TPP):</strong> New for 2026 — some players can be selected in three different positions, allowing even greater squad flexibility. Once granted, TPP status remains for the entire season.</p>
       </div>
     ),
   },

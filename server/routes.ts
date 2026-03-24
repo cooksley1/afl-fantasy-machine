@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertMyTeamPlayerSchema, users, feedback, players, weeklyStats } from "@shared/schema";
-import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam } from "@shared/game-rules";
+import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam, isByeRound } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
 import { eq, desc, and, inArray } from "drizzle-orm";
@@ -392,7 +392,7 @@ export async function registerRoutes(
         { playerId: fp("Connor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Deven Robertson"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
         { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Jack Carroll"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
+        { playerId: fp("Jack Carroll"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
       ];
 
       for (const entry of teamEntries) {
@@ -468,7 +468,7 @@ export async function registerRoutes(
       const settings = await storage.getSettings(uid);
       const maxTradesThisRound = getTradesForRound(settings.currentRound);
       if (settings.tradesRemaining <= 0) {
-        return res.status(400).json({ message: `No trades remaining this round (${maxTradesThisRound} per round${gameRules.byeRounds.includes(settings.currentRound) ? ' - bye round' : ''})` });
+        return res.status(400).json({ message: `No trades remaining this round (${maxTradesThisRound} per round${isByeRound(settings.currentRound) ? ' - bye round' : ''})` });
       }
 
       const myTeam = await storage.getMyTeam(uid);
@@ -1097,9 +1097,10 @@ export async function registerRoutes(
         let isOnField = false;
         let assignedFieldPos = fieldPos;
 
-        if (hasAiFieldData) {
+        if (assignedFieldPos === "UTIL") {
+          isOnField = false;
+        } else if (hasAiFieldData) {
           isOnField = ip.isOnField !== false;
-          assignedFieldPos = fieldPos;
         } else if (ip.isEmergency) {
           isOnField = false;
         } else if (totalOnField >= maxOnField) {
@@ -1110,10 +1111,8 @@ export async function registerRoutes(
             isOnField = true;
             posFieldCount[fieldPos]++;
             totalOnField++;
-          } else if (totalOnField < maxOnField) {
-            isOnField = true;
-            assignedFieldPos = "UTIL";
-            totalOnField++;
+          } else {
+            isOnField = false;
           }
         }
 
@@ -2678,10 +2677,10 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const captain = team.find(p => p.isCaptain);
       const viceCaptain = team.find(p => p.isViceCaptain);
 
-      const gameRules = (await import("@shared/game-rules")).AFL_FANTASY_CLASSIC_2026;
-      const byeRounds = gameRules.byeRounds || [12, 13, 14];
-      const isByeRound = byeRounds.includes(currentRound);
-      const maxTrades = currentRound < (gameRules.trades?.startFromRound || 2) ? 0 : isByeRound ? (gameRules.trades?.perByeRound || 3) : (gameRules.trades?.perRound || 2);
+      const gameRulesModule = await import("@shared/game-rules");
+      const gameRules = gameRulesModule.AFL_FANTASY_CLASSIC_2026;
+      const isByeRoundNow = gameRulesModule.isByeRound(currentRound);
+      const maxTrades = gameRulesModule.getTradesForRound(currentRound);
 
       const definitelyOutStatuses = [
         "season", "acl", "knee", "hamstring", "shoulder", "concussion",

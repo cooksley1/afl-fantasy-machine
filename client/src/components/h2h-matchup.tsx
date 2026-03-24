@@ -286,8 +286,8 @@ export default function H2HMatchupView({
   const myBench = data.myTeam.filter(p => !p.isOnField);
   const oppBench = data.oppTeam.filter(p => !p.isOnField);
 
-  const myUtil = data.myTeam.filter(p => p.fieldPosition === "UTIL" && p.isOnField);
-  const oppUtil = data.oppTeam.filter(p => p.fieldPosition === "UTIL" && p.isOnField);
+  const myUtil = data.myTeam.filter(p => p.fieldPosition === "UTIL");
+  const oppUtil = data.oppTeam.filter(p => p.fieldPosition === "UTIL");
 
   const scoreDiff = data.myTotal - data.oppTotal;
   const forecastDiff = data.myForecast - data.oppForecast;
