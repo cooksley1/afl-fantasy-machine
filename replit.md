@@ -51,7 +51,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 ### Core Features
 - **Projection Engine**: Calculates player projections, volatility, and Trade EV.
 - **Simulation Engine**: Provides Monte Carlo simulations for round scores.
-- **Trade Engine**: Offers comprehensive trade recommendations.
+- **Trade Engine**: Offers comprehensive rule-aware trade recommendations with Best-18 bye coverage analysis, TOG 50% captain risk warnings, TPP/DPP flexibility scoring, early vs regular bye trade allocation, and emergency setup recommendations.
 - **Tag Intelligence System**: Provides evidence-based tag warnings.
 - **Fixture Sync**: Fetches and syncs real fixtures and player data from Squiggle API.
 - **Player Alerts**: Generates typed alerts (injury, late_change, selection, role_change, news) when intel reports mention players on a user's team, displayed via a notification system.
@@ -63,7 +63,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Season Planner**: Algorithmically builds optimal 30-man squads and generates 24-round strategy documents.
 - **Dream Team Reverse Engineer**: Builds optimal 30-player squads ignoring salary cap, then reverse-engineers a budget-compliant starting team with round-by-round trade paths.
 - **Team Lab (Sandbox)**: Allows users to save, create, compare, and swap between multiple team configurations.
-- **Game Day Guide**: Provides a step-by-step transfer checklist for updating the official AFL Fantasy app.
+- **Game Day Guide**: Provides a step-by-step transfer checklist with TOG 50% captain fallback tips, emergency setup reminders, Best-18 bye awareness, rolling lockout warnings, captain loophole strategy, and Advanced Trade-Editing reminders.
 - **League Spy**: Enables tracking opponents across multiple fantasy leagues, including AI-powered analysis of opponent team screenshots and matchup breakdowns.
 - **PWA Support**: Installable as a mobile app with offline caching of static assets.
 

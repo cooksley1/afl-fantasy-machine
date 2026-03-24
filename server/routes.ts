@@ -2764,6 +2764,46 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
         }
       }
 
+      if (isByeRoundNow) {
+        const activeOnField = onField.filter(p => p.byeRound !== currentRound);
+        const best18Count = gameRules.best18.count;
+        if (activeOnField.length < best18Count) {
+          steps.push({
+            priority: "critical",
+            action: `Best-18 warning: Only ${activeOnField.length} active on-field players`,
+            reason: `During bye rounds, only your top ${best18Count} on-field scores count. You have ${activeOnField.length} active players — ${best18Count - activeOnField.length} below the threshold. Every missing player costs you points. Use your ${maxTrades} trade${maxTrades > 1 ? "s" : ""} to bring in active players.`,
+            link: "/trades",
+          });
+        } else if (activeOnField.length >= best18Count && activeOnField.length < 22) {
+          steps.push({
+            priority: "suggested",
+            action: `Bye round: ${activeOnField.length}/22 active on-field (Best-18 applies)`,
+            reason: `You have ${activeOnField.length} active on-field — above the Best-18 threshold of ${best18Count}. Your bottom ${activeOnField.length - best18Count} on-field scores won't count, so focus on having ${best18Count} quality scorers rather than filling all spots.`,
+            link: "/team",
+          });
+        }
+
+        const isEarlyBye = gameRulesModule.isEarlyByeRound(currentRound);
+        if (isEarlyBye) {
+          steps.push({
+            priority: "suggested",
+            action: `Early Bye round — ${maxTrades} trades available`,
+            reason: `Rounds 2-4 are early bye rounds with ${maxTrades} trades each. Best-18 scoring applies. Prioritise structure and cash cow generation over aggressive moves.`,
+            link: "/trades",
+          });
+        }
+      }
+
+      const emergencies = team.filter(p => p.isEmergency);
+      if (emergencies.length < 4 && team.length >= 22) {
+        steps.push({
+          priority: "important",
+          action: `Set ${4 - emergencies.length} more emergenc${emergencies.length === 3 ? "y" : "ies"} (${emergencies.length}/4 set)`,
+          reason: "Players below 50% TOG may be replaced by a higher-scoring emergency from the same position. Always have 4 emergencies set to protect against low-TOG disasters and late changes.",
+          link: "/team",
+        });
+      }
+
       if (!captain) {
         const topScorer = [...onField].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0];
         if (topScorer) {
@@ -2836,7 +2876,11 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const liveContext = `Your ${team.length}-player squad has ${premiums} premiums led by ${topStr}. ${cashCows} cash cows on bench. ${midPricers} mid-pricers.`;
       const finalContext = liveContext;
 
-      res.json({ steps, round: currentRound, summary, isByeRound, tradesAvailable: settings.tradesRemaining, maxTrades, seasonContext: finalContext });
+      const isEarlyByeNow = gameRulesModule.isEarlyByeRound(currentRound);
+      const isRegularByeNow = gameRulesModule.isRegularByeRound(currentRound);
+      const byeType = isEarlyByeNow ? "early" : isRegularByeNow ? "regular" : null;
+
+      res.json({ steps, round: currentRound, summary, isByeRound: isByeRoundNow, byeType, tradesAvailable: settings.tradesRemaining, maxTrades, best18Applies: isByeRoundNow, seasonContext: finalContext });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -2880,25 +2924,61 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
         scoreDiff: t.scoreDifference,
       }));
 
+      const gameRulesModule = await import("@shared/game-rules");
+      const isByeRoundNow = gameRulesModule.isByeRound(settings.currentRound);
+      const maxTradesThisRound = gameRulesModule.getTradesForRound(settings.currentRound);
+      const emergencies = currentTeam.filter(p => p.isEmergency);
+
+      const tips: string[] = [
+        "Open the AFL Fantasy app → My Team",
+      ];
+
+      if (tradeSteps.length > 0) {
+        tips.push("Go to Trades tab");
+        tips.push(...tradeSteps.map(t => `Search for "${t.in.name}" and trade out "${t.out.name}"`));
+        tips.push("Confirm all trades");
+        if (tradeSteps.length < maxTradesThisRound) {
+          tips.push(`Note: You have ${maxTradesThisRound - tradeSteps.length} unused trade${maxTradesThisRound - tradeSteps.length > 1 ? "s" : ""} this round — consider saving or using strategically`);
+        }
+      }
+
+      if (captain) {
+        tips.push(`Set ${captain.name} as Captain (tap the 'C' badge)`);
+      }
+      if (viceCaptain) {
+        tips.push(`Set ${viceCaptain.name} as Vice-Captain (tap the 'VC' badge)`);
+        tips.push("Captain Loophole: If your VC plays early and scores 120+, keep them. If under 100, switch captain to a player in a later game.");
+      }
+
+      tips.push("TOG 50% rule: If your Captain finishes below 50% Time On Ground (e.g. injury), the doubled score becomes whichever is higher between Captain and VC. Emergencies never get doubled.");
+
+      if (emergencies.length < 4) {
+        tips.push(`Set ${4 - emergencies.length} more emergency/ies — players below 50% TOG can be replaced by a higher-scoring emergency from the same position`);
+      }
+
+      if (fieldMoves.length > 0) {
+        tips.push(...fieldMoves.map(m => `${m.action}: ${m.player}`));
+      }
+
+      if (isByeRoundNow) {
+        const activeOnField = currentTeam.filter(p => p.isOnField && p.byeRound !== settings.currentRound);
+        tips.push(`Bye round: Best-18 scoring — only your top 18 on-field scores count. You have ${activeOnField.length} active on-field players.`);
+      }
+
+      tips.push("You can revise trades before lockout using Advanced Trade-Editing. Rollback restores your team to end of last round.");
+      tips.push("Review your team and confirm before lockout (rolling lockout — players lock at match start)");
+
       const guide = {
         round: settings.currentRound,
         tradesRemaining: settings.tradesRemaining,
+        tradesAvailableThisRound: maxTradesThisRound,
+        isByeRound: isByeRoundNow,
         trades: tradeSteps,
         captain: captain ? { name: captain.name, avgScore: captain.avgScore, position: captain.position } : null,
         viceCaptain: viceCaptain ? { name: viceCaptain.name, avgScore: viceCaptain.avgScore, position: viceCaptain.position } : null,
         fieldMoves,
-        tips: [
-          "Open the AFL Fantasy app → My Team",
-          ...(tradeSteps.length > 0 ? [
-            "Go to Trades tab",
-            ...tradeSteps.map(t => `Search for "${t.in.name}" and trade out "${t.out.name}"`),
-            "Confirm all trades",
-          ] : []),
-          ...(captain ? [`Set ${captain.name} as Captain (tap the 'C' badge)`] : []),
-          ...(viceCaptain ? [`Set ${viceCaptain.name} as Vice-Captain (tap the 'VC' badge)`] : []),
-          ...(fieldMoves.length > 0 ? fieldMoves.map(m => `${m.action}: ${m.player}`) : []),
-          "Review your team and confirm before lockout",
-        ],
+        emergenciesSet: emergencies.length,
+        tips,
         isEmpty: tradeSteps.length === 0 && fieldMoves.length === 0,
       };
 

@@ -36,10 +36,13 @@ interface FieldMove {
 interface GameDayGuideData {
   round: number;
   tradesRemaining: number;
+  tradesAvailableThisRound: number;
+  isByeRound: boolean;
   trades: TradeStep[];
   captain: { name: string; avgScore: number; position: string } | null;
   viceCaptain: { name: string; avgScore: number; position: string } | null;
   fieldMoves: FieldMove[];
+  emergenciesSet: number;
   tips: string[];
   isEmpty: boolean;
 }
@@ -202,7 +205,17 @@ export default function GameDayGuide() {
             </Badge>
             {guide.tradesRemaining > 0 && (
               <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20" data-testid="badge-trades-remaining">
-                {guide.tradesRemaining} trade{guide.tradesRemaining !== 1 ? "s" : ""} available
+                {guide.tradesRemaining} trade{guide.tradesRemaining !== 1 ? "s" : ""} remaining
+              </Badge>
+            )}
+            {guide.isByeRound && (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20" data-testid="badge-bye-round">
+                Best-18 Scoring
+              </Badge>
+            )}
+            {guide.emergenciesSet < 4 && (
+              <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20" data-testid="badge-emergencies-warning">
+                {guide.emergenciesSet}/4 Emergencies
               </Badge>
             )}
           </div>

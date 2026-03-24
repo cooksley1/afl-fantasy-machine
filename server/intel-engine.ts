@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { storage } from "./storage";
 import type { Player, PlayerWithTeamInfo, InsertIntelReport } from "@shared/schema";
+import { isByeRound, isEarlyByeRound, isRegularByeRound, getTradesForRound, AFL_FANTASY_CLASSIC_2026 } from "@shared/game-rules";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -157,7 +158,7 @@ export async function generateIntelReports(userId: string): Promise<void> {
 - Champion Data advanced metrics patterns
 - Doctor Fantasy and The Keeper League analysis
 
-KEY STRATEGIC CONCEPTS YOU MUST APPLY:
+KEY STRATEGIC CONCEPTS YOU MUST APPLY (AFL Fantasy Classic 2026 Official Rules):
 
 CAPTAIN LOOPHOLE / VC-C SWITCH STRATEGY:
 AFL Fantasy uses a "rolling lockout" where players lock as their individual games begin. The Captain Loophole works by:
@@ -166,13 +167,35 @@ AFL Fantasy uses a "rolling lockout" where players lock as their individual game
 3. If the VC scores poorly, switch captaincy to a player in a LATER game slot (Saturday night/Sunday)
 4. This requires having premium options across DIFFERENT game time slots
 Decision tree: IF VC_score > 120 → keep VC as captain | IF VC_score 100-120 → assess captain matchup | IF VC_score < 100 → switch to captain in later game
+CAPTAIN TOG 50% RULE: If a Captain finishes below 50% Time On Ground, the doubled score becomes whichever is HIGHER between the Captain and Vice-Captain. This is critical — if your Captain gets injured early, the VC score may be doubled instead. Factor this into VC selection.
+EMERGENCIES NEVER GET DOUBLED SCORES — only Captain or VC can receive the doubled score.
 
-DPP (DUAL POSITION PLAYERS):
-Players with dual position eligibility (DEF/MID, MID/FWD, etc.) are extremely valuable because:
+DPP (DUAL POSITION PLAYERS) & TPP (TRIPLE POSITION PLAYERS - NEW 2026):
+Players with dual/triple position eligibility are extremely valuable because:
 - They provide positional flexibility for team structure
 - Can be moved to exploit favorable matchups
 - Allow bench cover across multiple lines
 - Often indicate a role change that leads to scoring upside
+- TPP is NEW in 2026: Triple position players can be selected in any of three designated lines
+- Once DPP/TPP status is granted, it remains for the ENTIRE SEASON
+
+TOG 50% THRESHOLD:
+- Players below 50% Time On Ground may be replaced by a higher-scoring emergency from the same position
+- This means sub-50% TOG players are HIGH RISK — their scores can effectively be zeroed if an emergency outscores them
+- Always set 4 emergencies to protect against low-TOG disasters
+- TOG values from Champion Data are rounded (49.75% treated as 50%)
+
+BEST-18 SCORING (BYE ROUNDS):
+- During ALL bye rounds (Early Byes R2-R4 AND Regular Byes R12-R14), only the top 18 on-field scores count
+- This means your bottom 4 on-field players effectively score zero
+- Strategy: Prioritise quality over quantity — better to have 18 high scorers than 22 mediocre ones during byes
+- Trade allocation: Early Bye rounds get 2 trades, Regular Bye rounds get 3 trades (extra trade)
+
+TRADE RULES:
+- Standard rounds: 2 trades. Early Byes (R2-R4): 2 trades. Regular Byes (R12-R14): 3 trades.
+- Trades start from Round 2. No trades in R0 or R1.
+- Advanced Trade-Editing: Coaches can revise previously saved trades before lockout. Rollback available pre-lockout.
+- No player can be traded out and back in during the same round.
 
 BREAK-EVEN ANALYSIS:
 - Break-even (BE) = the score needed to maintain current price
@@ -180,12 +203,20 @@ BREAK-EVEN ANALYSIS:
 - Scoring BELOW BE = price drop (sell before they lose value)
 - Low BE + high form = prime trade target (will make lots of money)
 - High BE + poor form = sell candidate (about to lose value)
+- Price changes begin after Round 1. Opening Round (R0) scores contribute to first price change.
 
 LATE CHANGES / TEAM SELECTION:
 - Late changes happen 60 minutes before bounce-down
 - Players marked as "late change" or "not named" are HIGH RISK
 - If your captain/VC is a late change, you need an emergency plan
 - Always have bench cover for late withdrawals
+
+UTILITY (BENCH-ONLY):
+- The UTIL position is bench-only. 22 on-field = 6 DEF + 8 MID + 2 RUC + 6 FWD
+- UTIL can hold any position player (DEF/MID/RUC/FWD) but NEVER plays on-field
+- 8 bench total: 2 DEF + 2 MID + 1 RUC + 2 FWD + 1 UTIL
+
+SCORING: Kick 3, Handball 2, Mark 3, Tackle 4, Hitout 1, Goal 6, Behind 1, Free For 1, Free Against -3.
 
 Be specific with player names from the data provided. Every report should contain actionable advice.
 CRITICAL: All player prices MUST come from the provided data. Do NOT use your own training data for player prices — AFL Fantasy Classic 2026 prices differ from SuperCoach and from previous seasons. Only reference prices exactly as shown in the data below.`;
@@ -359,10 +390,26 @@ Trades do not start until Round 2. Focus recommendations on squad structure asse
 All prices are 2026 AFL Fantasy Classic starting prices — do NOT reference SuperCoach prices or your training data prices.
 ` : '';
 
-  const prompt = `You are an expert AFL Fantasy trade advisor combining statistical optimization with strategic game theory.
-${tradePreseasonCtx}
+  const tradesByeCtx = isByeRound(settings.currentRound) ? `
+BYE ROUND CONTEXT: This is ${isEarlyByeRound(settings.currentRound) ? "an EARLY" : "a REGULAR"} bye round.
+- Best-18 scoring applies — only top 18 on-field scores count. Bottom 4 on-field effectively score zero.
+- ${getTradesForRound(settings.currentRound)} trades available this round${isRegularByeRound(settings.currentRound) ? " (extra trade for regular bye)" : ""}.
+- Prioritise trades that keep 18+ active scorers. Quality > quantity during byes.
+` : '';
+
+  const prompt = `You are an expert AFL Fantasy Classic 2026 trade advisor combining statistical optimization with strategic game theory.
+
+2026 RULES:
+- Scoring: Kick 3, Handball 2, Mark 3, Tackle 4, Hitout 1, Goal 6, Behind 1, Free For 1, Free Against -3.
+- Trades: Standard rounds 2, Early Byes (R2-R4) 2, Regular Byes (R12-R14) 3. Start from R2.
+- Best-18 during bye rounds. TOG 50% threshold for emergency substitution. Captain below 50% TOG = higher of C/VC doubled.
+- DPP/TPP: Dual/Triple position players have permanent status once granted. TPP is new for 2026.
+- UTIL is bench-only. 22 on-field = 6 DEF + 8 MID + 2 RUC + 6 FWD.
+- No player traded out and back in the same round. Can revise trades pre-lockout.
+${tradePreseasonCtx}${tradesByeCtx}
 CURRENT ROUND: ${settings.currentRound}
-TRADES REMAINING: ${settings.tradesRemaining}
+TRADES AVAILABLE THIS ROUND: ${getTradesForRound(settings.currentRound)}
+TRADES REMAINING THIS SEASON: ${settings.tradesRemaining}
 SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
 
 MY TEAM:
@@ -728,12 +775,32 @@ export async function analyzeMyTeam(userId: string): Promise<TeamAnalysisResult>
 
   const playerList = myTeam.map(p => `ID:${p.id} | ${p.name}`).join(', ');
 
-  const prompt = `You are an elite AFL Fantasy analyst. Analyze my full team and provide a specific verdict on EVERY player. 
+  const isByeNow = isByeRound(settings.currentRound);
+  const isEarlyBye = isEarlyByeRound(settings.currentRound);
+  const isRegBye = isRegularByeRound(settings.currentRound);
+  const tradesForRound = getTradesForRound(settings.currentRound);
+  const onFieldCount = myTeam.filter(p => p.isOnField).length;
+  const emergencyCount = myTeam.filter(p => p.isEmergency).length;
 
-CURRENT ROUND: ${settings.currentRound}
-TRADES REMAINING: ${settings.tradesRemaining}
+  const prompt = `You are an elite AFL Fantasy Classic 2026 analyst. Analyze my full team and provide a specific verdict on EVERY player.
+
+AFL FANTASY CLASSIC 2026 RULES YOU MUST APPLY:
+- Squad: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). UTIL is bench-only.
+- Scoring: Kick 3, Handball 2, Mark 3, Tackle 4, Hitout 1, Goal 6, Behind 1, Free For 1, Free Against -3.
+- Trades: Standard rounds 2, Early Byes (R2-R4) 2, Regular Byes (R12-R14) 3. Start from R2.
+- Best-18: During ALL bye rounds, only top 18 on-field scores count. Bottom 4 on-field effectively score zero.
+- TOG 50%: Players below 50% TOG may be replaced by higher-scoring emergency. Captain below 50% TOG = doubled score is higher of C/VC. Emergencies never get doubled.
+- DPP/TPP: Dual and Triple Position Players. Once granted, status is permanent for the season. TPP is new for 2026.
+- Rolling lockout: Players lock at match start. Captain loophole works via VC in early game, C in later game.
+- Advanced Trade-Editing: Can revise trades before lockout. Rollback available pre-lockout. No player traded out and back in same round.
+- Set 4 emergencies to protect against sub-50% TOG and late changes.
+
+CURRENT ROUND: ${settings.currentRound}${isByeNow ? ` (${isEarlyBye ? "EARLY" : "REGULAR"} BYE ROUND — Best-18 scoring applies)` : ""}
+TRADES AVAILABLE THIS ROUND: ${tradesForRound}
+TRADES REMAINING THIS SEASON: ${settings.tradesRemaining}
 SALARY CAP: $${(settings.salaryCap / 1000).toFixed(0)}K
 SALARY REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
+ON-FIELD: ${onFieldCount}/22 | EMERGENCIES SET: ${emergencyCount}/4
 
 MY TEAM:
 ${teamData}

@@ -1,5 +1,5 @@
 import type { Player, PlayerWithTeamInfo } from "@shared/schema";
-import { AFL_FANTASY_CLASSIC_2026, getFixtureForTeam, getSeasonPhase, getRemainingRounds } from "@shared/game-rules";
+import { AFL_FANTASY_CLASSIC_2026, getFixtureForTeam, getSeasonPhase, getRemainingRounds, getTradesForRound, isByeRound, isEarlyByeRound, isRegularByeRound, isBest18Round } from "@shared/game-rules";
 import {
   getCachedWeights,
   calcTradeEV,
@@ -37,12 +37,17 @@ interface TradeContext {
   salaryCap: number;
   remainingSalary: number;
   isBye: boolean;
+  isEarlyBye: boolean;
+  isRegularBye: boolean;
+  isBest18: boolean;
   isRound0: boolean;
   isEarlySeasons: boolean;
   isMidSeason: boolean;
   isLateSeason: boolean;
+  tradesAvailable: number;
   teamPositionCounts: Record<string, number>;
   teamByeCounts: Record<number, number>;
+  teamOnFieldCount: number;
   teamPlayers: PlayerWithTeamInfo[];
   allPlayers: Player[];
   w: WeightConfig;
@@ -158,6 +163,27 @@ function isReducedTOGRisk(player: Player): boolean {
   }
   if (player.age && player.age >= 32 && player.formTrend === "down") return true;
   return false;
+}
+
+function isTPP(player: Player): boolean {
+  return !!(player as any).triplePosition;
+}
+
+function getPlayerPositionCount(player: Player): number {
+  if (isTPP(player)) return 3;
+  if (player.dualPosition) return 2;
+  return 1;
+}
+
+function best18ProjectedScore(onFieldPlayers: PlayerWithTeamInfo[]): number {
+  const scores = onFieldPlayers
+    .map(p => p.avgScore || p.projectedScore || 0)
+    .sort((a, b) => b - a);
+  return scores.slice(0, AFL_FANTASY_CLASSIC_2026.best18.count).reduce((s, v) => s + v, 0);
+}
+
+function countActivePlayersForBye(teamPlayers: PlayerWithTeamInfo[], byeRound: number): number {
+  return teamPlayers.filter(p => p.isOnField && p.byeRound !== byeRound).length;
 }
 
 function hasUpsidePotential(player: Player): boolean {
@@ -468,7 +494,11 @@ export function scoreTradeOut(
 
   if (isReducedTOGRisk(p)) {
     score += 20;
-    reasons.push("Reduced TOG risk — scoring declining, possible role change or rotation");
+    reasons.push(`Reduced TOG risk — scoring declining, possible role change. Under 50% TOG = replaced by emergency (${AFL_FANTASY_CLASSIC_2026.togThreshold.percent}% threshold)`);
+    if (p.isCaptain) {
+      score += 15;
+      reasons.push("CAPTAIN TOG RISK: If Captain finishes below 50% TOG, doubled score becomes whichever is higher between Captain and VC");
+    }
   }
 
   if (p.dualPosition && isLosingDPPValue(p)) {
@@ -581,17 +611,22 @@ export function scoreTradeIn(
     inReasons.push(`Underpriced at $${(pIn.price / 1000).toFixed(0)}K (started at $${(startingPrice / 1000).toFixed(0)}K) — bounce back potential`);
   }
 
-  if (pIn.dualPosition) {
+  if (pIn.dualPosition || isTPP(pIn)) {
+    const posCount = getPlayerPositionCount(pIn);
     if (isGainingDPPBenefit(pIn)) {
       evBonus += 15;
-      inReasons.push(`DPP upgrade: plays ${pIn.position} but eligible as ${pIn.dualPosition} — natural scoring boost`);
+      inReasons.push(`${posCount === 3 ? "TPP" : "DPP"} upgrade: plays ${pIn.position} but eligible as ${pIn.dualPosition}${isTPP(pIn) ? `/${(pIn as any).triplePosition}` : ""} — natural scoring boost`);
     } else {
-      inReasons.push(`DPP flexibility: ${pIn.position}/${pIn.dualPosition}`);
-      evBonus += 5;
+      inReasons.push(`${posCount === 3 ? "TPP" : "DPP"} flexibility: ${pIn.position}/${pIn.dualPosition}${isTPP(pIn) ? `/${(pIn as any).triplePosition}` : ""}`);
+      evBonus += posCount === 3 ? 10 : 5;
     }
     const dppValue = dppPositionUpgradeValue(pIn);
     if (dppValue > 10) {
       evBonus += 5;
+    }
+    if (posCount === 3) {
+      evBonus += 8;
+      inReasons.push("TPP: Triple position eligibility — maximum structural flexibility. Status locked for the season once granted.");
     }
   }
 
@@ -640,18 +675,30 @@ export function scoreTradeIn(
 
   if (ctx.isBye) {
     if (pOut.byeRound === ctx.currentRound && pIn.byeRound !== ctx.currentRound) {
-      inReasons.push("Fixes bye coverage this round");
-      evBonus += 10;
+      const activeAfterTrade = countActivePlayersForBye(ctx.teamPlayers, ctx.currentRound) + 1;
+      inReasons.push(`Fixes bye coverage this round — ${activeAfterTrade}/22 active on-field players`);
+      if (activeAfterTrade < AFL_FANTASY_CLASSIC_2026.best18.count) {
+        evBonus += 20;
+        inReasons.push(`CRITICAL: Below Best-18 threshold (${AFL_FANTASY_CLASSIC_2026.best18.count}) — every active player counts during bye rounds`);
+      } else {
+        evBonus += 10;
+      }
       if (category === "upgrade") category = "structure";
     }
-    for (const byeRound of AFL_FANTASY_CLASSIC_2026.regularByeRounds) {
+    const allByeRounds = [...AFL_FANTASY_CLASSIC_2026.earlyByeRounds, ...AFL_FANTASY_CLASSIC_2026.regularByeRounds];
+    for (const byeRound of allByeRounds) {
       if (pIn.byeRound !== byeRound && pOut.byeRound === byeRound) {
         const count = ctx.teamByeCounts[byeRound] || 0;
         if (count > 7) {
-          inReasons.push(`Reduces R${byeRound} bye exposure (${count} players)`);
+          inReasons.push(`Reduces R${byeRound} bye exposure (${count} on-field players on bye)`);
           evBonus += 5;
         }
       }
+    }
+    if (ctx.isEarlyBye) {
+      inReasons.push(`Early Bye round — ${ctx.tradesAvailable} trades available. Best-18 scoring applies.`);
+    } else if (ctx.isRegularBye) {
+      inReasons.push(`Regular Bye round — ${ctx.tradesAvailable} trades available (extra trade). Best-18 scoring applies.`);
     }
   }
 
@@ -727,7 +774,21 @@ export function scoreTradeIn(
       const outByeCount = ctx.teamByeCounts[pOut.byeRound] || 0;
       if (outByeCount > 6) {
         evBonus += 12;
-        inReasons.push(`Bye phase: reduces R${pOut.byeRound} exposure (${outByeCount} players)`);
+        inReasons.push(`Bye phase: reduces R${pOut.byeRound} exposure (${outByeCount} players). Best-18 scoring applies — only top 18 on-field scores count.`);
+      }
+    }
+    for (const byeRound of AFL_FANTASY_CLASSIC_2026.regularByeRounds) {
+      const activeCount = countActivePlayersForBye(ctx.teamPlayers, byeRound);
+      if (activeCount < AFL_FANTASY_CLASSIC_2026.best18.count && pIn.byeRound !== byeRound && pOut.byeRound === byeRound) {
+        evBonus += 15;
+        inReasons.push(`CRITICAL: Only ${activeCount} active on-field for R${byeRound} — need ${AFL_FANTASY_CLASSIC_2026.best18.count} for Best-18. Regular byes get 3 trades to fix this.`);
+      }
+    }
+    for (const byeRound of AFL_FANTASY_CLASSIC_2026.earlyByeRounds) {
+      const activeCount = countActivePlayersForBye(ctx.teamPlayers, byeRound);
+      if (activeCount < AFL_FANTASY_CLASSIC_2026.best18.count && pIn.byeRound !== byeRound && pOut.byeRound === byeRound) {
+        evBonus += 15;
+        inReasons.push(`CRITICAL: Only ${activeCount} active on-field for R${byeRound} early bye — need ${AFL_FANTASY_CLASSIC_2026.best18.count} for Best-18. Early byes get 2 trades.`);
       }
     }
   } else if (phase.phase === "run_home") {
@@ -789,19 +850,24 @@ export function generateTradeRecommendations(
     (p) => !teamPlayerIds.has(p.id) && !p.injuryStatus
   );
 
-  const isBye = AFL_FANTASY_CLASSIC_2026.regularByeRounds.includes(currentRound) || AFL_FANTASY_CLASSIC_2026.earlyByeRounds.includes(currentRound);
+  const isBye = isByeRound(currentRound);
+  const isEarlyBye = isEarlyByeRound(currentRound);
+  const isRegularBye = isRegularByeRound(currentRound);
+  const isBest18 = isBest18Round(currentRound);
   const isRound0 = currentRound === 0;
   const isEarlySeasons = currentRound <= 3;
   const isMidSeason = currentRound >= 8 && currentRound <= 16;
   const isLateSeason = currentRound >= 17;
+  const tradesAvailable = getTradesForRound(currentRound);
 
   const w = getCachedWeights();
   const totalSalary = myTeam.reduce((s, p) => s + p.price, 0);
   const remainingSalary = salaryCap - totalSalary;
 
+  const onField = myTeam.filter(pp => pp.isOnField);
   const teamByeCounts: Record<number, number> = {};
   const teamPositionCounts: Record<string, number> = {};
-  for (const p of myTeam.filter(pp => pp.isOnField)) {
+  for (const p of onField) {
     if (p.byeRound) {
       teamByeCounts[p.byeRound] = (teamByeCounts[p.byeRound] || 0) + 1;
     }
@@ -809,9 +875,9 @@ export function generateTradeRecommendations(
   }
 
   const ctx: TradeContext = {
-    currentRound, salaryCap, remainingSalary, isBye, isRound0, isEarlySeasons,
-    isMidSeason, isLateSeason,
-    teamPositionCounts, teamByeCounts, w,
+    currentRound, salaryCap, remainingSalary, isBye, isEarlyBye, isRegularBye, isBest18,
+    isRound0, isEarlySeasons, isMidSeason, isLateSeason, tradesAvailable,
+    teamPositionCounts, teamByeCounts, teamOnFieldCount: onField.length, w,
     teamPlayers: myTeam,
     allPlayers,
   };

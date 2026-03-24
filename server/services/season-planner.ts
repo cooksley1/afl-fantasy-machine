@@ -6,7 +6,10 @@ import { AFL_FANTASY_CLASSIC_2026, getSeasonPhase, getTradesForRound } from "../
 
 const SALARY_CAP = AFL_FANTASY_CLASSIC_2026.salaryCap;
 const POSITION_REQS = AFL_FANTASY_CLASSIC_2026.squad.positions;
-const BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.regularByeRounds;
+const BYE_ROUNDS = [...AFL_FANTASY_CLASSIC_2026.earlyByeRounds, ...AFL_FANTASY_CLASSIC_2026.regularByeRounds];
+const REGULAR_BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.regularByeRounds;
+const EARLY_BYE_ROUNDS = AFL_FANTASY_CLASSIC_2026.earlyByeRounds;
+const BEST_18_COUNT = AFL_FANTASY_CLASSIC_2026.best18.count;
 const MAGIC_NUMBER = AFL_FANTASY_CLASSIC_2026.magicNumber;
 const TOTAL_ROUNDS = 24;
 
@@ -402,17 +405,27 @@ function validatePlan(result: SeasonPlanResult, allPlayers: Player[]): Validatio
     detail: injuredPlayers.length === 0 ? "All healthy" : `WARNING: ${injuredPlayers.map(p => p.name).join(", ")} have long-term injuries`,
   });
 
-  const byeSpread = { r12: 0, r13: 0, r14: 0 };
-  for (const p of result.startingSquad) {
-    if (p.byeRound === 12) byeSpread.r12++;
-    else if (p.byeRound === 13) byeSpread.r13++;
-    else if (p.byeRound === 14) byeSpread.r14++;
+  const onFieldSquad = result.startingSquad.filter(p => p.isOnField !== false);
+  const onFieldByeSpread: Record<number, number> = {};
+  for (const p of onFieldSquad) {
+    if (p.byeRound) {
+      onFieldByeSpread[p.byeRound] = (onFieldByeSpread[p.byeRound] || 0) + 1;
+    }
   }
-  const byeBalanced = byeSpread.r12 >= 6 && byeSpread.r13 >= 6 && byeSpread.r14 >= 6;
+  const onFieldCount = onFieldSquad.length;
+  const regularByeDetail = REGULAR_BYE_ROUNDS.map(r => `R${r}: ${onFieldByeSpread[r] || 0} on bye, ${onFieldCount - (onFieldByeSpread[r] || 0)} active`).join(" | ");
+  const earlyByeDetail = EARLY_BYE_ROUNDS.map(r => `R${r}: ${onFieldByeSpread[r] || 0} on bye, ${onFieldCount - (onFieldByeSpread[r] || 0)} active`).join(" | ");
+  const regularByeBalanced = REGULAR_BYE_ROUNDS.every(r => (onFieldCount - (onFieldByeSpread[r] || 0)) >= BEST_18_COUNT);
+  const earlyByeOk = EARLY_BYE_ROUNDS.every(r => (onFieldCount - (onFieldByeSpread[r] || 0)) >= BEST_18_COUNT);
   items.push({
-    check: "Bye Coverage",
-    passed: byeBalanced,
-    detail: `R12:${byeSpread.r12} R13:${byeSpread.r13} R14:${byeSpread.r14} — ${byeBalanced ? "balanced" : "uneven, may struggle in bye rounds"}`,
+    check: "Regular Bye Coverage (R12-14)",
+    passed: regularByeBalanced,
+    detail: `${regularByeDetail} — ${regularByeBalanced ? "balanced, 18+ active on-field each round (Best-18 applies, 3 trades available)" : "WARNING: fewer than 18 active on-field during a bye round — Best-18 scores will be impacted"}`,
+  });
+  items.push({
+    check: "Early Bye Coverage (R2-4)",
+    passed: earlyByeOk,
+    detail: `${earlyByeDetail} — ${earlyByeOk ? "sufficient on-field coverage (Best-18 applies, 2 trades available)" : "WARNING: fewer than 18 active on-field during early byes — Best-18 scores will be impacted"}`,
   });
 
   return items;
@@ -965,7 +978,16 @@ export async function generateSeasonPlan(
       ? simulatedTeam.filter(p => p.byeRound !== round)
       : [...simulatedTeam];
 
-    const sortedByScore = [...activePlayers].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+    const onFieldActive = activePlayers.filter(p => {
+      const tp = simulatedTeam.find(sp => sp.id === p.id);
+      return tp ? true : false;
+    });
+    const sortedByScore = [...onFieldActive].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0));
+
+    const scoringPlayers = isBye
+      ? sortedByScore.slice(0, BEST_18_COUNT)
+      : sortedByScore;
+
     const captain = sortedByScore[0] || null;
     const viceCaptain = sortedByScore[1] || null;
 
@@ -1088,9 +1110,16 @@ export async function generateSeasonPlan(
           if (playerIn.ownedByPercent < 15) reasoning += `Only ${playerIn.ownedByPercent}% owned — genuine POD. `;
         } else if (phaseInfo.phase === "bye_warfare") {
           const inByeRound = playerIn.byeRound;
+          const isEarlyBye = EARLY_BYE_ROUNDS.includes(round);
+          const isRegBye = REGULAR_BYE_ROUNDS.includes(round);
           reasoning = `${playerIn.name} (avg ${playerIn.avgScore}, bye R${inByeRound || "?"}) replaces ${playerOut.name} (avg ${playerOut.avgScore}). ` +
             `+${pointsGain.toFixed(1)} pts/wk while maintaining bye coverage. `;
-          if (isBye) reasoning += `Critical: we need active players this bye round. `;
+          if (isBye) {
+            const activeCount = simulatedTeam.filter(p => p.byeRound !== round).length;
+            reasoning += `Best-18 scoring applies — only top ${BEST_18_COUNT} on-field scores count. ${activeCount} active players this round. `;
+            if (isRegBye) reasoning += `Regular bye: ${tradesAvailable} trades available (extra trade). `;
+            else if (isEarlyBye) reasoning += `Early bye: ${tradesAvailable} trades available. `;
+          }
         } else {
           reasoning = `Run home: ${playerIn.name} (avg ${playerIn.avgScore}, ceiling ${inCeiling}) over ${playerOut.name} (avg ${playerOut.avgScore}). ` +
             `+${pointsGain.toFixed(1)} pts/wk × ${remainingRounds} rounds = +${(pointsGain * remainingRounds).toFixed(0)} projected season points. `;
