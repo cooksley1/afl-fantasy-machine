@@ -1562,20 +1562,6 @@ export default function MyTeam() {
     return teams;
   }, [roundFixtures]);
 
-  const setupTeamMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/my-team/setup-glens-team");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
-      toast({ title: "Team loaded!", description: "Glen's team is ready to go." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Setup failed", description: error.message, variant: "destructive" });
-    },
-  });
-
   const clearTeamMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("DELETE", "/api/my-team");
@@ -1662,20 +1648,6 @@ export default function MyTeam() {
               >
                 <Users className="w-4 h-4" />
                 Browse Players
-              </Button>
-              <Button
-                onClick={() => setupTeamMutation.mutate()}
-                disabled={setupTeamMutation.isPending}
-                variant="outline"
-                className="gap-2"
-                data-testid="button-setup-team"
-              >
-                {setupTeamMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {setupTeamMutation.isPending ? "Loading Team..." : "Load Glen's Team"}
               </Button>
             </div>
           </CardContent>
@@ -1837,21 +1809,6 @@ export default function MyTeam() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button
-            onClick={() => setupTeamMutation.mutate()}
-            disabled={setupTeamMutation.isPending}
-            size="sm"
-            variant="outline"
-            className="gap-1 h-7 px-2 text-xs"
-            data-testid="button-reload-team"
-          >
-            {setupTeamMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="w-3.5 h-3.5" />
-            )}
-            <span className="hidden sm:inline">{setupTeamMutation.isPending ? "Loading..." : "Reload"}</span>
-          </Button>
           <Button
             onClick={() => analyzeMutation.mutate()}
             disabled={analyzeMutation.isPending || !teamPlayers?.length}
