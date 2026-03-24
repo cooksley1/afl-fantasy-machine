@@ -508,13 +508,14 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
         content: `You are an expert AFL Fantasy team analyzer. You analyze screenshots of AFL Fantasy teams and extract player data with extreme precision.
 
 CRITICAL RULES FOR PLAYER IDENTIFICATION:
-- ONLY include players whose names you can clearly read in the screenshot. Do NOT guess or infer player names.
-- If a name is partially obscured or unclear, skip that player entirely rather than guessing.
-- AFL Fantasy typically shows abbreviated first names (e.g. "T. Miller", "J. Steele") — match these carefully.
-- The screenshot may show only part of the team (one position line). Only report what you actually see.
-- Do NOT add players that are not visible in the image. Do NOT hallucinate players.
-- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD, UTILITY), read each row carefully.
-- Player cards typically show: surname (large text), first initial or name (smaller), team logo, price, score.
+- A full AFL Fantasy team has EXACTLY 30 players. You MUST identify all 30 if the screenshot shows a complete team.
+- Count the player cards in each position row. Standard layout: DEF 6+2=8, MID 8+2=10, RUC 2+1=3, FWD 6+2=8, UTIL 1 = 30 total.
+- AFL Fantasy player cards show the SURNAME in large text below the player photo, and often a first initial above or beside it.
+- Some AFL players have short or unusual surnames (e.g. "Grlj", "Ah Chee", "O'Brien", "De Goey"). These are real names — do NOT skip them.
+- If a name is difficult to read, cross-reference against the known player list provided below to find the best match. Prefer a best-guess match from the known list over skipping a player entirely.
+- Do NOT add players that are not visible in the image. Do NOT hallucinate players beyond what's shown.
+- Players showing "DNP" (Did Not Play) are still valid players — always include them with their name and position.
+- If the screenshot shows a "My Team" tab with multiple position rows (DEF, MID, RUC, FWD, UTILITY), read each row carefully, counting every card.
 - Read prices exactly as shown (e.g. "$517K", "$1.047M"). Convert to raw numbers: $517K = 517000, $1.047M = 1047000.
 
 CRITICAL LAYOUT RULES — ON-FIELD vs INTERCHANGE:
@@ -551,11 +552,13 @@ Return ONLY valid JSON.`
         content: [
           {
             type: "text",
-            text: `Analyze this AFL Fantasy team screenshot. Read EVERY player name visible in the image with extreme care.
+            text: `Analyze this AFL Fantasy team screenshot. Read EVERY player name visible in the image with extreme care. A complete team has 30 players — count them.
 
 INSTRUCTIONS:
 - Read each player card carefully. The surname is usually the largest text on the card.
-- Only include players you can clearly identify. If unsure, omit them.
+- You MUST read all 30 player cards. Count: 8 DEF (6 on-field + 2 interchange), 10 MID (8+2), 3 RUC (2+1), 8 FWD (6+2), 1 UTIL = 30 total.
+- If a surname looks unusual or short (e.g. "Grlj", "Ah Chee"), cross-reference against the known player list. Do not skip it.
+- Players with "DNP" still have a name — read it and include them. DNP just means no score, not no player.
 - Look for Captain ("C" badge) and Vice-Captain ("V" or "VC" badge) indicators. Include "isCaptain": true or "isViceCaptain": true.
 - Look for Emergency ("E" badge, usually orange/red) players. Include "isEmergency": true.
 - Read the price shown on each card if visible. Convert "$517K" to 517000, "$1.047M" to 1047000.
@@ -563,8 +566,9 @@ INSTRUCTIONS:
 - CRITICALLY: Determine whether each player is ON-FIELD or on the INTERCHANGE (bench).
   - On-field players appear in the main left area of each position row. Set "isOnField": true.
   - Interchange/bench players appear in the right-hand "INTERCHANGE" column. Set "isOnField": false.
-  - The last row is UTILITY. The left player is on-field UTIL, the right player is interchange UTIL.
+  - The last row is UTILITY — it is always bench ("isOnField": false).
 - Players showing "DNP" (Did Not Play) keep their field/interchange status unchanged.
+- BEFORE returning, count your players array. If it has fewer than 30, re-examine the screenshot for any missed cards.
 
 Return JSON:
 {
@@ -584,8 +588,8 @@ Return JSON:
         ]
       }
     ],
-    temperature: 0.5,
-    max_tokens: 4000,
+    temperature: 0.3,
+    max_tokens: 5000,
     response_format: { type: "json_object" },
   });
 
