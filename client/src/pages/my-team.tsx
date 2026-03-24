@@ -423,6 +423,19 @@ function FieldViewCard({
   );
 }
 
+function EmptyFieldCard({ position, isBench }: { position: string; isBench: boolean }) {
+  return (
+    <div className="w-[68px] sm:w-[80px] opacity-30" data-testid={`empty-field-card-${position.toLowerCase()}`}>
+      <div className="relative flex flex-col items-center">
+        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+          <UserPlus className="w-4 h-4 text-muted-foreground/50" />
+        </div>
+        <span className="text-[9px] text-muted-foreground mt-0.5 italic">{isBench ? "Bench" : "Empty"}</span>
+      </div>
+    </div>
+  );
+}
+
 function FieldView({
   teamPlayers,
   onTapPlayer,
@@ -444,17 +457,36 @@ function FieldView({
 
   const positionGroups = ["DEF", "MID", "RUC", "FWD"];
 
+  const posStructure: Record<string, { onField: number; bench: number }> = {
+    DEF: { onField: 6, bench: 2 },
+    MID: { onField: 8, bench: 2 },
+    RUC: { onField: 2, bench: 1 },
+    FWD: { onField: 6, bench: 2 },
+    UTIL: { onField: 1, bench: 0 },
+  };
+
   return (
     <div className="space-y-3" data-testid="view-field">
       {positionGroups.map((pos) => {
         const onField = onFieldByPos(pos);
         const bench = benchByPos(pos);
-        if (onField.length === 0 && bench.length === 0) return null;
+        const structure = posStructure[pos] || { onField: 0, bench: 0 };
+        const emptyOnField = Math.max(0, structure.onField - onField.length);
+        const emptyBench = Math.max(0, structure.bench - bench.length);
 
-        const allPlayers = [...onField, ...bench];
-        const half = Math.ceil(allPlayers.length / 2);
-        const topRow = pos === "RUC" ? allPlayers : allPlayers.slice(0, half);
-        const bottomRow = pos === "RUC" ? [] : allPlayers.slice(half);
+        const onFieldWithEmpty = [
+          ...onField.map(p => ({ type: "player" as const, player: p })),
+          ...Array.from({ length: emptyOnField }).map((_, i) => ({ type: "empty" as const, key: `empty-field-${pos}-${i}` })),
+        ];
+        const benchWithEmpty = [
+          ...bench.map(p => ({ type: "player" as const, player: p })),
+          ...Array.from({ length: emptyBench }).map((_, i) => ({ type: "empty" as const, key: `empty-bench-${pos}-${i}` })),
+        ];
+
+        const allItems = [...onFieldWithEmpty, ...benchWithEmpty];
+        const half = Math.ceil(allItems.length / 2);
+        const topRow = pos === "RUC" ? allItems : allItems.slice(0, half);
+        const bottomRow = pos === "RUC" ? [] : allItems.slice(half);
 
         return (
           <div key={pos} className="relative" data-testid={`field-group-${pos.toLowerCase()}`}>
@@ -465,36 +497,45 @@ function FieldView({
               <div className="flex-1 h-px bg-border/40" />
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
-              {topRow.map((p) => (
-                <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
-              ))}
+              {topRow.map((item) =>
+                item.type === "player" ? (
+                  <FieldViewCard key={item.player.myTeamPlayerId} player={item.player} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!item.player.isOnField} hasPlayed={playedTeams.has(item.player.team)} currentRound={currentRound} />
+                ) : (
+                  <EmptyFieldCard key={item.key} position={pos} isBench={false} />
+                )
+              )}
             </div>
             {bottomRow.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3 mt-2">
-                {bottomRow.map((p) => (
-                  <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!p.isOnField} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
-                ))}
+                {bottomRow.map((item) =>
+                  item.type === "player" ? (
+                    <FieldViewCard key={item.player.myTeamPlayerId} player={item.player} onTapPlayer={onTapPlayer} visibleStats={visibleStats} isBench={!item.player.isOnField} hasPlayed={playedTeams.has(item.player.team)} currentRound={currentRound} />
+                  ) : (
+                    <EmptyFieldCard key={item.key} position={pos} isBench={false} />
+                  )
+                )}
               </div>
             )}
           </div>
         );
       })}
 
-      {utilPlayers.length > 0 && (
-        <div className="relative" data-testid="field-group-util">
-          <div className="flex items-center gap-1 mb-1.5">
-            <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider px-2">
-              UTILITY
-            </span>
-            <div className="flex-1 h-px bg-border/40" />
-          </div>
-          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
-            {utilPlayers.map((p) => (
-              <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
-            ))}
-          </div>
+      <div className="relative" data-testid="field-group-util">
+        <div className="flex items-center gap-1 mb-1.5">
+          <span className="text-[10px] sm:text-xs font-bold text-primary/80 uppercase tracking-wider px-2">
+            UTILITY
+          </span>
+          <div className="flex-1 h-px bg-border/40" />
         </div>
-      )}
+        <div className="flex flex-wrap justify-center gap-1.5 sm:gap-3">
+          {utilPlayers.map((p) => (
+            <FieldViewCard key={p.myTeamPlayerId} player={p} onTapPlayer={onTapPlayer} visibleStats={visibleStats} hasPlayed={playedTeams.has(p.team)} currentRound={currentRound} />
+          ))}
+          {utilPlayers.length === 0 && (
+            <EmptyFieldCard position="UTIL" isBench={false} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -648,6 +689,20 @@ function getNumericStatForSort(player: PlayerWithTeamInfo, key: StatKey): number
   }
 }
 
+function EmptySlot({ position, label }: { position: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 border-b border-border/40 last:border-b-0 opacity-40" data-testid={`empty-slot-${position.toLowerCase()}`}>
+      <div className="w-9 h-9 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center shrink-0">
+        <UserPlus className="w-4 h-4 text-muted-foreground/50" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="text-sm text-muted-foreground italic">{label}</span>
+        <div className="text-[10px] text-muted-foreground/60">{position} position</div>
+      </div>
+    </div>
+  );
+}
+
 function ListView({
   teamPlayers,
   analysis,
@@ -697,15 +752,23 @@ function ListView({
     );
   }
 
+  const posStructure: Record<string, { onField: number; bench: number }> = {
+    DEF: { onField: 6, bench: 2 },
+    MID: { onField: 8, bench: 2 },
+    RUC: { onField: 2, bench: 1 },
+    FWD: { onField: 6, bench: 2 },
+    UTIL: { onField: 1, bench: 0 },
+  };
+
   return (
     <div className="space-y-0" data-testid="view-list">
       {positionGroups.map((pos) => {
         const players = teamPlayers.filter((p) => p.fieldPosition === pos);
-        if (players.length === 0) return null;
-
         const onField = players.filter((p) => p.isOnField);
         const bench = players.filter((p) => !p.isOnField);
-        const all = [...onField, ...bench];
+        const structure = posStructure[pos] || { onField: 0, bench: 0 };
+        const emptyOnField = Math.max(0, structure.onField - onField.length);
+        const emptyBench = Math.max(0, structure.bench - bench.length);
 
         return (
           <div key={pos}>
@@ -713,7 +776,7 @@ function ListView({
               <span className="text-xs font-bold text-white tracking-wide">{positionLabel(pos)}</span>
             </div>
             <div>
-              {all.map((player) => (
+              {onField.map((player) => (
                 <ListViewRow
                   key={player.myTeamPlayerId}
                   player={player}
@@ -725,7 +788,34 @@ function ListView({
                   currentRound={currentRound}
                 />
               ))}
+              {Array.from({ length: emptyOnField }).map((_, i) => (
+                <EmptySlot key={`empty-field-${pos}-${i}`} position={pos} label="Empty Slot" />
+              ))}
             </div>
+            {structure.bench > 0 && (
+              <>
+                <div className="bg-muted/60 px-3 py-1 border-y border-border/40">
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase">Bench</span>
+                </div>
+                <div>
+                  {bench.map((player) => (
+                    <ListViewRow
+                      key={player.myTeamPlayerId}
+                      player={player}
+                      advice={getAdvice(player.id)}
+                      onTapPlayer={onTapPlayer}
+                      onSetCaptain={onSetCaptain}
+                      onSetViceCaptain={onSetViceCaptain}
+                      hasPlayed={playedTeams.has(player.team)}
+                      currentRound={currentRound}
+                    />
+                  ))}
+                  {Array.from({ length: emptyBench }).map((_, i) => (
+                    <EmptySlot key={`empty-bench-${pos}-${i}`} position={pos} label="Empty Bench Slot" />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         );
       })}
