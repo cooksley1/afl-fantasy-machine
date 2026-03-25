@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -21,6 +23,7 @@ import {
   Save,
   CheckCircle,
   HelpCircle,
+  ClipboardPaste,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -75,6 +78,8 @@ const typeIcon: Record<string, any> = {
 export default function TeamAnalyzer() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pastedText, setPastedText] = useState("");
+  const [inputMode, setInputMode] = useState<"screenshot" | "paste">("screenshot");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [teamSaved, setTeamSaved] = useState(false);
   const [disambiguationData, setDisambiguationData] = useState<AmbiguousPlayer[] | null>(null);
@@ -103,6 +108,24 @@ export default function TeamAnalyzer() {
     },
     onError: (error: Error) => {
       toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const parseTextMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await apiRequest("POST", "/api/parse-team-text", { text });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to parse team text" }));
+        throw new Error(err.message || "Parse failed");
+      }
+      return res.json() as Promise<AnalysisResult>;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      toast({ title: "Team parsed", description: `Found ${data.players?.length || 0} players` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Parse failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -195,6 +218,15 @@ export default function TeamAnalyzer() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function clearText() {
+    setPastedText("");
+    setResult(null);
+    setTeamSaved(false);
+    setDisambiguationData(null);
+  }
+
+  const isParsing = analyzeMutation.isPending || parseTextMutation.isPending;
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-4xl mx-auto" data-testid="page-team-analyzer">
       <div>
@@ -202,85 +234,142 @@ export default function TeamAnalyzer() {
           Team Upload & Analyser
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-          Upload a screenshot of your AFL Fantasy team for AI-powered analysis
+          Upload a screenshot or paste your team list from AFL Fantasy
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3 px-4 pt-4">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-            <Camera className="w-4 h-4 text-primary" />
-            Upload Screenshot
+            <Upload className="w-4 h-4 text-primary" />
+            Import Your Team
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileSelect}
-            className="hidden"
-            data-testid="input-screenshot"
-          />
+          <Tabs value={inputMode} onValueChange={(v) => { setInputMode(v as "screenshot" | "paste"); setResult(null); setTeamSaved(false); }}>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="screenshot" className="text-xs sm:text-sm gap-1.5" data-testid="tab-screenshot">
+                <Camera className="w-3.5 h-3.5" />
+                Screenshot
+              </TabsTrigger>
+              <TabsTrigger value="paste" className="text-xs sm:text-sm gap-1.5" data-testid="tab-paste">
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                Paste List
+              </TabsTrigger>
+            </TabsList>
 
-          {!selectedFile ? (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed rounded-lg p-8 sm:p-12 flex flex-col items-center gap-3 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors cursor-pointer"
-              data-testid="button-upload-area"
-            >
-              <Upload className="w-8 h-8 sm:w-10 sm:h-10" />
-              <div className="text-center">
-                <p className="text-sm font-medium">Tap to upload screenshot</p>
-                <p className="text-xs mt-1">PNG, JPG up to 10MB</p>
-              </div>
-            </button>
-          ) : (
-            <div className="space-y-3">
-              <div className="relative">
-                <img
-                  src={previewUrl!}
-                  alt="Team screenshot"
-                  className="w-full rounded-lg border max-h-80 object-contain bg-muted"
-                  data-testid="img-preview"
-                />
+            <TabsContent value="screenshot" className="mt-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-screenshot"
+              />
+
+              {!selectedFile ? (
                 <button
-                  onClick={clearFile}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-background/80 hover:bg-background border shadow-sm"
-                  data-testid="button-clear-image"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed rounded-lg p-8 sm:p-12 flex flex-col items-center gap-3 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors cursor-pointer"
+                  data-testid="button-upload-area"
                 >
-                  <X className="w-4 h-4" />
+                  <Upload className="w-8 h-8 sm:w-10 sm:h-10" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">Tap to upload screenshot</p>
+                    <p className="text-xs mt-1">PNG, JPG up to 10MB</p>
+                  </div>
                 </button>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => selectedFile && analyzeMutation.mutate(selectedFile)}
-                  disabled={analyzeMutation.isPending}
-                  className="flex-1"
-                  data-testid="button-analyze"
-                >
-                  {analyzeMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Analysing...
-                    </>
-                  ) : (
-                    <>
-                      <ImageIcon className="w-4 h-4 mr-2" />
-                      Analyse Team
-                    </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <img
+                      src={previewUrl!}
+                      alt="Team screenshot"
+                      className="w-full rounded-lg border max-h-80 object-contain bg-muted"
+                      data-testid="img-preview"
+                    />
+                    <button
+                      onClick={clearFile}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-background/80 hover:bg-background border shadow-sm"
+                      data-testid="button-clear-image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => selectedFile && analyzeMutation.mutate(selectedFile)}
+                      disabled={analyzeMutation.isPending}
+                      className="flex-1"
+                      data-testid="button-analyze"
+                    >
+                      {analyzeMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Analysing...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-4 h-4 mr-2" />
+                          Analyse Team
+                        </>
+                      )}
+                    </Button>
+                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} data-testid="button-change-image">
+                      Change
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="paste" className="mt-0">
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Go to your AFL Fantasy team page, switch to <strong>List View</strong>, select all (Ctrl+A / Cmd+A) and paste below.
+                  </p>
+                  <Textarea
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder="Paste your team list here..."
+                    className="min-h-[200px] text-xs font-mono resize-y"
+                    data-testid="textarea-paste"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => parseTextMutation.mutate(pastedText)}
+                    disabled={parseTextMutation.isPending || pastedText.trim().length < 20}
+                    className="flex-1"
+                    data-testid="button-parse-text"
+                  >
+                    {parseTextMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Parsing...
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardPaste className="w-4 h-4 mr-2" />
+                        Import Team
+                      </>
+                    )}
+                  </Button>
+                  {pastedText && (
+                    <Button variant="outline" onClick={clearText} data-testid="button-clear-text">
+                      Clear
+                    </Button>
                   )}
-                </Button>
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()} data-testid="button-change-image">
-                  Change
-                </Button>
+                </div>
               </div>
-            </div>
-          )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
-      {analyzeMutation.isPending && (
+      {isParsing && (
         <div className="space-y-3">
           <Skeleton className="h-32 rounded-md" />
           <Skeleton className="h-24 rounded-md" />
@@ -345,19 +434,21 @@ export default function TeamAnalyzer() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-2 px-4 pt-4">
-              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-                <Target className="w-4 h-4 text-accent" />
-                Team Analysis
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-analysis">
-                {result.analysis}
-              </p>
-            </CardContent>
-          </Card>
+          {result.analysis && (
+            <Card>
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                  <Target className="w-4 h-4 text-accent" />
+                  Team Analysis
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-analysis">
+                  {result.analysis}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {result.captainTip && (
             <Card>

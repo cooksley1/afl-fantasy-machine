@@ -960,6 +960,156 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/parse-team-text", async (req, res) => {
+    try {
+      const { text } = req.body as { text: string };
+      if (!text || text.trim().length < 20) {
+        return res.status(400).json({ message: "Please paste your team list text" });
+      }
+
+      const lines = text.split("\n").map(l => l.trim());
+
+      interface ParsedPlayer {
+        name: string;
+        position: string;
+        price?: number;
+        isOnField?: boolean;
+        isCaptain?: boolean;
+        isViceCaptain?: boolean;
+        isEmergency?: boolean;
+      }
+
+      const players: ParsedPlayer[] = [];
+
+      let currentSection = "";
+      let sectionOnFieldCount = 0;
+      let sectionBenchCount = 0;
+      let sectionPlayerIndex = 0;
+
+      const sectionHeaderRe = /^(DEF|MID|RUC|FWD)\s+section\s+with\s+(\d+)\s+lineup\s+players?\s+and\s+(\d+)\s+bench/i;
+      const utilityHeaderRe = /utility\s+position\s+section/i;
+      const playerLineRe = /^Player\s+.+\s+in\s+(Defender|Midfielder|Ruck|Forward|Utility)\s+position/i;
+      const statusLineRe = /^(uncertain|injured|captain|vice-?captain|emergency)?([A-Z])\.\s*(.+)$/;
+      const priceRe = /^\$([0-9,.]+)(k|m)$/i;
+      const posCodeRe = /^(DEF|MID|RUC|FWD|D\/M|F\/M|R\/D|R\/F|D\/F|M\/F|F\/D|M\/D)$/i;
+
+      const posMap: Record<string, string> = {
+        "defender": "DEF", "midfielder": "MID", "ruck": "RUC", "forward": "FWD", "utility": "UTIL",
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        const sectionMatch = line.match(sectionHeaderRe);
+        if (sectionMatch) {
+          currentSection = sectionMatch[1].toUpperCase();
+          sectionOnFieldCount = parseInt(sectionMatch[2]);
+          sectionBenchCount = parseInt(sectionMatch[3]);
+          sectionPlayerIndex = 0;
+          continue;
+        }
+
+        if (utilityHeaderRe.test(line)) {
+          currentSection = "UTIL";
+          sectionOnFieldCount = 0;
+          sectionBenchCount = 1;
+          sectionPlayerIndex = 0;
+          continue;
+        }
+
+        const playerMatch = line.match(playerLineRe);
+        if (playerMatch) {
+          const posWord = playerMatch[1].toLowerCase();
+          const fallbackPos = posMap[posWord] || currentSection || "MID";
+
+          const window = lines.slice(i + 1, Math.min(i + 8, lines.length)).filter(l => l !== "");
+
+          let playerName = "";
+          let pos = fallbackPos;
+          let price: number | undefined;
+          let isCaptain = false;
+          let isViceCaptain = false;
+          let isEmergency = false;
+
+          for (const wl of window) {
+            if (!playerName && !wl.startsWith("$") && !wl.match(posCodeRe) && !wl.match(priceRe)
+                && !wl.startsWith("Player ") && !wl.match(/^[+-]?\$/) && !wl.match(/^\d/) && !wl.match(sectionHeaderRe)
+                && wl.length > 2 && wl.includes(" ")) {
+              playerName = wl;
+              continue;
+            }
+
+            if (wl.match(/^(uncertain|injured|captain|vice|emergency)/i)) {
+              const lower = wl.toLowerCase();
+              if (lower.startsWith("captain")) isCaptain = true;
+              if (lower.startsWith("vice")) isViceCaptain = true;
+              if (lower.startsWith("emergency")) isEmergency = true;
+              continue;
+            }
+
+            const pcm = wl.match(posCodeRe);
+            if (pcm) {
+              const code = pcm[1].toUpperCase();
+              if (code === "D/M" || code === "M/D") pos = currentSection === "DEF" ? "DEF" : "MID";
+              else if (code === "F/M" || code === "M/F") pos = currentSection === "FWD" ? "FWD" : "MID";
+              else if (code === "R/D" || code === "D/R") pos = currentSection === "RUC" ? "RUC" : "DEF";
+              else if (code === "R/F" || code === "F/R") pos = currentSection === "RUC" ? "RUC" : "FWD";
+              else if (code === "D/F" || code === "F/D") pos = currentSection === "DEF" ? "DEF" : "FWD";
+              else pos = code;
+              continue;
+            }
+
+            const pm = wl.match(priceRe);
+            if (pm && !price) {
+              const val = parseFloat(pm[1].replace(",", ""));
+              price = pm[2].toLowerCase() === "m" ? Math.round(val * 1000000) : Math.round(val * 1000);
+              break;
+            }
+          }
+
+          if (!playerName) continue;
+
+          if (currentSection === "UTIL") pos = "UTIL";
+
+          const isOnField = currentSection === "UTIL"
+            ? false
+            : sectionPlayerIndex < sectionOnFieldCount;
+
+          sectionPlayerIndex++;
+
+          players.push({
+            name: playerName,
+            position: pos,
+            price,
+            isOnField,
+            isCaptain,
+            isViceCaptain,
+            isEmergency,
+          });
+        }
+      }
+
+      if (players.length === 0) {
+        return res.status(400).json({ message: "Could not identify any players from the pasted text. Make sure you copy the full team list from AFL Fantasy." });
+      }
+
+      console.log(`[TextParser] Parsed ${players.length} players from pasted text`);
+
+      res.json({
+        players,
+        analysis: `Parsed ${players.length} players from your team list. ${players.filter(p => p.isOnField).length} on-field, ${players.filter(p => !p.isOnField).length} on bench.`,
+        recommendations: [],
+        captainTip: "",
+        tradeSuggestions: [],
+        captainName: players.find(p => p.isCaptain)?.name || null,
+        viceCaptainName: players.find(p => p.isViceCaptain)?.name || null,
+      });
+    } catch (error: any) {
+      console.error("Text parse error:", error.message);
+      res.status(500).json({ message: "Failed to parse team text" });
+    }
+  });
+
   app.post("/api/my-team/save-from-analyzer", async (req, res) => {
     try {
       const { players: identifiedPlayers, captainName, viceCaptainName } = req.body as {
