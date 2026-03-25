@@ -25,6 +25,7 @@ const syncSources: Record<string, SyncSourceStatus> = {
   wheelo: { lastSync: null, status: "idle" },
   fixtures: { lastSync: null, status: "idle" },
   aflTables: { lastSync: null, status: "idle" },
+  aflInjuryList: { lastSync: null, status: "idle" },
   intel: { lastSync: null, status: "idle" },
 };
 
@@ -94,6 +95,16 @@ async function runGather() {
     } catch (e: any) {
       markSync("dfsAustralia", "error", e.message);
       console.log(`[Scheduler] DFS Australia sync error: ${e.message}`);
+    }
+
+    try {
+      markSync("aflInjuryList", "syncing");
+      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
+      await syncAflInjuryList();
+      markSync("aflInjuryList", "idle");
+    } catch (e: any) {
+      markSync("aflInjuryList", "error", e.message);
+      console.log(`[Scheduler] AFL injury list sync error: ${e.message}`);
     }
 
     try {
@@ -262,6 +273,16 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     } catch (e: any) {
       markSync("fixtures", "error", e.message);
       errors.push(`Fixtures: ${e.message}`);
+    }
+
+    try {
+      markSync("aflInjuryList", "syncing");
+      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
+      await syncAflInjuryList();
+      markSync("aflInjuryList", "idle");
+    } catch (e: any) {
+      markSync("aflInjuryList", "error", e.message);
+      errors.push(`AFL injury list: ${e.message}`);
     }
 
     return { success: errors.length === 0, duration: Date.now() - startTime, errors };
