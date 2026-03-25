@@ -16,6 +16,7 @@ import {
 } from "./services/projection-engine";
 import { TradeEngine, generateTradeRecommendations } from "./services/trade-engine";
 import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan, buildDreamTeamReverse } from "./services/season-planner";
+import { checkPlayersAgainstNews, formatNewsWarningForReason, type NewsWarning } from "./services/news-sanity-check";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, syncPlayerFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
@@ -458,11 +459,28 @@ export async function registerRoutes(
       const executedThisRound = await tradeEngine.getTradeHistoryForRound(uid, currentRound);
       const finalTrades = tradeEngine.generateRecommendations(myTeam, allPlayers, currentRound, salaryCap, executedThisRound);
 
+      const playerNamesToCheck = new Set<string>();
       for (const trade of finalTrades) {
+        playerNamesToCheck.add(trade.playerOut.name);
+        playerNamesToCheck.add(trade.playerIn.name);
+      }
+      const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck]);
+
+      for (const trade of finalTrades) {
+        let reasonLines = [...trade.reasons];
+        const outWarnings = newsWarnings.get(trade.playerOut.name) || [];
+        const inWarnings = newsWarnings.get(trade.playerIn.name) || [];
+        for (const w of outWarnings) {
+          reasonLines.push(formatNewsWarningForReason(w));
+        }
+        for (const w of inWarnings) {
+          reasonLines.push(formatNewsWarningForReason(w));
+        }
+
         await storage.createTradeRecommendation(uid, {
           playerOutId: trade.playerOut.id,
           playerInId: trade.playerIn.id,
-          reason: trade.reasons.join(". ") + ".",
+          reason: reasonLines.join(". ") + ".",
           confidence: trade.confidence,
           priceChange: trade.priceDiff,
           scoreDifference: trade.scoreDiff,
@@ -477,7 +495,26 @@ export async function registerRoutes(
       }
 
       const recs = await storage.getTradeRecommendations(uid);
-      res.json(recs);
+
+      const tradeNewsWarnings: Record<number, NewsWarning[]> = {};
+      for (const rec of recs) {
+        const recWarnings: NewsWarning[] = [];
+        const playerOutObj = finalTrades.find(t => t.playerOut.id === rec.playerOutId);
+        const playerInObj = finalTrades.find(t => t.playerIn.id === rec.playerInId);
+        if (playerOutObj) {
+          const w = newsWarnings.get(playerOutObj.playerOut.name);
+          if (w) recWarnings.push(...w);
+        }
+        if (playerInObj) {
+          const w = newsWarnings.get(playerInObj.playerIn.name);
+          if (w) recWarnings.push(...w);
+        }
+        if (recWarnings.length > 0) {
+          tradeNewsWarnings[rec.id] = recWarnings;
+        }
+      }
+
+      res.json({ recommendations: recs, newsWarnings: tradeNewsWarnings });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -573,6 +610,40 @@ export async function registerRoutes(
       }));
 
       const advice = tradeEngine.getCaptainLoopholeAdvice(myTeam, currentRound, fixtureData);
+
+      const captainNames: string[] = [];
+      if (advice.recommendedVC?.player?.name) captainNames.push(advice.recommendedVC.player.name);
+      if (advice.recommendedCaptain?.player?.name) captainNames.push(advice.recommendedCaptain.player.name);
+      for (const alt of advice.alternativeVCs || []) {
+        if (alt.player?.name) captainNames.push(alt.player.name);
+      }
+      for (const alt of advice.alternativeCaptains || []) {
+        if (alt.player?.name) captainNames.push(alt.player.name);
+      }
+
+      const newsWarnings = await checkPlayersAgainstNews([...new Set(captainNames)]);
+
+      const attachWarnings = (rec: { player: any; reasons: string[] } | null) => {
+        if (!rec?.player?.name) return;
+        const warnings = newsWarnings.get(rec.player.name);
+        if (warnings && warnings.length > 0) {
+          for (const w of warnings) {
+            rec.reasons.push(formatNewsWarningForReason(w));
+          }
+        }
+      };
+
+      attachWarnings(advice.recommendedVC);
+      attachWarnings(advice.recommendedCaptain);
+      for (const alt of advice.alternativeVCs || []) attachWarnings(alt);
+      for (const alt of advice.alternativeCaptains || []) attachWarnings(alt);
+
+      const newsWarningsList: NewsWarning[] = [];
+      for (const [, warnings] of newsWarnings) {
+        newsWarningsList.push(...warnings);
+      }
+      (advice as any).newsWarnings = newsWarningsList;
+
       res.json(advice);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

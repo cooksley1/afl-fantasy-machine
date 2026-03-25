@@ -467,15 +467,30 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
 
     await storage.clearTradeRecommendations(userId);
 
+    const { checkPlayersAgainstNews, formatNewsWarningForReason } = await import("./services/news-sanity-check");
+    const playerNamesToCheck = new Set<string>();
+    for (const trade of trades) {
+      if (trade.playerOutName) playerNamesToCheck.add(trade.playerOutName);
+      if (trade.playerInName) playerNamesToCheck.add(trade.playerInName);
+    }
+    const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck]);
+
     for (const trade of trades) {
       const playerOut = myTeam.find(p => p.name === trade.playerOutName);
       const playerIn = availablePlayers.find(p => p.name === trade.playerInName);
 
       if (playerOut && playerIn) {
+        let reason = trade.reason || "AI recommendation based on form analysis";
+        const outWarnings = newsWarnings.get(trade.playerOutName) || [];
+        const inWarnings = newsWarnings.get(trade.playerInName) || [];
+        for (const w of [...outWarnings, ...inWarnings]) {
+          reason += ". " + formatNewsWarningForReason(w);
+        }
+
         await storage.createTradeRecommendation(userId, {
           playerOutId: playerOut.id,
           playerInId: playerIn.id,
-          reason: trade.reason || "AI recommendation based on form analysis",
+          reason,
           confidence: Math.min(Math.max(trade.confidence || 0.5, 0), 1),
           priceChange: playerIn.price - playerOut.price,
           scoreDifference: (playerIn.avgScore || 0) - (playerOut.avgScore || 0),

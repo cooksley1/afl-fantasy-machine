@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +22,23 @@ import {
   ArrowUpCircle,
   Settings2,
   Users,
+  ExternalLink,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import { PlayerAvailabilityBadge } from "@/components/player-availability-badge";
 import type { TradeRecommendationWithPlayers, LeagueSettings } from "@shared/schema";
+
+interface NewsWarning {
+  playerName: string;
+  headline: string;
+  summary: string;
+  severity: "high" | "medium" | "low";
+  category: string;
+  sourceUrl: string | null;
+  reportedAt: string;
+}
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Flame; color: string; bgColor: string; description: string }> = {
   urgent: { label: "Must Trade", icon: Flame, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800", description: "Injured, dropped, or late change — act now" },
@@ -112,6 +124,7 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
 
 export default function Trades() {
   const { toast } = useToast();
+  const [tradeWarnings, setTradeWarnings] = useState<Record<number, NewsWarning[]>>({});
 
   const { data: trades, isLoading } = useQuery<TradeRecommendationWithPlayers[]>({
     queryKey: ["/api/trade-recommendations"],
@@ -126,8 +139,14 @@ export default function Trades() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/trade-recommendations/generate"),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/trade-recommendations/generate");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data?.newsWarnings) {
+        setTradeWarnings(data.newsWarnings);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/trade-recommendations"] });
       toast({ title: "Trade recommendations generated", description: "Filtered to only worthwhile trades" });
     },
@@ -339,6 +358,7 @@ export default function Trades() {
                 trade={trade}
                 onExecute={() => executeTradeMutation.mutate(trade.id)}
                 isPending={executeTradeMutation.isPending}
+                newsWarnings={tradeWarnings[trade.id]}
               />
             ))}
           </div>
@@ -348,16 +368,57 @@ export default function Trades() {
   );
 }
 
+function NewsWarningCard({ warning, tradeId, index }: { warning: NewsWarning; tradeId: number; index: number }) {
+  const colorClasses = warning.severity === "high"
+    ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+    : warning.severity === "medium"
+    ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"
+    : "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300";
+
+  return (
+    <div
+      className={`text-xs leading-relaxed p-2 rounded-md border ${colorClasses}`}
+      data-testid={`text-news-warning-${tradeId}-${index}`}
+    >
+      <div className="flex items-start gap-1.5">
+        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold">{warning.playerName}: {warning.headline}</p>
+          {warning.sourceUrl && (
+            <a
+              href={warning.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 mt-1 underline opacity-80 hover:opacity-100"
+              data-testid={`link-news-source-${tradeId}-${index}`}
+            >
+              <ExternalLink className="w-3 h-3" />
+              View source
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TradeCard({
   trade,
   onExecute,
   isPending,
+  newsWarnings,
 }: {
   trade: TradeRecommendationWithPlayers;
   onExecute: () => void;
   isPending: boolean;
+  newsWarnings?: NewsWarning[];
 }) {
   const urgencyConfig = URGENCY_BADGE[trade.urgency || "medium"] || URGENCY_BADGE.medium;
+
+  const reasonLines = trade.reason?.split(/(?<=\.) (?=[A-Z])/).filter(Boolean).filter(line => {
+    const t = line.trim();
+    return !t.startsWith("⚠️") && !t.startsWith("📰");
+  }) || [];
 
   return (
     <Card className="hover-elevate" data-testid={`card-trade-${trade.id}`}>
@@ -417,8 +478,16 @@ function TradeCard({
           </div>
         </div>
 
-        <div className="mt-3 pt-3 border-t space-y-1" data-testid={`text-trade-reason-${trade.id}`}>
-          {trade.reason?.split(/(?<=\.) (?=[A-Z])/).filter(Boolean).map((line, i) => {
+        {newsWarnings && newsWarnings.length > 0 && (
+          <div className="mt-3 pt-3 border-t space-y-2" data-testid={`news-warnings-${trade.id}`}>
+            {newsWarnings.map((w, i) => (
+              <NewsWarningCard key={i} warning={w} tradeId={trade.id} index={i} />
+            ))}
+          </div>
+        )}
+
+        <div className={`${newsWarnings && newsWarnings.length > 0 ? "mt-2" : "mt-3 pt-3 border-t"} space-y-1`} data-testid={`text-trade-reason-${trade.id}`}>
+          {reasonLines.map((line, i) => {
             const trimmed = line.trim();
             const isHeader = trimmed.startsWith("OUT:") || trimmed.startsWith("IN:");
             const isPlan = trimmed.startsWith("PRICE PLAN:") || trimmed.startsWith("LONG-TERM:") || trimmed.startsWith("SEASON PLAN:") || trimmed.startsWith("SELL URGENCY:");
