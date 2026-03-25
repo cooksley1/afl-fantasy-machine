@@ -88,16 +88,6 @@ async function runGather() {
     }
 
     try {
-      markSync("aflInjuryList", "syncing");
-      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
-      await syncAflInjuryList();
-      markSync("aflInjuryList", "idle");
-    } catch (e: any) {
-      markSync("aflInjuryList", "error", e.message);
-      console.log(`[Scheduler] AFL injury list sync error: ${e.message}`);
-    }
-
-    try {
       markSync("aflFantasyPrices", "syncing");
       const { syncAflFantasyPrices } = await import("./expand-players");
       await syncAflFantasyPrices();
@@ -105,6 +95,16 @@ async function runGather() {
     } catch (e: any) {
       markSync("aflFantasyPrices", "error", e.message);
       console.log(`[Scheduler] AFL Fantasy price sync error: ${e.message}`);
+    }
+
+    try {
+      markSync("aflInjuryList", "syncing");
+      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
+      await syncAflInjuryList();
+      markSync("aflInjuryList", "idle");
+    } catch (e: any) {
+      markSync("aflInjuryList", "error", e.message);
+      console.log(`[Scheduler] AFL injury list sync error: ${e.message}`);
     }
 
     try {

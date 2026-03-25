@@ -203,17 +203,35 @@ async function findPlayer(
     )
     .limit(10);
 
-  if (results.length === 0) return null;
+  const matchInResults = (list: typeof results, requireFirstName = false) => {
+    const exact = list.find((r) => {
+      const rParts = r.name.toLowerCase().split(/\s+/);
+      const fParts = firstName.toLowerCase().split(/\s+/);
+      return rParts.some((p) => fParts.some((f) => p.startsWith(f))) && r.name.toLowerCase().includes(surname.toLowerCase());
+    });
+    if (exact) return exact;
+    if (!requireFirstName && list.length === 1) return list[0];
+    return null;
+  };
 
-  const exact = results.find((r) => {
-    const rParts = r.name.toLowerCase().split(/\s+/);
-    const fParts = firstName.toLowerCase().split(/\s+/);
-    return rParts.some((p) => fParts.some((f) => p.startsWith(f))) && r.name.toLowerCase().includes(surname.toLowerCase());
-  });
+  const teamMatch = matchInResults(results);
+  if (teamMatch) return teamMatch;
 
-  if (exact) return exact;
+  if (results.length === 0) {
+    const allResults = await db
+      .select({ id: players.id, name: players.name, injuryStatus: players.injuryStatus, team: players.team })
+      .from(players)
+      .where(ilike(players.name, `%${surname}%`))
+      .limit(20);
 
-  if (results.length === 1) return results[0];
+    const crossTeam = allResults.find((r) => {
+      const fullNameLower = `${firstName} ${surname}`.toLowerCase();
+      return r.name.toLowerCase() === fullNameLower;
+    });
+    if (crossTeam) return crossTeam;
+
+    return matchInResults(allResults, true);
+  }
 
   return null;
 }
@@ -264,7 +282,7 @@ export async function syncAflInjuryList(): Promise<{ matched: number; updated: n
       if (!injuredPlayerIds.has(p.id)) {
         await db
           .update(players)
-          .set({ injuryStatus: null })
+          .set({ injuryStatus: null, selectionStatus: "named", isNamedTeam: true })
           .where(eq(players.id, p.id));
         cleared++;
       }

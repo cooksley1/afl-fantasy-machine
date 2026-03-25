@@ -383,10 +383,9 @@ export async function syncAflFantasyPrices(): Promise<{
         updates.selectionStatus = "not-playing";
         updates.isNamedTeam = false;
       } else if (aflStatus === "playing") {
-        updates.selectionStatus = "named";
-        updates.isNamedTeam = true;
-        if (dbPlayer.injuryStatus) {
-          updates.injuryStatus = null;
+        if (!dbPlayer.injuryStatus) {
+          updates.selectionStatus = "named";
+          updates.isNamedTeam = true;
         }
       } else if (aflStatus === "medical_sub") {
         updates.selectionStatus = "medical_sub";
