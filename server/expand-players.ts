@@ -467,7 +467,7 @@ export async function syncAflFantasyPrices(): Promise<{
 
 export async function syncDfsAustralia(): Promise<{ updated: number; added: number }> {
   try {
-    const XLSX = await import("xlsx");
+    const ExcelJS = await import("exceljs");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     const res = await fetch("https://dfsaustralia.com/wp-content/uploads/file-downloads/afl-fantasy-2026.xlsx", {
@@ -478,9 +478,14 @@ export async function syncDfsAustralia(): Promise<{ updated: number; added: numb
     if (!res.ok) throw new Error(`DFS Australia returned ${res.status}`);
 
     const buffer = await res.arrayBuffer();
-    const workbook = XLSX.read(Buffer.from(buffer), { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(buffer));
+    const sheet = workbook.worksheets[0];
+    const data: any[][] = [];
+    sheet.eachRow({ includeEmpty: true }, (row) => {
+      const values = row.values as any[];
+      data.push(values.slice(1));
+    });
 
     let headerRow = -1;
     for (let i = 0; i < 20; i++) {
