@@ -2933,104 +2933,168 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const isByeRoundNow = gameRulesModule.isByeRound(currentRound);
       const maxTrades = gameRulesModule.getTradesForRound(currentRound);
 
-      const definitelyOutStatuses = [
-        "season", "acl", "knee", "hamstring", "shoulder", "concussion",
-        "suspended", "dropped", "omitted", "delisted", "retired",
-        "broken", "fracture", "surgery", "torn", "rupture",
-      ];
-      function isDefinitelyOut(injuryStatus: string | null): boolean {
+      const longTermKeywords = ["season", "acl", "torn", "rupture", "surgery", "broken", "fracture", "delisted", "retired"];
+      function isLongTermInjury(injuryStatus: string | null): boolean {
         if (!injuryStatus) return false;
-        return definitelyOutStatuses.some(s => injuryStatus.toLowerCase().includes(s));
+        return longTermKeywords.some(s => injuryStatus.toLowerCase().includes(s));
+      }
+      function getTierLabel(price: number): string {
+        if (price < 350000) return "Rookie";
+        if (price < 700000) return "Mid-pricer";
+        return "Premium";
+      }
+      function calcProjPriceChange(p: any): number | null {
+        const proj = p.projectedScore || 0;
+        const be = p.breakEven;
+        const sp = p.startingPrice || p.price;
+        if (be === null || be === undefined || !proj) return null;
+        return Math.round((proj - be) * (sp / 10490));
+      }
+      function isCashCowGenerating(p: any): boolean {
+        if ((p.price || 0) >= 400000) return false;
+        const be = p.breakEven;
+        if (be === null || be === undefined) return false;
+        return be < (p.avgScore || 0);
       }
 
       const steps: { priority: "critical" | "important" | "suggested"; action: string; reason: string; link?: string }[] = [];
 
-      const injuredOnField = onField.filter(p => isDefinitelyOut(p.injuryStatus) || p.lateChange);
-      const omittedOnField = onField.filter(p => p.selectionStatus === "omitted" && !isDefinitelyOut(p.injuryStatus));
-      const unavailable = [...injuredOnField, ...omittedOnField];
+      const notPlayingOnField = onField.filter(p =>
+        p.injuryStatus || p.lateChange || p.selectionStatus === "injured" ||
+        p.selectionStatus === "not-playing" || p.selectionStatus === "omitted" ||
+        p.byeRound === currentRound
+      );
 
-      for (const p of unavailable) {
-        const topTrade = pendingTrades.find(t => t.playerOutId === p.id);
-        if (topTrade) {
-          steps.push({
-            priority: "critical",
-            action: `Trade out ${p.name} → bring in ${topTrade.playerIn.name}`,
-            reason: `${p.name} is ${p.injuryStatus || "unavailable"}. ${topTrade.playerIn.name} (avg ${topTrade.playerIn.avgScore?.toFixed(1)}) is the best replacement at ${topTrade.playerIn.position}.`,
-            link: "/trades",
+      const tradeSteps: { priority: "critical" | "important" | "suggested"; action: string; reason: string; link?: string; impactScore: number }[] = [];
+
+      for (const p of notPlayingOnField) {
+        const tierLabel = getTierLabel(p.price || 0);
+        const statusText = p.injuryStatus || p.selectionStatus || "not playing";
+        const onBye = p.byeRound === currentRound;
+        const longTerm = isLongTermInjury(p.injuryStatus);
+        const cashGen = isCashCowGenerating(p);
+        const pChange = calcProjPriceChange(p);
+        const pChangeStr = pChange !== null ? (pChange >= 0 ? `+$${(pChange / 1000).toFixed(0)}k` : `-$${Math.abs(pChange / 1000).toFixed(0)}k`) : null;
+
+        if (onBye && !longTerm && !p.injuryStatus) {
+          const benchCover = bench.find(b => {
+            const bPositions = [b.position, b.dualPosition].filter(Boolean);
+            return (p.fieldPosition === "UTIL" || bPositions.includes(p.fieldPosition || "")) &&
+              b.byeRound !== currentRound && !b.injuryStatus &&
+              b.selectionStatus !== "injured" && b.selectionStatus !== "not-playing";
           });
-        } else {
-          const replacement = bench.find(b => {
-            const bpPositions = [b.position, b.dualPosition].filter(Boolean);
-            return (p.fieldPosition === "UTIL" || bpPositions.includes(p.fieldPosition || "")) && !isDefinitelyOut(b.injuryStatus);
-          });
-          if (replacement) {
+          if (benchCover) {
             steps.push({
               priority: "critical",
-              action: `Move ${replacement.name} on-field to replace ${p.name}`,
-              reason: `${p.name} is ${p.injuryStatus || "unavailable"}. ${replacement.name} (avg ${replacement.avgScore?.toFixed(1)}) is your best bench option at ${p.fieldPosition}.`,
+              action: `${p.name} — on bye. Swap ${benchCover.name} on-field`,
+              reason: `${tierLabel} on bye this round. ${benchCover.name} (avg ${benchCover.avgScore?.toFixed(0)}) can cover at ${p.fieldPosition}.`,
               link: "/team",
             });
           } else {
             steps.push({
-              priority: "critical",
-              action: `Find a replacement for ${p.name}`,
-              reason: `${p.name} is ${p.injuryStatus || "unavailable"} and there's no suitable bench cover. You'll need to use a trade.`,
-              link: "/trades",
+              priority: "suggested",
+              action: `${p.name} — on bye (no bench cover)`,
+              reason: `${tierLabel} on bye, no eligible bench swap. Returns next round.${cashGen && pChangeStr ? ` Still generating ${pChangeStr}/wk — don't waste a trade.` : ""}`,
+              link: "/team",
             });
           }
+          continue;
         }
-      }
 
-      const remainingTrades = pendingTrades
-        .filter(t => !unavailable.some(u => u.id === t.playerOutId))
-        .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
-        .slice(0, Math.max(0, maxTrades - unavailable.length));
-
-      for (const t of remainingTrades) {
-        if (t.confidence > 0.7) {
-          steps.push({
-            priority: "important",
-            action: `Trade ${t.playerOut.name} → ${t.playerIn.name}`,
-            reason: t.reason || `${t.playerIn.name} (avg ${t.playerIn.avgScore?.toFixed(1)}) is a significant upgrade over ${t.playerOut.name} (avg ${t.playerOut.avgScore?.toFixed(1)}).`,
+        if (longTerm) {
+          const impactScore = (p.avgScore || 0) + ((p.price || 0) >= 700000 ? 50 : 0);
+          tradeSteps.push({
+            priority: "critical",
+            action: `Trade ${p.name} — ${statusText}`,
+            reason: `${tierLabel} out long-term (${statusText}). ${(p.price || 0) < 350000 ? `Was $${((p.price || 0) / 1000).toFixed(0)}k — cash generation over.` : `Avg ${p.avgScore?.toFixed(0)}, $${((p.price || 0) / 1000).toFixed(0)}k — free up salary.`}`,
             link: "/trades",
+            impactScore,
           });
+          continue;
         }
+
+        if (cashGen && (p.price || 0) < 350000) {
+          let remainingValue = pChange && pChange > 0 ? Math.min(pChange * Math.min(24 - currentRound, 6), 200000) : 0;
+          if (remainingValue === 0) {
+            const avgAboveBe = (p.avgScore || 0) - (p.breakEven || 0);
+            if (avgAboveBe > 0) {
+              const approxWeeklyGain = avgAboveBe * ((p.startingPrice || p.price || 230000) / 10490);
+              remainingValue = Math.min(approxWeeklyGain * Math.min(24 - currentRound, 6), 200000);
+            }
+          }
+          if (remainingValue > 30000) {
+            steps.push({
+              priority: "important",
+              action: `${p.name} — ${statusText} (hold for cash)`,
+              reason: `Rookie cash cow (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven}, ${pChangeStr || "growing"}) — still making money. ${p.selectionStatus === "injured" ? "Monitor injury timeline." : "Likely returns soon."} Move to bench and cover with a playing player.`,
+              link: "/team",
+            });
+            continue;
+          }
+        }
+
+        if ((p.price || 0) >= 700000 || (p.price || 0) >= 350000) {
+          const benchCover = bench.find(b => {
+            const bPositions = [b.position, b.dualPosition].filter(Boolean);
+            return (p.fieldPosition === "UTIL" || bPositions.includes(p.fieldPosition || "")) &&
+              !b.injuryStatus && b.selectionStatus !== "injured" && b.selectionStatus !== "not-playing" && b.byeRound !== currentRound;
+          });
+          if (benchCover && !isLongTermInjury(p.injuryStatus)) {
+            steps.push({
+              priority: "critical",
+              action: `${p.name} — ${statusText}. Swap ${benchCover.name} on-field`,
+              reason: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}) not playing. ${benchCover.name} (avg ${benchCover.avgScore?.toFixed(0)}) can cover. ${p.selectionStatus === "injured" ? "Hold if short-term injury." : "Monitor status."}`,
+              link: "/team",
+            });
+          } else {
+            const impactScore = (p.avgScore || 0) + ((p.price || 0) >= 700000 ? 30 : 15);
+            tradeSteps.push({
+              priority: "critical",
+              action: `Trade ${p.name} — ${statusText}`,
+              reason: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}, $${((p.price || 0) / 1000).toFixed(0)}k) not playing${benchCover ? "" : " with no bench cover"}. ${p.selectionStatus === "injured" ? "If extended, trade out." : "Trade for a playing replacement."}`,
+              link: "/trades",
+              impactScore,
+            });
+          }
+          continue;
+        }
+
+        const impactScore = cashGen ? 5 : 20;
+        tradeSteps.push({
+          priority: cashGen ? "suggested" : "important",
+          action: `${p.name} — ${statusText}`,
+          reason: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven ?? "-"}, ${pChangeStr || "no projected growth"}). ${cashGen ? "Still generating some cash — consider holding." : "Not generating cash. Trade for an active player."}`,
+          link: cashGen ? "/team" : "/trades",
+          impactScore,
+        });
       }
 
-      const byeAffected = onField.filter(p => p.byeRound === currentRound);
-      if (byeAffected.length > 0) {
-        const swappable = byeAffected.filter(p => {
-          return bench.some(b => {
-            const bpPositions = [b.position, b.dualPosition].filter(Boolean);
-            return (p.fieldPosition === "UTIL" || bpPositions.includes(p.fieldPosition || "")) && b.byeRound !== currentRound;
-          });
-        });
-        if (swappable.length > 0) {
+      tradeSteps.sort((a, b) => b.impactScore - a.impactScore);
+      const effectiveTradeLimit = Math.min(maxTrades, settings?.tradesRemaining ?? maxTrades);
+      let tradeCount = 0;
+      for (const ts of tradeSteps) {
+        if (tradeCount < effectiveTradeLimit) {
+          steps.push({ priority: ts.priority, action: ts.action, reason: ts.reason, link: ts.link });
+          tradeCount++;
+        } else {
           steps.push({
-            priority: "important",
-            action: `Swap ${swappable.length} bye-affected player${swappable.length > 1 ? "s" : ""} to bench`,
-            reason: `${swappable.map(p => p.name).join(", ")} ${swappable.length > 1 ? "are" : "is"} on bye this round. Move eligible bench players on-field to cover.`,
-            link: "/team",
+            priority: "suggested",
+            action: ts.action,
+            reason: `(Over trade limit — ${effectiveTradeLimit} this round) ${ts.reason}`,
+            link: ts.link,
           });
         }
       }
 
       if (isByeRoundNow) {
-        const activeOnField = onField.filter(p => p.byeRound !== currentRound);
+        const activeOnField = onField.filter(p => p.byeRound !== currentRound && !p.injuryStatus && p.selectionStatus !== "injured" && p.selectionStatus !== "not-playing");
         const best18Count = gameRules.best18.count;
         if (activeOnField.length < best18Count) {
           steps.push({
             priority: "critical",
             action: `Best-18 warning: Only ${activeOnField.length} active on-field players`,
-            reason: `During bye rounds, only your top ${best18Count} on-field scores count. You have ${activeOnField.length} active players — ${best18Count - activeOnField.length} below the threshold. Every missing player costs you points. Use your ${maxTrades} trade${maxTrades > 1 ? "s" : ""} to bring in active players.`,
+            reason: `During bye rounds, only your top ${best18Count} on-field scores count. You have ${activeOnField.length} active — ${best18Count - activeOnField.length} below threshold.`,
             link: "/trades",
-          });
-        } else if (activeOnField.length >= best18Count && activeOnField.length < 22) {
-          steps.push({
-            priority: "suggested",
-            action: `Bye round: ${activeOnField.length}/22 active on-field (Best-18 applies)`,
-            reason: `You have ${activeOnField.length} active on-field — above the Best-18 threshold of ${best18Count}. Your bottom ${activeOnField.length - best18Count} on-field scores won't count, so focus on having ${best18Count} quality scorers rather than filling all spots.`,
-            link: "/team",
           });
         }
 
@@ -3039,20 +3103,10 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
           steps.push({
             priority: "suggested",
             action: `Early Bye round — ${maxTrades} trades available`,
-            reason: `Rounds 2-4 are early bye rounds with ${maxTrades} trades each. Best-18 scoring applies. Prioritise structure and cash cow generation over aggressive moves.`,
+            reason: `Rounds 2-4 are early bye rounds. Best-18 scoring applies. Prioritise structure and cash cow generation over aggressive moves.`,
             link: "/trades",
           });
         }
-      }
-
-      const emergencies = team.filter(p => p.isEmergency);
-      if (emergencies.length < 4 && team.length >= 22) {
-        steps.push({
-          priority: "important",
-          action: `Set ${4 - emergencies.length} more emergenc${emergencies.length === 3 ? "y" : "ies"} (${emergencies.length}/4 set)`,
-          reason: "Players below 50% TOG may be replaced by a higher-scoring emergency from the same position. Always have 4 emergencies set to protect against low-TOG disasters and late changes.",
-          link: "/team",
-        });
       }
 
       if (!captain) {
@@ -3098,8 +3152,9 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       } catch {}
 
       if (currentRound >= 3) {
+        const alreadyMentioned = new Set(notPlayingOnField.map(p => p.id));
         const coldOnField = onField
-          .filter(p => (p.gamesPlayed ?? 0) >= 3 && p.formTrend === "down" && (p.last3Avg || 0) < (p.avgScore || 0) * 0.8)
+          .filter(p => !alreadyMentioned.has(p.id) && (p.gamesPlayed ?? 0) >= 3 && p.formTrend === "down" && (p.last3Avg || 0) < (p.avgScore || 0) * 0.8)
           .sort((a, b) => ((a.last3Avg || 0) / (a.avgScore || 1)) - ((b.last3Avg || 0) / (b.avgScore || 1)));
 
         if (coldOnField.length > 0 && steps.length < 6) {

@@ -228,27 +228,189 @@ export default function Dashboard() {
     link: string;
     linkLabel: string;
     players?: PlayerWithTeamInfo[];
+    tradeImpactScore?: number;
   }
   const roundActions: ActionItem[] = [];
 
+  function getPlayerTier(p: PlayerWithTeamInfo): "rookie" | "mid-pricer" | "premium" {
+    if (p.price < 350000) return "rookie";
+    if (p.price < 700000) return "mid-pricer";
+    return "premium";
+  }
+
+  function projectedPriceChange(p: PlayerWithTeamInfo): number | null {
+    const proj = p.projectedScore || 0;
+    const be = p.breakEven;
+    const sp = p.startingPrice || p.price;
+    if (be === null || be === undefined || !proj) return null;
+    return Math.round((proj - be) * (sp / 10490));
+  }
+
+  function isLongTermInjury(p: PlayerWithTeamInfo): boolean {
+    if (!p.injuryStatus) return false;
+    const longTermKeywords = ["season", "acl", "torn", "rupture", "surgery", "broken", "fracture", "delisted", "retired"];
+    return longTermKeywords.some(k => (p.injuryStatus || "").toLowerCase().includes(k));
+  }
+
+  function isOnBye(p: PlayerWithTeamInfo): boolean {
+    return p.byeRound === currentRound;
+  }
+
+  function isCashCowGenerating(p: PlayerWithTeamInfo): boolean {
+    if (p.price >= 400000) return false;
+    const be = p.breakEven;
+    if (be === null || be === undefined) return false;
+    return be < (p.avgScore || 0);
+  }
+
+  function getRemainingCashValue(p: PlayerWithTeamInfo): number {
+    const pc = projectedPriceChange(p);
+    if (pc && pc > 0) {
+      const roundsLeft = 24 - currentRound;
+      return Math.min(pc * Math.min(roundsLeft, 6), 200000);
+    }
+    if (isCashCowGenerating(p)) {
+      const avgAboveBe = (p.avgScore || 0) - (p.breakEven || 0);
+      if (avgAboveBe > 0) {
+        const approxWeeklyGain = avgAboveBe * ((p.startingPrice || p.price) / 10490);
+        const roundsLeft = 24 - currentRound;
+        return Math.min(approxWeeklyGain * Math.min(roundsLeft, 6), 200000);
+      }
+    }
+    return 0;
+  }
+
   if (hasTeam) {
+    const tradeActions: ActionItem[] = [];
+    const nonTradeActions: ActionItem[] = [];
+
     for (const p of injuredOnField) {
+      const tier = getPlayerTier(p);
+      const tierLabel = tier === "rookie" ? "Rookie" : tier === "mid-pricer" ? "Mid-pricer" : "Premium";
       const statusText = p.injuryStatus || "not playing";
-      const isCashCow = (p.avgScore || 0) < 70 && p.price < 400000;
-      roundActions.push({
-        tier: "must",
+      const onBye = isOnBye(p);
+      const longTerm = isLongTermInjury(p);
+      const cashGen = isCashCowGenerating(p);
+      const pChange = projectedPriceChange(p);
+      const pChangeStr = pChange !== null ? (pChange >= 0 ? `+$${(pChange / 1000).toFixed(0)}k` : `-$${Math.abs(pChange / 1000).toFixed(0)}k`) : null;
+
+      if (onBye && !longTerm && !p.injuryStatus) {
+        const benchCover = benchPlayers.find(b => {
+          const bPositions = [b.position, b.dualPosition].filter(Boolean);
+          return (p.fieldPosition === "UTIL" || bPositions.includes(p.fieldPosition || "")) &&
+            !isOnBye(b) && !(b.injuryStatus || b.selectionStatus === "injured" || b.selectionStatus === "not-playing");
+        });
+        if (benchCover) {
+          nonTradeActions.push({
+            tier: "must",
+            text: `${p.name} — on bye`,
+            detail: `${tierLabel} on bye this round. Swap ${benchCover.name} (avg ${benchCover.avgScore?.toFixed(0)}) on-field to cover.`,
+            link: "/team",
+            linkLabel: "Fix Team",
+            players: [p],
+            tradeImpactScore: 0,
+          });
+        } else {
+          nonTradeActions.push({
+            tier: "should",
+            text: `${p.name} — on bye (no bench cover)`,
+            detail: `${tierLabel} on bye, no eligible bench player to swap in. Will score 0 this round but returns next week.${cashGen && pChangeStr ? ` Still generating ${pChangeStr}/wk — don't waste a trade.` : ""}`,
+            link: "/team",
+            linkLabel: "Review",
+            players: [p],
+            tradeImpactScore: 0,
+          });
+        }
+        continue;
+      }
+
+      if (longTerm) {
+        const impactScore = (p.avgScore || 0) + (p.price >= 700000 ? 50 : 0);
+        tradeActions.push({
+          tier: "must",
+          text: `Trade ${p.name} — ${statusText}`,
+          detail: `${tierLabel} out long-term (${statusText}). ${p.isOnField ? "On-field spot scoring 0." : ""} ${tier === "rookie" ? `Was $${(p.price / 1000).toFixed(0)}k — cash generation over.` : `Avg ${p.avgScore?.toFixed(0)}, $${(p.price / 1000).toFixed(0)}k — free up salary for an active replacement.`}`,
+          link: "/trades",
+          linkLabel: "Trade",
+          players: [p],
+          tradeImpactScore: impactScore,
+        });
+        continue;
+      }
+
+      if (cashGen && tier === "rookie") {
+        const remainingValue = getRemainingCashValue(p);
+        const holdAdvice = remainingValue > 30000;
+        if (holdAdvice) {
+          nonTradeActions.push({
+            tier: "should",
+            text: `${p.name} — ${statusText} (hold)`,
+            detail: `Rookie cash cow (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven}). ${pChangeStr ? `Proj. ${pChangeStr}/wk` : ""} — still making money. ${p.selectionStatus === "injured" ? "Monitor injury timeline." : "Likely returns soon."} Move to bench and cover with a playing player.`,
+            link: "/team",
+            linkLabel: "Manage",
+            players: [p],
+            tradeImpactScore: 0,
+          });
+        } else {
+          const impactScore = 10;
+          tradeActions.push({
+            tier: "should",
+            text: `${p.name} — ${statusText}`,
+            detail: `Rookie (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven}, ${pChangeStr || "no growth"}). Cash generation slowing. ${p.isOnField ? "On-field scoring 0. " : ""}Consider trading for an active rookie.`,
+            link: "/trades",
+            linkLabel: "Trade",
+            players: [p],
+            tradeImpactScore: impactScore,
+          });
+        }
+        continue;
+      }
+
+      if (tier === "premium" || tier === "mid-pricer") {
+        const benchCover = benchPlayers.find(b => {
+          const bPositions = [b.position, b.dualPosition].filter(Boolean);
+          return (p.fieldPosition === "UTIL" || bPositions.includes(p.fieldPosition || "")) &&
+            !(b.injuryStatus || b.selectionStatus === "injured" || b.selectionStatus === "not-playing");
+        });
+        if (benchCover && !isDefinitelyOut(p.injuryStatus)) {
+          nonTradeActions.push({
+            tier: "must",
+            text: `${p.name} — ${statusText}`,
+            detail: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}) not playing. Move ${benchCover.name} on-field to cover. ${p.selectionStatus === "injured" ? "Monitor injury — hold if short-term." : "Expected to return."}`,
+            link: "/team",
+            linkLabel: "Fix Team",
+            players: [p],
+            tradeImpactScore: 0,
+          });
+        } else {
+          const impactScore = (p.avgScore || 0) + (tier === "premium" ? 30 : 15);
+          tradeActions.push({
+            tier: "must",
+            text: `Trade ${p.name} — ${statusText}`,
+            detail: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}, $${(p.price / 1000).toFixed(0)}k) not playing${benchCover ? "" : " with no bench cover"}. ${p.selectionStatus === "injured" ? "Injury status unclear — if extended, trade out." : "Trade for a playing replacement."}`,
+            link: "/trades",
+            linkLabel: "Trade",
+            players: [p],
+            tradeImpactScore: impactScore,
+          });
+        }
+        continue;
+      }
+
+      const impactScore = cashGen ? 5 : 20;
+      tradeActions.push({
+        tier: cashGen ? "could" : "should",
         text: `${p.name} — ${statusText}`,
-        detail: isCashCow
-          ? `Cash cow on field scoring 0. Trade out for an active player at ${p.position} or move to bench and bring on a replacement.`
-          : `Premium on field scoring 0. ${p.price > 700000 ? "Consider moving to bench and keeping if the injury is short-term, or trade out if extended." : "Trade out for a playing replacement."}`,
-        link: "/trades",
-        linkLabel: "Trade",
+        detail: `${tierLabel} (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven ?? "-"}, ${pChangeStr || "no projected growth"}). ${cashGen ? "Still generating cash — consider holding." : "Not generating cash. Trade for an active player."}`,
+        link: cashGen ? `/player/${p.id}` : "/trades",
+        linkLabel: cashGen ? "Review" : "Trade",
         players: [p],
+        tradeImpactScore: impactScore,
       });
     }
 
     if (!captain) {
-      roundActions.push({
+      nonTradeActions.push({
         tier: "must",
         text: "No captain set",
         detail: "You're leaving double points on the table. Assign a captain immediately.",
@@ -257,13 +419,71 @@ export default function Dashboard() {
       });
     }
 
+    if (byeAffectedPlayers.length > 0) {
+      const alreadyHandled = new Set(roundActions.map(a => a.players?.[0]?.id).filter(Boolean));
+      const unhandledBye = byeAffectedPlayers.filter(p => !alreadyHandled.has(p.id) && !injuredOnField.some(ip => ip.id === p.id));
+      if (unhandledBye.length > 0) {
+        nonTradeActions.push({
+          tier: "must",
+          text: `${unhandledBye.length} player${unhandledBye.length > 1 ? "s" : ""} on bye this round`,
+          detail: `${unhandledBye.map(p => p.name).join(", ")} ${unhandledBye.length > 1 ? "are" : "is"} on bye. Move bench players on-field to cover.`,
+          link: "/team",
+          linkLabel: "Fix Team",
+        });
+      }
+    }
+
+    for (const p of injuredBench) {
+      const tier = getPlayerTier(p);
+      const tierLabel = tier === "rookie" ? "Rookie" : tier === "mid-pricer" ? "Mid-pricer" : "Premium";
+      const statusText = p.injuryStatus || "not playing";
+      const cashGen = isCashCowGenerating(p);
+      const pChange = projectedPriceChange(p);
+      const pChangeStr = pChange !== null ? (pChange >= 0 ? `+$${(pChange / 1000).toFixed(0)}k` : `-$${Math.abs(pChange / 1000).toFixed(0)}k`) : null;
+      const longTerm = isLongTermInjury(p);
+
+      if (isOnBye(p) && !longTerm && !p.injuryStatus) {
+        continue;
+      }
+
+      if (tier === "rookie" && cashGen && !longTerm) {
+        nonTradeActions.push({
+          tier: "could",
+          text: `${p.name} (bench) — ${statusText}`,
+          detail: `Rookie on bench (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven}, ${pChangeStr || "minimal growth"}). Still generating cash — hold unless injury is extended.`,
+          link: `/player/${p.id}`,
+          linkLabel: "Monitor",
+          players: [p],
+        });
+      } else if (tier === "rookie" && !cashGen) {
+        tradeActions.push({
+          tier: "should",
+          text: `${p.name} (bench) — ${statusText}`,
+          detail: `Rookie on bench (avg ${p.avgScore?.toFixed(0)}, BE ${p.breakEven ?? "-"}, ${pChangeStr || "no growth"}). Cash generation done. Trade for an active cash cow while there's still value.`,
+          link: "/trades",
+          linkLabel: "Trade",
+          players: [p],
+          tradeImpactScore: 8,
+        });
+      } else {
+        nonTradeActions.push({
+          tier: "could",
+          text: `${p.name} (bench) — ${statusText}`,
+          detail: `${tierLabel} bench cover unavailable. Less urgent on bench, but reduces emergency depth.`,
+          link: "/trades",
+          linkLabel: "Review",
+          players: [p],
+        });
+      }
+    }
+
     if (riskData && riskData.alerts.length > 0) {
       const nonInjuryAlerts = riskData.alerts.filter(a =>
         !injuredOnField.some(ip => ip.id === a.playerId) &&
         !injuredBench.some(ip => ip.id === a.playerId)
       );
       for (const alert of nonInjuryAlerts) {
-        roundActions.push({
+        nonTradeActions.push({
           tier: (alert.severity === "critical" || alert.severity === "high") ? "must" : "should",
           text: `${alert.playerName} — ${alert.reason}`,
           detail: `${alert.playerName} (${alert.position}, avg ${alert.avgScore?.toFixed(1)}) is flagged. Review bench options or trade.`,
@@ -273,36 +493,38 @@ export default function Dashboard() {
       }
     }
 
-    for (const p of injuredBench) {
-      const statusText = p.injuryStatus || "not playing";
-      const isCashCow = (p.avgScore || 0) < 70 && p.price < 400000;
-      roundActions.push({
-        tier: isCashCow ? "should" : "could",
-        text: `${p.name} (bench) — ${statusText}`,
-        detail: isCashCow
-          ? `Cash cow on bench no longer generating cash. Trade for an active cash cow while you still have value.`
-          : `Bench cover unavailable. Less urgent since they're not on field, but reduces your emergency depth.`,
-        link: "/trades",
-        linkLabel: "Review",
-        players: [p],
-      });
+    tradeActions.sort((a, b) => (b.tradeImpactScore || 0) - (a.tradeImpactScore || 0));
+
+    const mustTrades = tradeActions.filter(a => a.tier === "must");
+    const otherTrades = tradeActions.filter(a => a.tier !== "must");
+
+    const tradesAvail = availableTradesRound;
+    const finalTradeActions: ActionItem[] = [];
+    for (const t of mustTrades) {
+      if (finalTradeActions.length < tradesAvail) {
+        finalTradeActions.push(t);
+      } else {
+        t.tier = "could";
+        t.detail = `(Over trade limit) ${t.detail} You've used your ${tradesAvail} trade${tradesAvail !== 1 ? "s" : ""} — save for next round.`;
+        t.linkLabel = "Monitor";
+        finalTradeActions.push(t);
+      }
+    }
+    for (const t of otherTrades) {
+      if (finalTradeActions.length < tradesAvail) {
+        finalTradeActions.push(t);
+      } else {
+        if (t.tier === "should") t.tier = "could";
+        t.detail = `(Over trade limit) ${t.detail}`;
+        finalTradeActions.push(t);
+      }
     }
 
-    if (byeAffectedPlayers.length > 0) {
-      roundActions.push({
-        tier: "must",
-        text: `${byeAffectedPlayers.length} player${byeAffectedPlayers.length > 1 ? "s" : ""} on bye this round`,
-        detail: `${byeAffectedPlayers.map(p => p.name).join(", ")} ${byeAffectedPlayers.length > 1 ? "are" : "is"} on bye. Move bench players on-field to cover or use a trade.`,
-        link: "/team",
-        linkLabel: "Fix Team",
-      });
-    }
-
-    if (trades && trades.length > 0) {
+    if (trades && trades.length > 0 && finalTradeActions.filter(a => a.tier === "must" || a.tier === "should").length < tradesAvail) {
       const urgentTrades = trades.filter(t => t.confidence > 0.7);
       for (const t of urgentTrades.slice(0, 2)) {
-        if (!injuredPlayers.some(ip => ip.id === t.playerOutId)) {
-          roundActions.push({
+        if (!injuredPlayers.some(ip => ip.id === t.playerOutId) && !finalTradeActions.some(a => a.players?.[0]?.id === t.playerOutId)) {
+          finalTradeActions.push({
             tier: "should",
             text: `Trade ${t.playerOut.name} → ${t.playerIn.name}`,
             detail: t.reason || `${t.playerIn.name} (avg ${t.playerIn.avgScore?.toFixed(1)}) is a significant upgrade. Confidence: ${Math.round(t.confidence * 100)}%.`,
@@ -313,15 +535,20 @@ export default function Dashboard() {
       }
     }
 
+    roundActions.push(...nonTradeActions, ...finalTradeActions);
+
     if (coldPlayers.length > 0 && roundActions.filter(a => a.tier === "could").length < 3) {
-      const worstCold = coldPlayers[0];
-      roundActions.push({
-        tier: "could",
-        text: `${worstCold.name} is underperforming`,
-        detail: `L3 avg ${worstCold.last3Avg?.toFixed(0)} vs season avg ${worstCold.avgScore?.toFixed(0)}. Monitor another week or trade if form doesn't recover.`,
-        link: `/player/${worstCold.id}`,
-        linkLabel: "View",
-      });
+      const alreadyMentioned = new Set(roundActions.flatMap(a => (a.players || []).map(p => p.id)));
+      const worstCold = coldPlayers.find(p => !alreadyMentioned.has(p.id));
+      if (worstCold) {
+        roundActions.push({
+          tier: "could",
+          text: `${worstCold.name} is underperforming`,
+          detail: `L3 avg ${worstCold.last3Avg?.toFixed(0)} vs season avg ${worstCold.avgScore?.toFixed(0)}. Monitor another week or trade if form doesn't recover.`,
+          link: `/player/${worstCold.id}`,
+          linkLabel: "View",
+        });
+      }
     }
 
     if (riskData && riskData.tagWarnings.length > 0) {
