@@ -17,7 +17,7 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
 - **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
 - **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
-Current version: **v2.7.3**. Always update this line in replit.md when bumping.
+Current version: **v2.7.4**. Always update this line in replit.md when bumping.
 
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
