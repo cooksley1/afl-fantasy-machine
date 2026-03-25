@@ -89,6 +89,22 @@ interface AflFantasyPlayer {
   cost: number;
   status: string;
   positions: number[];
+  dob?: string;
+  stats: {
+    prices?: Record<string, number>;
+    scores?: Record<string, number>;
+    games_played?: number;
+    total_points?: number;
+    avg_points?: number;
+    last_3_avg?: number;
+    last_5_avg?: number;
+    owned_by?: number;
+    high_score?: number;
+    low_score?: number;
+    career_avg?: number;
+    tog?: number;
+    proj_avg?: number;
+  };
 }
 
 const AFL_FANTASY_SQUAD_MAP: Record<number, string> = {
@@ -255,9 +271,6 @@ export async function syncAflFantasyPrices(): Promise<{
 
       if (Math.abs(aflPlayer.cost - dbPlayer.price) >= 1000) {
         updates.price = aflPlayer.cost;
-        if (!dbPlayer.startingPrice) {
-          updates.startingPrice = aflPlayer.cost;
-        }
         priceChanges.push({
           name: dbPlayer.name,
           oldPrice: dbPlayer.price,
@@ -265,8 +278,76 @@ export async function syncAflFantasyPrices(): Promise<{
         });
       }
 
+      const rd1Price = aflPlayer.stats.prices?.["1"];
+      if (rd1Price && rd1Price > 0 && dbPlayer.startingPrice !== rd1Price) {
+        updates.startingPrice = rd1Price;
+      } else if (!dbPlayer.startingPrice) {
+        updates.startingPrice = aflPlayer.cost;
+      }
+
       if (!dbPlayer.aflFantasyId && aflPlayer.id) {
         updates.aflFantasyId = aflPlayer.id;
+      }
+
+      if (aflPlayer.dob) {
+        const dob = new Date(aflPlayer.dob);
+        if (!isNaN(dob.getTime())) {
+          const now = new Date();
+          let calcAge = now.getFullYear() - dob.getFullYear();
+          const mDiff = now.getMonth() - dob.getMonth();
+          if (mDiff < 0 || (mDiff === 0 && now.getDate() < dob.getDate())) calcAge--;
+          if (calcAge > 0 && calcAge !== dbPlayer.age) {
+            updates.age = calcAge;
+          }
+        }
+      }
+
+      const s = aflPlayer.stats;
+      if (s.games_played !== undefined && s.games_played !== dbPlayer.gamesPlayed) {
+        updates.gamesPlayed = s.games_played;
+      }
+      if (s.avg_points !== undefined && s.avg_points > 0 && Math.abs(s.avg_points - (dbPlayer.avgScore || 0)) >= 0.5) {
+        updates.avgScore = s.avg_points;
+      }
+      if (s.total_points !== undefined && s.total_points !== dbPlayer.seasonTotal) {
+        updates.seasonTotal = s.total_points;
+      }
+      if (s.last_3_avg !== undefined && s.last_3_avg !== (dbPlayer.last3Avg || 0)) {
+        updates.last3Avg = s.last_3_avg;
+      }
+      if (s.last_5_avg !== undefined && s.last_5_avg !== (dbPlayer.last5Avg || 0)) {
+        updates.last5Avg = s.last_5_avg;
+      }
+      if (s.owned_by !== undefined && Math.abs(s.owned_by - (dbPlayer.ownedByPercent || 0)) >= 0.1) {
+        updates.ownedByPercent = s.owned_by;
+      }
+      if (s.high_score !== undefined && s.high_score > 0) {
+        updates.ceilingScore = s.high_score;
+      }
+      if (s.tog !== undefined && s.tog > 0 && s.tog !== (dbPlayer.avgTog || 0)) {
+        updates.avgTog = s.tog;
+      }
+
+      if (s.scores && Object.keys(s.scores).length > 0) {
+        const roundKeys = Object.keys(s.scores).map(Number).sort((a, b) => a - b);
+        const recentRounds = roundKeys.slice(-5);
+        const recentScoresStr = recentRounds.map(r => s.scores![String(r)]).join(",");
+        if (recentScoresStr && recentScoresStr !== (dbPlayer.recentScores || "")) {
+          updates.recentScores = recentScoresStr;
+        }
+      }
+
+      const currentPrice = updates.price || dbPlayer.price;
+      const prevRoundPrices = aflPlayer.stats.prices ? Object.entries(aflPlayer.stats.prices) : [];
+      if (prevRoundPrices.length >= 2) {
+        const sorted = prevRoundPrices.map(([r, p]) => ({ r: Number(r), p })).sort((a, b) => a.r - b.r);
+        const prevPrice = sorted[sorted.length - 2]?.p;
+        if (prevPrice) {
+          const roundChange = currentPrice - prevPrice;
+          if (roundChange !== dbPlayer.priceChange) {
+            updates.priceChange = roundChange;
+          }
+        }
       }
 
       const aflTeam = AFL_FANTASY_SQUAD_MAP[aflPlayer.squad_id] || "";
@@ -294,6 +375,9 @@ export async function syncAflFantasyPrices(): Promise<{
         updates.selectionStatus = "injured";
         updates.isNamedTeam = false;
       } else if (aflStatus === "not-playing") {
+        if (dbPlayer.injuryStatus && dbPlayer.selectionStatus === "injured") {
+          updates.injuryStatus = null;
+        }
         updates.selectionStatus = "not-playing";
         updates.isNamedTeam = false;
       } else if (aflStatus === "playing") {
@@ -884,10 +968,10 @@ export async function populateConsistencyData(): Promise<number> {
     const ceiling = calcProjectedCeiling(adjustedProj, actualStdDev, w);
     const captainProb = calcCaptainProbability(adjustedProj, actualStdDev, w);
 
-    const age = generateAge(price, avg);
-    const yearsExperience = generateYearsExperience(age);
-    const durabilityScore = generateDurabilityScore(age, p.injuryStatus);
-    const injuryRiskScore = generateInjuryRiskScore(durabilityScore, age, p.injuryStatus);
+    const age = p.age || generateAge(price, avg);
+    const yearsExperience = p.yearsExperience || generateYearsExperience(age);
+    const durabilityScore = p.durabilityScore || generateDurabilityScore(age, p.injuryStatus);
+    const injuryRiskScore = p.injuryRiskScore || generateInjuryRiskScore(durabilityScore, age, p.injuryStatus);
 
     await db.update(players)
       .set({
@@ -906,7 +990,7 @@ export async function populateConsistencyData(): Promise<number> {
         yearsExperience,
         durabilityScore,
         injuryRiskScore,
-        startingPrice: price,
+        startingPrice: p.startingPrice || price,
       })
       .where(eq(players.id, p.id));
     updated++;

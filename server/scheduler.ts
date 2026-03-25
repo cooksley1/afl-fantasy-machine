@@ -78,16 +78,6 @@ async function runGather() {
     }
 
     try {
-      markSync("aflFantasyPrices", "syncing");
-      const { syncAflFantasyPrices } = await import("./expand-players");
-      await syncAflFantasyPrices();
-      markSync("aflFantasyPrices", "idle");
-    } catch (e: any) {
-      markSync("aflFantasyPrices", "error", e.message);
-      console.log(`[Scheduler] AFL Fantasy price sync error: ${e.message}`);
-    }
-
-    try {
       markSync("dfsAustralia", "syncing");
       const { syncDfsAustralia } = await import("./expand-players");
       await syncDfsAustralia();
@@ -105,6 +95,16 @@ async function runGather() {
     } catch (e: any) {
       markSync("aflInjuryList", "error", e.message);
       console.log(`[Scheduler] AFL injury list sync error: ${e.message}`);
+    }
+
+    try {
+      markSync("aflFantasyPrices", "syncing");
+      const { syncAflFantasyPrices } = await import("./expand-players");
+      await syncAflFantasyPrices();
+      markSync("aflFantasyPrices", "idle");
+    } catch (e: any) {
+      markSync("aflFantasyPrices", "error", e.message);
+      console.log(`[Scheduler] AFL Fantasy price sync error: ${e.message}`);
     }
 
     try {
@@ -195,16 +195,6 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
 
   try {
     try {
-      markSync("aflFantasyPrices", "syncing");
-      const { syncAflFantasyPrices } = await import("./expand-players");
-      await syncAflFantasyPrices();
-      markSync("aflFantasyPrices", "idle");
-    } catch (e: any) {
-      markSync("aflFantasyPrices", "error", e.message);
-      errors.push(`AFL Fantasy prices: ${e.message}`);
-    }
-
-    try {
       markSync("dfsAustralia", "syncing");
       const { syncDfsAustralia } = await import("./expand-players");
       await syncDfsAustralia();
@@ -232,6 +222,16 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     } catch (e: any) {
       markSync("footywire", "error", e.message);
       errors.push(`Footywire: ${e.message}`);
+    }
+
+    try {
+      markSync("aflFantasyPrices", "syncing");
+      const { syncAflFantasyPrices } = await import("./expand-players");
+      await syncAflFantasyPrices();
+      markSync("aflFantasyPrices", "idle");
+    } catch (e: any) {
+      markSync("aflFantasyPrices", "error", e.message);
+      errors.push(`AFL Fantasy prices: ${e.message}`);
     }
 
     try {

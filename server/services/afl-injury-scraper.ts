@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { players, intelReports } from "@shared/schema";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and, ilike, isNotNull, notInArray } from "drizzle-orm";
 
 const AFL_INJURY_URL = "https://www.afl.com.au/matches/injury-list";
 
@@ -218,12 +218,13 @@ async function findPlayer(
   return null;
 }
 
-export async function syncAflInjuryList(): Promise<{ matched: number; updated: number; unmatched: string[] }> {
+export async function syncAflInjuryList(): Promise<{ matched: number; updated: number; cleared: number; unmatched: string[] }> {
   const data = await scrapeAflInjuryList();
 
   let matched = 0;
   let updated = 0;
   const unmatched: string[] = [];
+  const injuredPlayerIds = new Set<number>();
 
   for (const entry of data.injuries) {
     if (entry.injury.toLowerCase() === "suspension") continue;
@@ -235,6 +236,7 @@ export async function syncAflInjuryList(): Promise<{ matched: number; updated: n
     }
 
     matched++;
+    injuredPlayerIds.add(player.id);
 
     const newInjuryStatus = buildInjuryStatusText(entry.injury, entry.estimatedReturn);
 
@@ -248,6 +250,27 @@ export async function syncAflInjuryList(): Promise<{ matched: number; updated: n
         })
         .where(eq(players.id, player.id));
       updated++;
+    }
+  }
+
+  let cleared = 0;
+  if (injuredPlayerIds.size > 0) {
+    const previouslyInjured = await db
+      .select({ id: players.id, name: players.name })
+      .from(players)
+      .where(isNotNull(players.injuryStatus));
+
+    for (const p of previouslyInjured) {
+      if (!injuredPlayerIds.has(p.id)) {
+        await db
+          .update(players)
+          .set({ injuryStatus: null })
+          .where(eq(players.id, p.id));
+        cleared++;
+      }
+    }
+    if (cleared > 0) {
+      console.log(`[AflInjuryList] Cleared injury status for ${cleared} recovered players`);
     }
   }
 
@@ -286,11 +309,11 @@ export async function syncAflInjuryList(): Promise<{ matched: number; updated: n
   }
 
   console.log(
-    `[AflInjury] Matched ${matched}/${data.injuries.length} players, updated ${updated}, unmatched ${unmatched.length}`
+    `[AflInjury] Matched ${matched}/${data.injuries.length} players, updated ${updated}, cleared ${cleared}, unmatched ${unmatched.length}`
   );
   if (unmatched.length > 0) {
     console.log(`[AflInjury] Unmatched: ${unmatched.join(", ")}`);
   }
 
-  return { matched, updated, unmatched };
+  return { matched, updated, cleared, unmatched };
 }
