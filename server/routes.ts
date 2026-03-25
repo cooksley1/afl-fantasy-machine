@@ -1048,6 +1048,9 @@ export async function registerRoutes(
         if (surnameMatches.length === 1) return { match: surnameMatches[0] };
 
         if (surnameMatches.length > 1) {
+          const byTeam = narrowByTeam(surnameMatches);
+          if (byTeam) return { match: byTeam };
+
           const firstMatch = surnameMatches.filter(p => {
             const pFirst = p.name.toLowerCase().split(/\s+/)[0];
             if (isInitial) return pFirst.startsWith(inputFirst);
@@ -1055,12 +1058,8 @@ export async function registerRoutes(
           });
           if (firstMatch.length === 1) return { match: firstMatch[0] };
           if (firstMatch.length > 1) {
-            const byTeam = narrowByTeam(firstMatch);
-            if (byTeam) return { match: byTeam };
             return { match: firstMatch[0], ambiguous: true, candidates: firstMatch };
           }
-          const byTeam = narrowByTeam(surnameMatches);
-          if (byTeam) return { match: byTeam };
           return { match: surnameMatches[0], ambiguous: true, candidates: surnameMatches };
         }
 

@@ -522,11 +522,13 @@ export async function analyzeTeamScreenshot(base64Image: string): Promise<{
         content: `You are an AFL Fantasy team screenshot reader. Your ONLY job is to read player names from the image and match them to the known player database below.
 
 HOW TO IDENTIFY PLAYERS:
-1. Each player card shows a SURNAME in large text and usually a first initial (e.g. "S. Grlj", "J. Lindsay"). Cards also display the player's AFL team logo.
+1. Each player card shows a SURNAME in large text and usually a first initial (e.g. "S. Grlj", "J. Lindsay"). Cards also display the player's AFL team logo/abbreviation and an opponent (e.g. "@ FRE", "V MEL").
 2. Look up the surname in the known player list for that position row. Each entry shows "Full Name [Team]". If only one player has that surname, use their full name.
-3. If multiple players share the same surname AND first initial (e.g. two "J. Clark" or two "M. King"), use the team logo on the card to pick the correct one from the database.
-4. DNP (Did Not Play) cards still show a player name — read it and match it.
-5. Every visible card MUST be matched. A full team = 30 players. Count your output before returning.
+3. If multiple players share the same surname, use the TEAM LOGO on the card to identify which team the player belongs to, then find the matching player from the database at that team.
+4. CRITICAL: Do NOT guess or invent full first names from initials. If you see "J. Smith" with a Carlton logo, search the database for a Smith at Carlton — you will find "Jagga Smith [Carlton]". Use THAT name. Never fabricate names like "Josh Smith" or "Jack Smith" that are not in the database.
+5. DNP (Did Not Play) cards still show a player name — read it and match it.
+6. Every visible card MUST be matched. A full team = 30 players. Count your output before returning.
+7. You MUST include the "team" field for EVERY player. Read the team from the logo/abbreviation on the card.
 
 KNOWN PLAYER DATABASE (match against these names):
 ${playerLookup}
