@@ -1496,12 +1496,29 @@ export async function registerRoutes(
       const roundPriceChange = player.priceChange || 0;
       const seasonPriceChange = player.startingPrice ? player.price - player.startingPrice : 0;
 
+      const effectiveUserId = getEffectiveUserId(req);
+      const settings = await storage.getSettings(effectiveUserId);
+      const currentRound = settings?.currentRound ?? 0;
+
+      const projectedPriceChange = (() => {
+        const proj = player.projectedScore || 0;
+        const be = player.breakEven || 0;
+        if (proj === 0 || be === 0) return null;
+        const startP = player.startingPrice || player.price;
+        const magicPerPoint = startP / 10490;
+        return Math.round((proj - be) * magicPerPoint * 1000) / 1000;
+      })();
+
+      const lastRoundPlayed = stats.length > 0 ? stats[stats.length - 1].round : null;
+
       res.json({
         player,
         matchHistory,
         upcomingFixtures,
         opponentBreakdown: formatAgg(opponentAgg),
         venueBreakdown: formatAgg(venueAgg),
+        currentRound,
+        lastRoundPlayed,
         overview: {
           highestScore,
           lowestScore,
@@ -1509,6 +1526,7 @@ export async function registerRoutes(
           pricePerPoint,
           roundPriceChange,
           seasonPriceChange,
+          projectedPriceChange,
         },
       });
     } catch (error: any) {

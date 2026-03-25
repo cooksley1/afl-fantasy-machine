@@ -625,7 +625,6 @@ function deriveFormTrend(l5Avg: number, regAvg: number): string {
 function deriveBreakEven(salary: number, avgPoints: number, gamesPlayed: number = 0, startingPrice?: number): number {
   const MAGIC_NUMBER = 10490;
   const TOTAL_ROUNDS = 24;
-  const DIVISOR = 14;
   const effectiveStartPrice = startingPrice || salary;
   const initialBE = effectiveStartPrice / MAGIC_NUMBER;
 
@@ -634,7 +633,7 @@ function deriveBreakEven(salary: number, avgPoints: number, gamesPlayed: number 
   }
 
   const remaining = TOTAL_ROUNDS - gamesPlayed;
-  const factor = remaining / DIVISOR;
+  const factor = remaining / TOTAL_ROUNDS;
   return Math.round(initialBE + factor * (initialBE - avgPoints));
 }
 
@@ -1102,8 +1101,6 @@ export async function recalculatePlayerAverages(): Promise<number> {
     const ceilingScore = Math.max(...scores);
     const recentScoresStr = scores.slice(-5).join(",");
 
-    const breakEven = deriveBreakEven(p.price, avgScore, gamesPlayed, p.startingPrice || p.price);
-
     const formTrend = deriveFormTrend(last5Avg, avgScore);
 
     const togScores = togByPlayer[p.id];
@@ -1118,6 +1115,16 @@ export async function recalculatePlayerAverages(): Promise<number> {
       ? Math.round((avgScore / (avgTog * 0.01 * 120)) * 100) / 100
       : p.ppm;
 
+    const POSITION_PRIORS: Record<string, number> = { DEF: 72, MID: 80, RUC: 85, FWD: 70 };
+    const PRIOR_WEIGHT = 5;
+    const posPrior = POSITION_PRIORS[p.position] ?? 75;
+    const projectedScore = Math.round(
+      ((gamesPlayed / (gamesPlayed + PRIOR_WEIGHT)) * avgScore +
+      (PRIOR_WEIGHT / (gamesPlayed + PRIOR_WEIGHT)) * posPrior) * 10
+    ) / 10;
+
+    const breakEven = deriveBreakEven(p.price, avgScore, gamesPlayed, p.startingPrice || p.price);
+
     const needsUpdate =
       Math.abs((p.avgScore || 0) - avgScore) > 0.1 ||
       Math.abs((p.last3Avg || 0) - last3Avg) > 0.1 ||
@@ -1125,7 +1132,9 @@ export async function recalculatePlayerAverages(): Promise<number> {
       p.gamesPlayed !== gamesPlayed ||
       p.seasonTotal !== seasonTotal ||
       (p.ceilingScore || 0) !== ceilingScore ||
-      (p.recentScores || "") !== recentScoresStr;
+      (p.recentScores || "") !== recentScoresStr ||
+      Math.abs((p.projectedScore || 0) - projectedScore) > 0.1 ||
+      p.breakEven !== breakEven;
 
     if (needsUpdate) {
       await db.update(players).set({
@@ -1136,6 +1145,7 @@ export async function recalculatePlayerAverages(): Promise<number> {
         seasonTotal,
         ceilingScore,
         recentScores: recentScoresStr,
+        projectedScore,
         breakEven,
         formTrend,
         ...(avgTog !== null && avgTog !== undefined ? { avgTog } : {}),
@@ -1146,10 +1156,31 @@ export async function recalculatePlayerAverages(): Promise<number> {
     }
   }
 
-  if (updated > 0) {
-    console.log(`[ExpandPlayers] Recalculated averages for ${updated} players from weekly_stats`);
+  const POSITION_PRIORS_GLOBAL: Record<string, number> = { DEF: 72, MID: 80, RUC: 85, FWD: 70 };
+  const PRIOR_WEIGHT_GLOBAL = 5;
+  const noStatsPlayers = allPlayers.filter(p =>
+    p.gamesPlayed && p.gamesPlayed > 0 && p.avgScore && p.avgScore > 0 && !byPlayer[p.id]
+  );
+  let fallbackUpdated = 0;
+  for (const p of noStatsPlayers) {
+    const posPrior = POSITION_PRIORS_GLOBAL[p.position] ?? 75;
+    const gp = p.gamesPlayed!;
+    const avg = p.avgScore!;
+    const proj = Math.round(
+      ((gp / (gp + PRIOR_WEIGHT_GLOBAL)) * avg +
+      (PRIOR_WEIGHT_GLOBAL / (gp + PRIOR_WEIGHT_GLOBAL)) * posPrior) * 10
+    ) / 10;
+    const be = deriveBreakEven(p.price, avg, gp, p.startingPrice || p.price);
+    if (Math.abs((p.projectedScore || 0) - proj) > 0.1 || p.breakEven !== be) {
+      await db.update(players).set({ projectedScore: proj, breakEven: be }).where(eq(players.id, p.id));
+      fallbackUpdated++;
+    }
   }
-  return updated;
+
+  if (updated > 0 || fallbackUpdated > 0) {
+    console.log(`[ExpandPlayers] Recalculated averages for ${updated} players from weekly_stats, ${fallbackUpdated} from external data`);
+  }
+  return updated + fallbackUpdated;
 }
 
 export { calcTradeEV, calcCaptainProbability, bayesianAdjustedAvg, calcVolatilityScore };

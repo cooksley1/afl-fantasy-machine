@@ -73,6 +73,8 @@ interface DetailedStatsData {
   upcomingFixtures: UpcomingFixture[];
   opponentBreakdown: AggBreakdown[];
   venueBreakdown: AggBreakdown[];
+  currentRound: number;
+  lastRoundPlayed: number | null;
   overview: {
     highestScore: number | null;
     lowestScore: number | null;
@@ -80,6 +82,7 @@ interface DetailedStatsData {
     pricePerPoint: number | null;
     roundPriceChange: number;
     seasonPriceChange: number;
+    projectedPriceChange: number | null;
   };
 }
 
@@ -141,7 +144,8 @@ function OverviewTab({ player, overview }: { player: Player; overview: DetailedS
       <OverviewRow label="Total Points" value={overview.totalPoints.toString()} />
       <OverviewRow label="Ownership" value={`${player.ownedByPercent?.toFixed(1) || 0}%`} />
       <OverviewRow label="Byes" value={player.byeRound?.toString() || "—"} />
-      <OverviewRow label="Projected Avg" value={player.projectedScore?.toFixed(1) || "—"} />
+      <OverviewRow label="Projected Score" value={player.projectedScore?.toFixed(1) || "—"} />
+      <OverviewRow label="Proj. $ Change" value={overview.projectedPriceChange ? formatPriceChange(Math.round(overview.projectedPriceChange)) : "—"} />
       <OverviewRow label="Consistency Rating" value={player.consistencyRating?.toFixed(1) || "—"} />
       <OverviewRow label="Break Even" value={player.breakEven?.toString() || "—"} />
       <OverviewRow label="Form Trend" value={player.formTrend || "—"} />
@@ -533,10 +537,15 @@ export default function PlayerReport() {
     );
   }
 
-  const { player, matchHistory, upcomingFixtures, opponentBreakdown, venueBreakdown, overview } = data;
+  const { player, matchHistory, upcomingFixtures, opponentBreakdown, venueBreakdown, overview, currentRound, lastRoundPlayed } = data;
   const teamColors = getTeamColors(player.team);
   const photoUrl = getPlayerPhotoUrl(player.aflFantasyId);
-  const lastScore = matchHistory.length > 0 ? matchHistory[matchHistory.length - 1].score : null;
+  const lastRoundScore = matchHistory.length > 0 ? matchHistory[matchHistory.length - 1].score : null;
+  const lastRoundDisplay = (() => {
+    if (currentRound > 0 && lastRoundPlayed !== null && lastRoundPlayed < currentRound) return "DNP";
+    if (currentRound > 0 && lastRoundPlayed === null) return "DNP";
+    return lastRoundScore?.toString() || "—";
+  })();
   const posLabel = player.dualPosition ? `${player.position}/${player.dualPosition}` : player.position;
 
   return (
@@ -584,11 +593,11 @@ export default function PlayerReport() {
 
       <div className="grid grid-cols-6 border-y border-border bg-card" data-testid="section-quick-stats">
         <QuickStatBox label="GP" value={(player.gamesPlayed || 0).toString()} />
-        <QuickStatBox label="LAST" value={lastScore?.toString() || "—"} />
+        <QuickStatBox label="LAST" value={lastRoundDisplay} />
         <QuickStatBox label="Average" value={player.avgScore?.toFixed(1) || "0"} />
         <QuickStatBox label="BE" value={player.breakEven?.toString() || "—"} />
         <QuickStatBox label="Proj." value={player.projectedScore?.toFixed(0) || "—"} highlight />
-        <QuickStatBox label="P$ Chg" value={overview.roundPriceChange ? formatPriceChange(overview.roundPriceChange) : "—"} />
+        <QuickStatBox label="P$ Chg" value={overview.projectedPriceChange ? formatPriceChange(Math.round(overview.projectedPriceChange)) : (overview.roundPriceChange ? formatPriceChange(overview.roundPriceChange) : "—")} />
       </div>
 
       <div className="flex overflow-x-auto border-b border-border bg-card scrollbar-hide" data-testid="section-tabs">
