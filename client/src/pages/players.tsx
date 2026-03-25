@@ -20,12 +20,12 @@ import {
   TrendingDown,
   Minus,
   ArrowUpDown,
-  AlertTriangle,
   Repeat2,
   Gauge,
   Star,
   DollarSign,
 } from "lucide-react";
+import { PlayerAvailabilityBadge } from "@/components/player-availability-badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { LeagueSettings } from "@shared/schema";
@@ -225,17 +225,7 @@ export default function Players() {
         </Badge>
       )}
       <CashGenBadge potential={player.cashGenPotential} />
-      {player.injuryStatus && (
-        <Badge variant="destructive" className="text-[10px]">
-          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
-          {player.injuryStatus}
-        </Badge>
-      )}
-      {player.lateChange && (
-        <Badge variant="destructive" className="text-[10px]">
-          Late Change
-        </Badge>
-      )}
+      <PlayerAvailabilityBadge player={player} />
       {isOnTeam && (
         <Badge variant="default" className="text-[10px]">
           In Team

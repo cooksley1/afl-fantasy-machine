@@ -52,6 +52,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { PlayerAvailabilityBadge, PlayerAvailabilityDot } from "@/components/player-availability-badge";
 import { useLocation } from "wouter";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
 import type { PlayerWithTeamInfo, Player, LeagueSettings, Fixture } from "@shared/schema";
@@ -1226,10 +1227,14 @@ function PlayerActionDialog({
                     {getTeamAbbr(rp.team)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium truncate">{rp.name}</p>
                     <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-medium truncate">{rp.name}</p>
+                      <PlayerAvailabilityDot player={rp} />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[10px] text-muted-foreground">{getPositionDisplay(rp)}</span>
                       <span className="text-[10px] text-muted-foreground">avg {(rp.avgScore || 0).toFixed(0)}</span>
+                      <PlayerAvailabilityBadge player={rp} size="sm" />
                     </div>
                   </div>
                   <div className="text-right shrink-0">

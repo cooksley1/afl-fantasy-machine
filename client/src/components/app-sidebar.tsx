@@ -187,7 +187,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 space-y-3">
         <FeedbackDialog />
         <p className="text-[10px] text-sidebar-foreground/40 text-center group-data-[collapsible=icon]:hidden">We read every message</p>
-        <p className="text-[9px] text-sidebar-foreground/30 text-center group-data-[collapsible=icon]:hidden" data-testid="text-app-version">v2.8.0</p>
+        <p className="text-[9px] text-sidebar-foreground/30 text-center group-data-[collapsible=icon]:hidden" data-testid="text-app-version">v2.8.1</p>
 
         {user && (
           <div className="rounded-md bg-sidebar-accent/50 p-3 space-y-2">

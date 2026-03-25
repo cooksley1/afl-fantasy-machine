@@ -25,6 +25,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getTeamColors, getTeamAbbr } from "@/lib/afl-teams";
+import { PlayerAvailabilityBadge } from "@/components/player-availability-badge";
 import type { TradeRecommendationWithPlayers, LeagueSettings } from "@shared/schema";
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Flame; color: string; bgColor: string; description: string }> = {
@@ -102,6 +103,7 @@ function PlayerPill({ player, direction }: { player: any; direction: "out" | "in
               <span>BE: {player.breakEven}</span>
             </>
           )}
+          <PlayerAvailabilityBadge player={player} />
         </div>
       </div>
     </div>
