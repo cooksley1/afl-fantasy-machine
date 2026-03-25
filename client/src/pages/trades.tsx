@@ -238,25 +238,38 @@ export default function Trades() {
 
       <Card>
         <CardContent className="p-5">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-md bg-accent/15 flex items-center justify-center">
-                <ArrowLeftRight className="w-5 h-5 text-accent" />
+          {(() => {
+            const round = settings?.currentRound || 1;
+            const regularByeRounds = [12, 13, 14];
+            const earlyByeRounds = [2, 3, 4];
+            const maxThisRound = round < 2 ? 0 : regularByeRounds.includes(round) ? 3 : earlyByeRounds.includes(round) ? 2 : 2;
+            const availableThisRound = Math.min(maxThisRound, settings?.tradesRemaining || 0);
+            const isByeRound = regularByeRounds.includes(round) || earlyByeRounds.includes(round);
+            return (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-md bg-accent/15 flex items-center justify-center">
+                    <ArrowLeftRight className="w-5 h-5 text-accent" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Trades This Round</p>
+                    <p className="text-xs text-muted-foreground">
+                      Round {round}{isByeRound ? (earlyByeRounds.includes(round) ? " (Early Bye)" : " (Bye)") : ""} — {maxThisRound} trade{maxThisRound !== 1 ? "s" : ""} allowed
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {settings?.tradesRemaining || 0} remaining this season ({settings?.totalTradesUsed || 0} used)
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-accent" data-testid="text-trades-remaining">
+                    {availableThisRound}/{maxThisRound}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">this round</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold">Trades This Round</p>
-                <p className="text-xs text-muted-foreground">
-                  Round {settings?.currentRound || 1} — {settings?.totalTradesUsed || 0} used this season
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-accent" data-testid="text-trades-remaining">
-                {settings?.tradesRemaining || 0}
-              </p>
-              <p className="text-[10px] text-muted-foreground">remaining</p>
-            </div>
-          </div>
+            );
+          })()}
         </CardContent>
       </Card>
 

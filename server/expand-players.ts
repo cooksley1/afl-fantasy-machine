@@ -286,6 +286,30 @@ export async function syncAflFantasyPrices(): Promise<{
         updates.dualPosition = aflDualPos;
       }
 
+      const aflStatus = aflPlayer.status;
+      if (aflStatus === "injured") {
+        if (!dbPlayer.injuryStatus || dbPlayer.injuryStatus === "") {
+          updates.injuryStatus = "Injured";
+        }
+        updates.selectionStatus = "injured";
+        updates.isNamedTeam = false;
+      } else if (aflStatus === "not-playing") {
+        updates.selectionStatus = "not-playing";
+        updates.isNamedTeam = false;
+      } else if (aflStatus === "playing") {
+        updates.selectionStatus = "named";
+        updates.isNamedTeam = true;
+        if (dbPlayer.injuryStatus) {
+          updates.injuryStatus = null;
+        }
+      } else if (aflStatus === "medical_sub") {
+        updates.selectionStatus = "medical_sub";
+        updates.isNamedTeam = true;
+        if (dbPlayer.injuryStatus) {
+          updates.injuryStatus = null;
+        }
+      }
+
       if (Object.keys(updates).length > 0) {
         await db.update(players).set(updates).where(eq(players.id, dbPlayer.id));
         updated++;

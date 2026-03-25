@@ -213,56 +213,134 @@ export default function Dashboard() {
   const remaining = salaryCap - totalSalary;
   const hasTeam = teamPlayers && teamPlayers.length > 0;
 
-  const actionItems: { color: string; text: string; link: string; linkLabel: string }[] = [];
+  const availableTradesRound = Math.min(maxTradesThisRound, tradesThisRound);
+
+  const injuredPlayers = (teamPlayers || []).filter(p =>
+    p.injuryStatus || p.selectionStatus === "injured" || p.selectionStatus === "not-playing"
+  );
+  const injuredOnField = injuredPlayers.filter(p => p.isOnField);
+  const injuredBench = injuredPlayers.filter(p => !p.isOnField);
+
+  interface ActionItem {
+    tier: "must" | "should" | "could";
+    text: string;
+    detail: string;
+    link: string;
+    linkLabel: string;
+    players?: PlayerWithTeamInfo[];
+  }
+  const roundActions: ActionItem[] = [];
+
   if (hasTeam) {
+    for (const p of injuredOnField) {
+      const statusText = p.injuryStatus || "not playing";
+      const isCashCow = (p.avgScore || 0) < 70 && p.price < 400000;
+      roundActions.push({
+        tier: "must",
+        text: `${p.name} — ${statusText}`,
+        detail: isCashCow
+          ? `Cash cow on field scoring 0. Trade out for an active player at ${p.position} or move to bench and bring on a replacement.`
+          : `Premium on field scoring 0. ${p.price > 700000 ? "Consider moving to bench and keeping if the injury is short-term, or trade out if extended." : "Trade out for a playing replacement."}`,
+        link: "/trades",
+        linkLabel: "Trade",
+        players: [p],
+      });
+    }
+
+    if (!captain) {
+      roundActions.push({
+        tier: "must",
+        text: "No captain set",
+        detail: "You're leaving double points on the table. Assign a captain immediately.",
+        link: "/team",
+        linkLabel: "Set Captain",
+      });
+    }
+
     if (riskData && riskData.alerts.length > 0) {
-      const criticalAlerts = riskData.alerts.filter(a => a.severity === "critical" || a.severity === "high");
-      const otherAlerts = riskData.alerts.filter(a => a.severity !== "critical" && a.severity !== "high");
-      if (criticalAlerts.length > 0) {
-        actionItems.push({
-          color: "red",
-          text: `${criticalAlerts.length} unavailable player${criticalAlerts.length > 1 ? "s" : ""} — ${criticalAlerts.map(a => a.playerName).join(", ")}`,
-          link: "/team",
-          linkLabel: "Fix Team",
-        });
-      }
-      if (otherAlerts.length > 0 && actionItems.length < 3) {
-        actionItems.push({
-          color: "yellow",
-          text: `${otherAlerts.length} player${otherAlerts.length > 1 ? "s" : ""} with warnings`,
+      const nonInjuryAlerts = riskData.alerts.filter(a =>
+        !injuredOnField.some(ip => ip.id === a.playerId) &&
+        !injuredBench.some(ip => ip.id === a.playerId)
+      );
+      for (const alert of nonInjuryAlerts) {
+        roundActions.push({
+          tier: (alert.severity === "critical" || alert.severity === "high") ? "must" : "should",
+          text: `${alert.playerName} — ${alert.reason}`,
+          detail: `${alert.playerName} (${alert.position}, avg ${alert.avgScore?.toFixed(1)}) is flagged. Review bench options or trade.`,
           link: "/team",
           linkLabel: "Review",
         });
       }
     }
-    if (trades && trades.length > 0 && actionItems.length < 3) {
-      const urgent = trades.filter(t => t.confidence > 0.7);
-      if (urgent.length > 0) {
-        actionItems.push({
-          color: "yellow",
-          text: `${urgent.length} high-confidence trade${urgent.length > 1 ? "s" : ""} recommended`,
-          link: "/trades",
-          linkLabel: "View Trades",
+
+    for (const p of injuredBench) {
+      const statusText = p.injuryStatus || "not playing";
+      const isCashCow = (p.avgScore || 0) < 70 && p.price < 400000;
+      roundActions.push({
+        tier: isCashCow ? "should" : "could",
+        text: `${p.name} (bench) — ${statusText}`,
+        detail: isCashCow
+          ? `Cash cow on bench no longer generating cash. Trade for an active cash cow while you still have value.`
+          : `Bench cover unavailable. Less urgent since they're not on field, but reduces your emergency depth.`,
+        link: "/trades",
+        linkLabel: "Review",
+        players: [p],
+      });
+    }
+
+    if (byeAffectedPlayers.length > 0) {
+      roundActions.push({
+        tier: "must",
+        text: `${byeAffectedPlayers.length} player${byeAffectedPlayers.length > 1 ? "s" : ""} on bye this round`,
+        detail: `${byeAffectedPlayers.map(p => p.name).join(", ")} ${byeAffectedPlayers.length > 1 ? "are" : "is"} on bye. Move bench players on-field to cover or use a trade.`,
+        link: "/team",
+        linkLabel: "Fix Team",
+      });
+    }
+
+    if (trades && trades.length > 0) {
+      const urgentTrades = trades.filter(t => t.confidence > 0.7);
+      for (const t of urgentTrades.slice(0, 2)) {
+        if (!injuredPlayers.some(ip => ip.id === t.playerOutId)) {
+          roundActions.push({
+            tier: "should",
+            text: `Trade ${t.playerOut.name} → ${t.playerIn.name}`,
+            detail: t.reason || `${t.playerIn.name} (avg ${t.playerIn.avgScore?.toFixed(1)}) is a significant upgrade. Confidence: ${Math.round(t.confidence * 100)}%.`,
+            link: "/trades",
+            linkLabel: "View Trade",
+          });
+        }
+      }
+    }
+
+    if (coldPlayers.length > 0 && roundActions.filter(a => a.tier === "could").length < 3) {
+      const worstCold = coldPlayers[0];
+      roundActions.push({
+        tier: "could",
+        text: `${worstCold.name} is underperforming`,
+        detail: `L3 avg ${worstCold.last3Avg?.toFixed(0)} vs season avg ${worstCold.avgScore?.toFixed(0)}. Monitor another week or trade if form doesn't recover.`,
+        link: `/player/${worstCold.id}`,
+        linkLabel: "View",
+      });
+    }
+
+    if (riskData && riskData.tagWarnings.length > 0) {
+      const highTags = riskData.tagWarnings.filter(tw => tw.riskLevel === "high");
+      for (const tw of highTags.slice(0, 1)) {
+        roundActions.push({
+          tier: "could",
+          text: `${tw.playerName} — tag risk vs ${tw.nextOpponent}`,
+          detail: tw.advice,
+          link: `/player/${tw.playerId}`,
+          linkLabel: "View",
         });
       }
     }
-    if (emergencyPlayers.length > 0 && actionItems.length < 3) {
-      actionItems.push({
-        color: "yellow",
-        text: `${emergencyPlayers.length} player${emergencyPlayers.length > 1 ? "s" : ""} named as emergency — won't play unless a teammate is withdrawn`,
-        link: "/team",
-        linkLabel: "Review",
-      });
-    }
-    if (!captain && actionItems.length < 3) {
-      actionItems.push({
-        color: "yellow",
-        text: "No captain set — assign a captain for double points",
-        link: "/team",
-        linkLabel: "Set Captain",
-      });
-    }
   }
+
+  const mustActions = roundActions.filter(a => a.tier === "must");
+  const shouldActions = roundActions.filter(a => a.tier === "should");
+  const couldActions = roundActions.filter(a => a.tier === "could");
 
   const topPlayersForSnapshot = [...onFieldPlayers]
     .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
@@ -354,104 +432,126 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* B. What You Need to Do Today */}
-      <Card data-testid="card-action-items">
+      {/* B. Round Actions — MUST / SHOULD / COULD */}
+      <Card data-testid="card-round-actions">
         <CardHeader className="pb-2 px-4 pt-4">
-          <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-            <Zap className="w-4 h-4 text-accent" />
-            What You Need to Do Today
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-accent" />
+              Round {currentRound} Actions
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px]" data-testid="badge-trades-round">
+                {availableTradesRound}/{maxTradesThisRound} trades
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-2">
-          {actionItems.length === 0 ? (
+        <CardContent className="px-4 pb-4 space-y-3">
+          {roundActions.length === 0 ? (
             <div className="flex items-center gap-2.5 p-3 rounded-md bg-emerald-500/5 border border-emerald-500/15" data-testid="status-all-good">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">All good — no urgent actions needed</p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">All good — no urgent actions this round</p>
             </div>
           ) : (
-            actionItems.map((item, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 p-2.5 rounded-md bg-muted/30" data-testid={`action-item-${i}`}>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.color === "red" ? "bg-red-500" : item.color === "yellow" ? "bg-yellow-500" : "bg-green-500"}`} />
-                  <p className="text-sm min-w-0">{item.text}</p>
+            <>
+              {mustActions.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-red-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Must Do</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">— act before lockout</span>
+                  </div>
+                  {mustActions.map((item, i) => (
+                    <div
+                      key={`must-${i}`}
+                      className="rounded-md border-l-4 border-l-red-500 bg-red-500/5 p-3 cursor-pointer hover:brightness-95 transition-all"
+                      onClick={() => navigate(item.link)}
+                      data-testid={`action-must-${i}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold">{item.text}</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.detail}</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="shrink-0 text-xs h-7 border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10" data-testid={`button-must-${i}`}>
+                          {item.linkLabel}
+                          <ChevronRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => navigate(item.link)} data-testid={`button-action-${i}`}>
-                  {item.linkLabel}
-                  <ChevronRight className="w-3 h-3 ml-1" />
-                </Button>
-              </div>
-            ))
+              )}
+
+              {shouldActions.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Should Do</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">— recommended this round</span>
+                  </div>
+                  {shouldActions.map((item, i) => (
+                    <div
+                      key={`should-${i}`}
+                      className="rounded-md border-l-4 border-l-amber-500 bg-amber-500/5 p-3 cursor-pointer hover:brightness-95 transition-all"
+                      onClick={() => navigate(item.link)}
+                      data-testid={`action-should-${i}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold">{item.text}</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.detail}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" className="shrink-0 text-xs h-7" data-testid={`button-should-${i}`}>
+                          {item.linkLabel}
+                          <ChevronRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {couldActions.length > 0 && (
+                <Collapsible>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Could Do</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">— worth considering</span>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="ml-auto h-5 px-1.5 text-[10px]" data-testid="button-toggle-could">
+                        <ChevronDown className="w-3 h-3" />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <CollapsibleContent className="space-y-2 mt-2">
+                    {couldActions.map((item, i) => (
+                      <div
+                        key={`could-${i}`}
+                        className="rounded-md border-l-4 border-l-blue-500 bg-blue-500/5 p-3 cursor-pointer hover:brightness-95 transition-all"
+                        onClick={() => navigate(item.link)}
+                        data-testid={`action-could-${i}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold">{item.text}</p>
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.detail}</p>
+                          </div>
+                          <Button variant="ghost" size="sm" className="shrink-0 text-xs h-7" data-testid={`button-could-${i}`}>
+                            {item.linkLabel}
+                            <ChevronRight className="w-3 h-3 ml-1" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
-
-      {/* B2. This Week's Plan */}
-      {weeklyPlan && weeklyPlan.steps.length > 0 && (
-        <Card data-testid="card-weekly-plan" className="border-primary/20">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-primary" />
-                This Week's Plan
-              </CardTitle>
-              <Badge variant="outline" className="text-[10px]" data-testid="badge-weekly-plan-round">
-                R{weeklyPlan.round}
-              </Badge>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{weeklyPlan.summary}</p>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-2">
-            {weeklyPlan.steps.map((step, i) => {
-              const priorityStyles = {
-                critical: "border-l-red-500 bg-red-500/5",
-                important: "border-l-amber-500 bg-amber-500/5",
-                suggested: "border-l-blue-500 bg-blue-500/5",
-              };
-              const priorityLabels = {
-                critical: "Urgent",
-                important: "Important",
-                suggested: "Consider",
-              };
-              const priorityLabelColors = {
-                critical: "text-red-600 dark:text-red-400",
-                important: "text-amber-600 dark:text-amber-400",
-                suggested: "text-blue-600 dark:text-blue-400",
-              };
-              return (
-                <div
-                  key={i}
-                  className={`rounded-md border-l-4 p-3 cursor-pointer hover:brightness-95 transition-all ${priorityStyles[step.priority]}`}
-                  onClick={() => step.link && navigate(step.link)}
-                  data-testid={`weekly-plan-step-${i}`}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-sm font-bold text-primary/60 mt-0.5 shrink-0">{i + 1}.</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wide ${priorityLabelColors[step.priority]}`}>
-                          {priorityLabels[step.priority]}
-                        </span>
-                      </div>
-                      <p className="text-sm font-semibold" data-testid={`text-plan-action-${i}`}>{step.action}</p>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed" data-testid={`text-plan-reason-${i}`}>{step.reason}</p>
-                    </div>
-                    {step.link && (
-                      <ChevronRight className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {weeklyPlan.seasonContext && (
-              <div className="mt-2 pt-2 border-t border-border/50">
-                <p className="text-[11px] text-muted-foreground italic" data-testid="text-season-context">
-                  Season strategy: {weeklyPlan.seasonContext}...
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* C. Captain Loophole Panel */}
       {(captain || viceCaptain) && (
@@ -590,10 +690,17 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <p className="text-xs sm:text-sm font-medium line-clamp-2">{player.name}</p>
-                      <FormTrendIcon trend={player.formTrend} />
+                      {(player.injuryStatus || player.selectionStatus === "injured" || player.selectionStatus === "not-playing") ? (
+                        <Badge variant="destructive" className="text-[8px] px-1 py-0 shrink-0" data-testid={`badge-injury-${player.id}`}>INJ</Badge>
+                      ) : (
+                        <FormTrendIcon trend={player.formTrend} />
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <Badge variant="secondary" className="text-[9px]">{player.position}{player.dualPosition ? `/${player.dualPosition}` : ""}</Badge>
+                      {player.injuryStatus && (
+                        <span className="text-[9px] text-red-500">{player.injuryStatus}</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between gap-1 mt-1.5">
                       <span className="text-xs font-mono">{player.avgScore?.toFixed(1)}</span>
@@ -649,16 +756,23 @@ export default function Dashboard() {
       {/* Player Risks & Warnings */}
       {(lateChangeAlerts.length > 0 || coldPlayers.length > 0 || byeAffectedPlayers.length > 0 ||
         (riskData && riskData.tagWarnings.length > 0)) && (
+        <Collapsible>
         <Card className="border-destructive/30" data-testid="card-risk-assessment">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 text-destructive">
-              <ShieldAlert className="w-4 h-4" />
-              Player Risks & Warnings
-            </CardTitle>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Injuries, availability issues, tag threats, and bench swap advice
-            </p>
-          </CardHeader>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="pb-2 px-4 pt-4 cursor-pointer">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 text-destructive">
+                  <ShieldAlert className="w-4 h-4" />
+                  Player Risks & Warnings
+                </CardTitle>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Injuries, availability issues, tag threats, and bench swap advice
+              </p>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
           <CardContent className="px-4 pb-4 space-y-3">
             {riskData && riskData.alerts.length > 0 && (
               <div className="space-y-2">
@@ -822,7 +936,9 @@ export default function Dashboard() {
               </div>
             )}
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
       )}
 
       {/* Round Score Simulator */}
