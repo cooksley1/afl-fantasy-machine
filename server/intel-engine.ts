@@ -473,7 +473,7 @@ Recommend 5-8 trades, ranked by confidence. Include at least one cash cow downgr
       if (trade.playerOutName) playerNamesToCheck.add(trade.playerOutName);
       if (trade.playerInName) playerNamesToCheck.add(trade.playerInName);
     }
-    const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck]);
+    const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck], settings.currentRound);
 
     for (const trade of trades) {
       const playerOut = myTeam.find(p => p.name === trade.playerOutName);

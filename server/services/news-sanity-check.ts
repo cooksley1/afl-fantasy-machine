@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { intelReports, intelSources } from "@shared/schema";
-import { desc, gte } from "drizzle-orm";
+import { intelReports, intelSources, fixtures } from "@shared/schema";
+import { desc, gte, eq } from "drizzle-orm";
 
 export interface NewsWarning {
   playerName: string;
@@ -72,14 +72,34 @@ function extractConcernFromWindow(window: string): { severity: "high" | "medium"
   return null;
 }
 
+async function getLastGameDateOfRound(round: number): Promise<Date | null> {
+  const prevRoundFixtures = await db.select({ date: fixtures.date })
+    .from(fixtures)
+    .where(eq(fixtures.round, round))
+    .orderBy(desc(fixtures.date))
+    .limit(1);
+
+  if (prevRoundFixtures.length > 0 && prevRoundFixtures[0].date) {
+    const parsed = new Date(prevRoundFixtures[0].date);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
 export async function checkPlayersAgainstNews(
   playerNames: string[],
+  currentRound?: number,
 ): Promise<Map<string, NewsWarning[]>> {
   const warnings = new Map<string, NewsWarning[]>();
   if (playerNames.length === 0) return warnings;
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 7);
+  let cutoff: Date;
+  if (currentRound != null && currentRound > 0) {
+    const lastGameDate = await getLastGameDateOfRound(currentRound - 1);
+    cutoff = lastGameDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  } else {
+    cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  }
 
   const [reports, sources] = await Promise.all([
     db.select().from(intelReports)

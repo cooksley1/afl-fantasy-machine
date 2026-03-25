@@ -464,7 +464,7 @@ export async function registerRoutes(
         playerNamesToCheck.add(trade.playerOut.name);
         playerNamesToCheck.add(trade.playerIn.name);
       }
-      const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck]);
+      const newsWarnings = await checkPlayersAgainstNews([...playerNamesToCheck], currentRound);
 
       for (const trade of finalTrades) {
         let reasonLines = [...trade.reasons];
@@ -621,7 +621,7 @@ export async function registerRoutes(
         if (alt.player?.name) captainNames.push(alt.player.name);
       }
 
-      const newsWarnings = await checkPlayersAgainstNews([...new Set(captainNames)]);
+      const newsWarnings = await checkPlayersAgainstNews([...new Set(captainNames)], currentRound);
 
       const attachWarnings = (rec: { player: any; reasons: string[] } | null) => {
         if (!rec?.player?.name) return;
