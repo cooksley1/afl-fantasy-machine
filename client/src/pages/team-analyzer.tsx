@@ -84,6 +84,8 @@ export default function TeamAnalyzer() {
   const [teamSaved, setTeamSaved] = useState(false);
   const [disambiguationData, setDisambiguationData] = useState<AmbiguousPlayer[] | null>(null);
   const [disambiguationChoices, setDisambiguationChoices] = useState<Record<string, string>>({});
+  const [needsCaptainPick, setNeedsCaptainPick] = useState(false);
+  const [captainPickMode, setCaptainPickMode] = useState<"captain" | "vc" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -122,6 +124,12 @@ export default function TeamAnalyzer() {
     },
     onSuccess: (data) => {
       setResult(data);
+      const hasCaptain = data.players.some(p => p.isCaptain);
+      const hasVC = data.players.some(p => p.isViceCaptain);
+      if (!hasCaptain || !hasVC) {
+        setNeedsCaptainPick(true);
+        setCaptainPickMode(!hasCaptain ? "captain" : "vc");
+      }
       toast({ title: "Team parsed", description: `Found ${data.players?.length || 0} players` });
     },
     onError: (error: Error) => {
@@ -209,12 +217,54 @@ export default function TeamAnalyzer() {
     setDisambiguationData(null);
   }
 
+  function handleCaptainPick(playerName: string) {
+    if (!result || !captainPickMode) return;
+    const updated = result.players.map(p => {
+      if (captainPickMode === "captain") {
+        if (p.name === playerName) return { ...p, isCaptain: true, isViceCaptain: false };
+        return { ...p, isCaptain: false };
+      } else {
+        if (p.name === playerName) return { ...p, isViceCaptain: true, isCaptain: false };
+        return { ...p, isViceCaptain: false };
+      }
+    });
+    const updatedResult = { ...result, players: updated };
+    if (captainPickMode === "captain") {
+      updatedResult.captainName = playerName;
+      const hasVC = updated.some(p => p.isViceCaptain);
+      if (!hasVC) {
+        setCaptainPickMode("vc");
+        setResult(updatedResult);
+        return;
+      }
+    } else {
+      updatedResult.viceCaptainName = playerName;
+    }
+    setResult(updatedResult);
+    setNeedsCaptainPick(false);
+    setCaptainPickMode(null);
+  }
+
+  function skipCaptainPick() {
+    if (captainPickMode === "captain") {
+      const hasVC = result?.players.some(p => p.isViceCaptain);
+      if (!hasVC) {
+        setCaptainPickMode("vc");
+        return;
+      }
+    }
+    setNeedsCaptainPick(false);
+    setCaptainPickMode(null);
+  }
+
   function clearFile() {
     setSelectedFile(null);
     setPreviewUrl(null);
     setResult(null);
     setTeamSaved(false);
     setDisambiguationData(null);
+    setNeedsCaptainPick(false);
+    setCaptainPickMode(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -223,6 +273,8 @@ export default function TeamAnalyzer() {
     setResult(null);
     setTeamSaved(false);
     setDisambiguationData(null);
+    setNeedsCaptainPick(false);
+    setCaptainPickMode(null);
   }
 
   const isParsing = analyzeMutation.isPending || parseTextMutation.isPending;
@@ -392,6 +444,11 @@ export default function TeamAnalyzer() {
                       <CheckCircle className="w-3 h-3" />
                       Saved
                     </Badge>
+                  ) : captainPickMode ? (
+                    <Badge variant="outline" className="gap-1 text-xs border-amber-500/50 text-amber-600 dark:text-amber-400">
+                      <Crown className="w-3 h-3" />
+                      {captainPickMode === "captain" ? "Pick Captain" : "Pick Vice-Captain"}
+                    </Badge>
                   ) : (
                     <Button
                       size="sm"
@@ -410,25 +467,53 @@ export default function TeamAnalyzer() {
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
+                {captainPickMode && (
+                  <div className="flex items-center justify-between mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Tap an on-field player to set as {captainPickMode === "captain" ? "Captain" : "Vice-Captain"}
+                    </p>
+                    <Button variant="ghost" size="sm" className="h-6 text-[11px] text-muted-foreground" onClick={skipCaptainPick} data-testid="button-skip-captain">
+                      Skip
+                    </Button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5">
-                  {result.players.map((p, i) => (
-                    <Badge key={i} variant="secondary" className={`text-xs py-1 ${p.isOnField === false ? 'opacity-70' : ''}`} data-testid={`badge-player-${i}`}>
-                      {p.name}
-                      <span className="text-muted-foreground ml-1">{p.position}</span>
-                      {p.score !== undefined && p.score > 0 && (
-                        <span className="ml-1 font-bold">{p.score}</span>
-                      )}
-                      {p.isCaptain && <span className="ml-1 text-[9px] font-bold text-red-500">(C)</span>}
-                      {p.isViceCaptain && <span className="ml-1 text-[9px] font-bold text-emerald-500">(VC)</span>}
-                      {p.isEmergency && <span className="ml-1 text-[9px] font-bold text-amber-500">(E)</span>}
-                      {p.isOnField === false && <span className="ml-1 text-[9px] font-medium text-muted-foreground">(Bench)</span>}
-                    </Badge>
-                  ))}
+                  {result.players.map((p, i) => {
+                    const isPickable = captainPickMode && p.isOnField !== false && !p.isCaptain;
+                    const isAlreadyCaptain = p.isCaptain && captainPickMode === "vc";
+                    return (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className={`text-xs py-1 ${p.isOnField === false ? 'opacity-50' : ''} ${isPickable ? 'cursor-pointer ring-1 ring-amber-500/40 hover:ring-amber-500 hover:bg-amber-500/10 transition-all' : ''} ${isAlreadyCaptain ? 'ring-1 ring-red-500/40' : ''}`}
+                        onClick={() => isPickable && handleCaptainPick(p.name)}
+                        data-testid={`badge-player-${i}`}
+                      >
+                        {p.name}
+                        <span className="text-muted-foreground ml-1">{p.position}</span>
+                        {p.score !== undefined && p.score > 0 && (
+                          <span className="ml-1 font-bold">{p.score}</span>
+                        )}
+                        {p.isCaptain && <span className="ml-1 text-[9px] font-bold text-red-500">(C)</span>}
+                        {p.isViceCaptain && <span className="ml-1 text-[9px] font-bold text-emerald-500">(VC)</span>}
+                        {p.isEmergency && <span className="ml-1 text-[9px] font-bold text-amber-500">(E)</span>}
+                        {p.isOnField === false && <span className="ml-1 text-[9px] font-medium text-muted-foreground">(Bench)</span>}
+                      </Badge>
+                    );
+                  })}
                 </div>
-                {!teamSaved && (
+                {!teamSaved && !captainPickMode && (
                   <p className="text-[11px] text-muted-foreground mt-3">
                     Saving will replace your current team with these {result.players.length} identified players.
                   </p>
+                )}
+                {!captainPickMode && !teamSaved && inputMode === "paste" && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setNeedsCaptainPick(true); setCaptainPickMode("captain"); }} data-testid="button-change-captain">
+                      <Crown className="w-3 h-3" />
+                      {result.players.some(p => p.isCaptain) ? "Change C/VC" : "Set Captain & VC"}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
