@@ -281,7 +281,17 @@ export const insertPlayerAlertSchema = createInsertSchema(playerAlerts).omit({ i
 
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMyTeamPlayerSchema = createInsertSchema(myTeamPlayers).omit({ id: true });
+export const tradeHistory = pgTable("trade_history", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
+  playerOutId: integer("player_out_id").notNull(),
+  playerInId: integer("player_in_id").notNull(),
+  round: integer("round").notNull(),
+  executedAt: timestamp("executed_at").defaultNow(),
+});
+
 export const insertTradeRecSchema = createInsertSchema(tradeRecommendations).omit({ id: true, createdAt: true });
+export const insertTradeHistorySchema = createInsertSchema(tradeHistory).omit({ id: true, executedAt: true });
 export const insertLeagueSettingsSchema = createInsertSchema(leagueSettings).omit({ id: true });
 export const insertIntelReportSchema = createInsertSchema(intelReports).omit({ id: true, createdAt: true });
 export const insertLateChangeSchema = createInsertSchema(lateChanges).omit({ id: true, createdAt: true });
@@ -298,6 +308,8 @@ export type InsertMyTeamPlayer = z.infer<typeof insertMyTeamPlayerSchema>;
 export type TradeRecommendation = typeof tradeRecommendations.$inferSelect;
 export type InsertTradeRec = z.infer<typeof insertTradeRecSchema>;
 export type LeagueSettings = typeof leagueSettings.$inferSelect;
+export type TradeHistory = typeof tradeHistory.$inferSelect;
+export type InsertTradeHistory = z.infer<typeof insertTradeHistorySchema>;
 export type InsertLeagueSettings = z.infer<typeof insertLeagueSettingsSchema>;
 export type IntelReport = typeof intelReports.$inferSelect;
 export type InsertIntelReport = z.infer<typeof insertIntelReportSchema>;

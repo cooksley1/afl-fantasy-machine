@@ -17,7 +17,7 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
 - **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
 - **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
-Current version: **v2.7.9**. Always update this line in replit.md when bumping.
+Current version: **v2.8.0**. Always update this line in replit.md when bumping.
 
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
@@ -58,7 +58,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 ### Core Features
 - **Projection Engine**: Calculates player projections, volatility, and Trade EV.
 - **Simulation Engine**: Provides Monte Carlo simulations for round scores.
-- **Trade Engine**: Offers comprehensive rule-aware trade recommendations with Best-18 bye coverage analysis, TOG 50% captain risk warnings, TPP/DPP flexibility scoring, early vs regular bye trade allocation, and emergency setup recommendations.
+- **Trade Engine** (`TradeEngine` class in `server/services/trade-engine.ts`): Consolidated trade logic with `generateRecommendations()` (filters rule-checker violations), `evaluateCandidate()` (Points/Price/Strategic EV), `validateRecommendation()` (no trade-out-and-back-in same round), `markAsExecuted()` (trade history tracking), `getCaptainLoopholeAdvice()` (pre-round VC/C recommendations with injury/TOG warnings), and `getLiveLoopholeDecision()` (real-time keep/swap Captain advice). Includes Best-18 bye coverage analysis, TOG 50% captain risk warnings, TPP/DPP flexibility scoring, early vs regular bye trade allocation, and emergency setup recommendations.
 - **Tag Intelligence System**: Provides evidence-based tag warnings.
 - **Fixture Sync**: Fetches and syncs real fixtures and player data from Squiggle API.
 - **Player Alerts**: Generates typed alerts (injury, late_change, selection, role_change, news) when intel reports mention players on a user's team, displayed via a notification system.

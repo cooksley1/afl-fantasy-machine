@@ -28,6 +28,42 @@ import {
   calcIsExpectedTagger,
 } from "./services/projection-engine";
 
+export interface StandardPlayerUpdate {
+  playerId?: number;
+  aflFantasyId?: number;
+  name: string;
+  team?: string;
+  position?: string;
+  dualPosition?: string | null;
+  price?: number;
+  avgScore?: number;
+  last3Avg?: number;
+  last5Avg?: number;
+  gamesPlayed?: number;
+  ownedByPercent?: number;
+  ppm?: number;
+  cbaPercent?: number;
+  maxScore?: number;
+  breakEven?: number;
+  source: string;
+}
+
+function logSyncError(source: string, context: string, error: unknown): void {
+  const msg = error instanceof Error ? error.message : String(error);
+  console.error(`[${source}] ${context}: ${msg}`);
+}
+
+function logSyncResult(source: string, updated: number, added: number, extra?: string): void {
+  const parts = [`Updated ${updated} players`];
+  if (added > 0) parts.push(`added ${added} new players`);
+  if (extra) parts.push(extra);
+  console.log(`[${source}] ${parts.join(", ")}`);
+}
+
+function logSyncFieldWarning(source: string, playerName: string, field: string, value: unknown): void {
+  console.warn(`[${source}] ${playerName}: unexpected ${field} value: ${JSON.stringify(value)}`);
+}
+
 interface RealPlayer {
   name: string;
   team: string;
@@ -467,7 +503,8 @@ export async function syncAflFantasyPrices(): Promise<{
 
 export async function syncDfsAustralia(): Promise<{ updated: number; added: number }> {
   try {
-    const ExcelJS = await import("exceljs");
+    const excelMod = await import("exceljs");
+    const ExcelJS = excelMod.default || excelMod;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     const res = await fetch("https://dfsaustralia.com/wp-content/uploads/file-downloads/afl-fantasy-2026.xlsx", {
@@ -605,16 +642,16 @@ export async function syncDfsAustralia(): Promise<{ updated: number; added: numb
           added++;
         } catch (err: any) {
           if (!err.message.includes("duplicate")) {
-            console.log(`[DfsAustralia] Failed to insert "${dp.name}": ${err.message}`);
+            logSyncError("DfsAustralia", `Failed to insert "${dp.name}"`, err);
           }
         }
       }
     }
 
-    console.log(`[DfsAustralia] Updated ${updated} players, added ${added} new players`);
+    logSyncResult("DfsAustralia", updated, added);
     return { updated, added };
   } catch (err: any) {
-    console.log(`[DfsAustralia] Sync failed: ${err.message}`);
+    logSyncError("DfsAustralia", "Sync failed", err);
     return { updated: 0, added: 0 };
   }
 }

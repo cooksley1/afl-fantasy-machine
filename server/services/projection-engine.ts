@@ -172,6 +172,7 @@ export function calcMultiplierProjection(
   last5Avg: number | null,
   opponentAvgConceded: number | null,
   leagueAvgConceded: number | null,
+  avgTog: number | null = null,
 ): { adjustedScore: number; factors: MultiplierFactors } {
   let matchupFactor = 1.0;
   if (opponentAvgConceded != null && leagueAvgConceded != null && leagueAvgConceded > 0) {
@@ -187,7 +188,7 @@ export function calcMultiplierProjection(
     formFactor = Math.max(0.85, Math.min(1.20, rawForm));
   }
 
-  const togFactor = 1.0;
+  const togFactor = calcTogFactor(avgTog);
 
   const combined = matchupFactor * formFactor * togFactor;
   const adjustedScore = Math.round(baseProjection * combined * 10) / 10;
@@ -196,6 +197,37 @@ export function calcMultiplierProjection(
     adjustedScore,
     factors: { matchupFactor, formFactor, togFactor, combined },
   };
+}
+
+export const TOG_THRESHOLD = 50;
+
+export function calcTogFactor(avgTog: number | null): number {
+  if (avgTog == null || avgTog >= 80) return 1.0;
+  if (avgTog < TOG_THRESHOLD) return 0.75;
+  if (avgTog < 65) return 0.90;
+  return 0.95;
+}
+
+export function calcEmergencyAdjustedScore(
+  playerScore: number,
+  playerTog: number | null,
+  emergencyScores: number[],
+): number {
+  if (playerTog == null || playerTog >= TOG_THRESHOLD) return playerScore;
+  const bestEmergency = emergencyScores.length > 0 ? Math.max(...emergencyScores) : 0;
+  return Math.max(playerScore, bestEmergency);
+}
+
+export function calcCaptainTOGAdjustedScore(
+  captainScore: number,
+  captainTog: number | null,
+  viceCaptainScore: number,
+): { effectiveDoubledScore: number; togApplied: boolean } {
+  if (captainTog == null || captainTog >= TOG_THRESHOLD) {
+    return { effectiveDoubledScore: captainScore * 2, togApplied: false };
+  }
+  const effectiveDoubledScore = Math.max(captainScore, viceCaptainScore) * 2;
+  return { effectiveDoubledScore, togApplied: true };
 }
 
 export function calcValueGap(projectedAvg: number, price: number, magicNumber: number): number {

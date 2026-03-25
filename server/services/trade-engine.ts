@@ -1,4 +1,5 @@
 import type { Player, PlayerWithTeamInfo } from "@shared/schema";
+import { tradeHistory } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026, getFixtureForTeam, getSeasonPhase, getRemainingRounds, getTradesForRound, isByeRound, isEarlyByeRound, isRegularByeRound, isBest18Round } from "@shared/game-rules";
 import {
   getCachedWeights,
@@ -6,8 +7,14 @@ import {
   calcTradeConfidence,
   calcSeasonTradeGain,
   calcValueGap,
+  calcTogFactor,
+  calcCaptainTOGAdjustedScore,
+  TOG_THRESHOLD,
   type WeightConfig,
 } from "./projection-engine";
+import { db } from "../db";
+import { players, weeklyStats, fixtures } from "@shared/schema";
+import { eq, and, desc, inArray } from "drizzle-orm";
 
 export interface TradeCandidate {
   playerOut: PlayerWithTeamInfo;
@@ -990,4 +997,452 @@ export function generateTradeRecommendations(
       return b.tradeEv - a.tradeEv;
     })
     .slice(0, 15);
+}
+
+export interface TradeValidationResult {
+  valid: boolean;
+  reason?: string;
+}
+
+export interface TradeHistoryEntry {
+  playerOutId: number;
+  playerInId: number;
+  round: number;
+  userId?: string;
+}
+
+export interface CaptainAdvice {
+  recommendedVC: { player: PlayerWithTeamInfo; reasons: string[] } | null;
+  recommendedCaptain: { player: PlayerWithTeamInfo; reasons: string[] } | null;
+  alternativeVCs: { player: PlayerWithTeamInfo; reasons: string[] }[];
+  alternativeCaptains: { player: PlayerWithTeamInfo; reasons: string[] }[];
+  warnings: string[];
+}
+
+export interface LoopholeDecision {
+  action: "keep_captain" | "swap_to_vc";
+  confidence: number;
+  reason: string;
+  vcScore: number;
+  captainProjectedFloor: number;
+  captainProjectedCeiling: number;
+  captainTogRisk: boolean;
+  captainAvailable: boolean;
+}
+
+export interface TradeEvaluation {
+  tradeEV: number;
+  breakdown: { pointsEV: number; priceEV: number; strategicEV: number };
+  flags: { isLoopholeEnabler: boolean; isLoopholeRisk: boolean; isCbaBreakout: boolean; isByeRisk: boolean };
+  recommendation: string;
+}
+
+const OPTIMIZER_CONFIG = {
+  MAGIC_NUMBER: 10490,
+  BREAKOUT_CBA_THRESHOLD: 15,
+  IRONMAN_TOG: 82,
+  BYE_TARGETS: { R1: 8, R2: 10, R3: 12 },
+  HORIZON: 3,
+  VC_SCORE_THRESHOLD: 110,
+};
+
+export class TradeEngine {
+  generateRecommendations(
+    myTeam: PlayerWithTeamInfo[],
+    allPlayers: Player[],
+    currentRound: number,
+    salaryCap: number,
+    executedTradesThisRound: TradeHistoryEntry[] = [],
+  ): TradeCandidate[] {
+    const candidates = generateTradeRecommendations(myTeam, allPlayers, currentRound, salaryCap);
+    if (executedTradesThisRound.length === 0) return candidates;
+    const tradedOutIds = new Set(executedTradesThisRound.map(t => t.playerOutId));
+    return candidates.filter(c => {
+      const validation = this.validateRecommendation(c.playerIn.id, currentRound, executedTradesThisRound);
+      if (!validation.valid) {
+        return false;
+      }
+      return !tradedOutIds.has(c.playerIn.id);
+    });
+  }
+
+  async evaluateCandidate(
+    candidateId: number,
+    userTeamPlayerIds: number[],
+    currentRound: number,
+  ): Promise<TradeEvaluation> {
+    const candidate = await db.select().from(players).where(eq(players.id, candidateId)).limit(1);
+    if (!candidate.length) throw new Error("Candidate player not found");
+    const p = candidate[0];
+
+    const recentStats = await db.select({
+      fantasyScore: weeklyStats.fantasyScore,
+      cbaPercent: weeklyStats.centreBounceAttendancePercent,
+      togPercent: weeklyStats.timeOnGroundPercent,
+      round: weeklyStats.round,
+    })
+      .from(weeklyStats)
+      .where(eq(weeklyStats.playerId, candidateId))
+      .orderBy(desc(weeklyStats.round))
+      .limit(5);
+
+    const teamPlayers = userTeamPlayerIds.length > 0
+      ? await db.select().from(players).where(inArray(players.id, userTeamPlayerIds))
+      : [];
+
+    const teamFixtures = await db.select().from(fixtures)
+      .where(eq(fixtures.round, currentRound + 1));
+
+    const { pointsEV, isCbaBreakout } = this.calculatePointsEV(p, recentStats);
+    const priceEV = this.calculatePriceEV(p);
+    const { strategicEV, flags } = this.calculateStrategicEV(p, teamFixtures, teamPlayers, currentRound);
+
+    const phaseWeight = currentRound < 12 ? 0.6 : 0.2;
+    const finalEV = (pointsEV * (1 - phaseWeight)) + (priceEV * phaseWeight) + strategicEV;
+
+    return {
+      tradeEV: Math.round(finalEV * 10) / 10,
+      breakdown: { pointsEV, priceEV, strategicEV },
+      flags: { ...flags, isCbaBreakout },
+      recommendation: this.generateEvalAdvice(finalEV, { ...flags, isCbaBreakout }),
+    };
+  }
+
+  validateRecommendation(
+    playerInId: number,
+    currentRound: number,
+    executedTradesThisRound: TradeHistoryEntry[],
+  ): TradeValidationResult {
+    const tradedOutThisRound = executedTradesThisRound
+      .filter(t => t.round === currentRound)
+      .map(t => t.playerOutId);
+
+    if (tradedOutThisRound.includes(playerInId)) {
+      return {
+        valid: false,
+        reason: `Cannot trade this player back in — they were already traded out this round. The official AFL Fantasy app does not allow trading a player out and back in during the same round.`,
+      };
+    }
+    return { valid: true };
+  }
+
+  async markAsExecuted(
+    userId: string,
+    playerOutId: number,
+    playerInId: number,
+    round: number,
+  ): Promise<TradeHistoryEntry> {
+    const entry: TradeHistoryEntry = { playerOutId, playerInId, round, userId };
+    await db.insert(tradeHistory).values({
+      userId,
+      playerOutId,
+      playerInId,
+      round,
+    });
+    return entry;
+  }
+
+  async getTradeHistoryForRound(userId: string, round: number): Promise<TradeHistoryEntry[]> {
+    const rows = await db.select().from(tradeHistory)
+      .where(and(eq(tradeHistory.userId, userId), eq(tradeHistory.round, round)));
+    return rows.map(r => ({ playerOutId: r.playerOutId, playerInId: r.playerInId, round: r.round, userId: r.userId ?? undefined }));
+  }
+
+  getCaptainLoopholeAdvice(
+    myTeam: PlayerWithTeamInfo[],
+    currentRound: number,
+    roundFixtures: { homeTeam: string; awayTeam: string; date: string; localTime: string; complete: number }[],
+  ): CaptainAdvice {
+    const warnings: string[] = [];
+    const onField = myTeam.filter(p => p.isOnField);
+    if (onField.length === 0) return { recommendedVC: null, recommendedCaptain: null, alternativeVCs: [], alternativeCaptains: [], warnings: ["No on-field players"] };
+
+    const playerGameTiming = onField.map(p => {
+      const match = roundFixtures.find(f => f.homeTeam === p.team || f.awayTeam === p.team);
+      if (!match) return { player: p, gameDay: -1, isEarly: false, isComplete: false, hasGame: false };
+      const gameDate = new Date(match.date);
+      const dayOfWeek = gameDate.getDay();
+      const isEarly = dayOfWeek === 4 || dayOfWeek === 5;
+      return { player: p, gameDay: dayOfWeek, isEarly, isComplete: match.complete === 100, hasGame: true };
+    });
+
+    const earlyGamePlayers = playerGameTiming
+      .filter(pt => pt.hasGame && pt.isEarly && !pt.player.injuryStatus && pt.player.isNamedTeam !== false && pt.player.selectionStatus !== "omitted")
+      .sort((a, b) => {
+        const aScore = (a.player.projectedScore || a.player.avgScore || 0) + (a.player.ceilingScore || 0) * 0.3;
+        const bScore = (b.player.projectedScore || b.player.avgScore || 0) + (b.player.ceilingScore || 0) * 0.3;
+        return bScore - aScore;
+      });
+
+    const lateGamePlayers = playerGameTiming
+      .filter(pt => pt.hasGame && !pt.isEarly && !pt.player.injuryStatus && pt.player.isNamedTeam !== false && pt.player.selectionStatus !== "omitted")
+      .sort((a, b) => {
+        const aScore = (a.player.projectedScore || a.player.avgScore || 0);
+        const bScore = (b.player.projectedScore || b.player.avgScore || 0);
+        return bScore - aScore;
+      });
+
+    if (earlyGamePlayers.length === 0) {
+      warnings.push("No eligible early-game players for VC loophole — all your premiums play later. Set C on your highest projected player instead.");
+    }
+    if (lateGamePlayers.length === 0) {
+      warnings.push("No eligible late-game players for Captain — loophole strategy unavailable this round.");
+    }
+
+    const injuredStars = onField.filter(p =>
+      (p.injuryStatus || p.selectionStatus === "omitted" || p.isNamedTeam === false) &&
+      (p.isCaptain || p.isViceCaptain)
+    );
+    for (const p of injuredStars) {
+      warnings.push(`${p.isCaptain ? "Captain" : "Vice-Captain"} ${p.name} is ${p.injuryStatus || "omitted/not named"} — change in the official app before lockout.`);
+    }
+
+    for (const pt of earlyGamePlayers.slice(0, 3)) {
+      if (pt.player.avgTog != null && pt.player.avgTog < TOG_THRESHOLD) {
+        warnings.push(`${pt.player.name} averaging ${pt.player.avgTog.toFixed(0)}% TOG — risk of sub-50% TOG. If VC finishes below 50% TOG, their score may be replaced by an emergency. Consider alternatives.`);
+      }
+    }
+
+    const buildAdvice = (pt: typeof playerGameTiming[0], role: "VC" | "C"): { player: PlayerWithTeamInfo; reasons: string[] } => {
+      const p = pt.player;
+      const reasons: string[] = [];
+      const proj = p.projectedScore || p.avgScore || 0;
+      const ceiling = p.ceilingScore || Math.round(proj * 1.3);
+      reasons.push(`Projected ${proj.toFixed(0)} (ceiling ${ceiling})`);
+
+      if (p.consistencyRating && p.consistencyRating >= 8) reasons.push(`Elite consistency (${p.consistencyRating.toFixed(1)}/10)`);
+      if (p.captainProbability && p.captainProbability > 0.2) reasons.push(`P(120+) = ${(p.captainProbability * 100).toFixed(0)}%`);
+
+      const fixture = getFixtureForTeam(p.team, currentRound);
+      if (fixture) reasons.push(`vs ${fixture.opponent} at ${fixture.venue}`);
+
+      if (role === "VC" && pt.isEarly) reasons.push(`Plays ${pt.gameDay === 4 ? "Thursday" : "Friday"} — early game for loophole`);
+      if (role === "C" && !pt.isEarly) reasons.push(`Plays later — ideal for loophole Captain slot`);
+
+      if (p.avgTog != null && p.avgTog < TOG_THRESHOLD) {
+        reasons.push(`WARNING: avg TOG ${p.avgTog.toFixed(0)}% below 50% threshold — if below 50% TOG, doubled score = higher of C/VC`);
+      }
+
+      if (p.formTrend === "up") reasons.push(`In hot form (L3: ${p.last3Avg?.toFixed(1)})`);
+      if (p.formTrend === "down") reasons.push(`Form declining — consider alternatives`);
+
+      return { player: p, reasons };
+    };
+
+    const recommendedVC = earlyGamePlayers.length > 0 ? buildAdvice(earlyGamePlayers[0], "VC") : null;
+    const recommendedCaptain = lateGamePlayers.length > 0 ? buildAdvice(lateGamePlayers[0], "C") : null;
+    const alternativeVCs = earlyGamePlayers.slice(1, 4).map(pt => buildAdvice(pt, "VC"));
+    const alternativeCaptains = lateGamePlayers.slice(1, 4).map(pt => buildAdvice(pt, "C"));
+
+    return { recommendedVC, recommendedCaptain, alternativeVCs, alternativeCaptains, warnings };
+  }
+
+  getLiveLoopholeDecision(
+    vcPlayer: PlayerWithTeamInfo,
+    vcActualScore: number,
+    vcTog: number | null,
+    captainPlayer: PlayerWithTeamInfo,
+    captainMatchStatus: "upcoming" | "live" | "complete",
+  ): LoopholeDecision {
+    const captainProj = captainPlayer.projectedScore || captainPlayer.avgScore || 0;
+    const captainStdDev = captainPlayer.scoreStdDev || captainProj * 0.2;
+    const captainFloor = Math.round(Math.max(10, captainProj - captainStdDev));
+    const captainCeiling = Math.round(captainProj + captainStdDev * 1.3);
+    const captainTogRisk = captainPlayer.avgTog != null && captainPlayer.avgTog < TOG_THRESHOLD;
+    const captainAvailable = !captainPlayer.injuryStatus &&
+      captainPlayer.isNamedTeam !== false &&
+      captainPlayer.selectionStatus !== "omitted";
+
+    if (captainMatchStatus !== "upcoming") {
+      return {
+        action: "keep_captain",
+        confidence: 0.95,
+        reason: `Captain ${captainPlayer.name}'s game is ${captainMatchStatus === "live" ? "in progress" : "already complete"} — too late to swap. The loophole only works before your Captain's game locks.`,
+        vcScore: vcActualScore,
+        captainProjectedFloor: captainFloor,
+        captainProjectedCeiling: captainCeiling,
+        captainTogRisk,
+        captainAvailable,
+      };
+    }
+
+    let vcEffectiveScore = vcActualScore;
+    const vcBelowTogThreshold = vcTog != null && vcTog < TOG_THRESHOLD;
+    if (vcBelowTogThreshold) {
+      vcEffectiveScore = vcActualScore;
+    }
+
+    if (!captainAvailable) {
+      return {
+        action: "swap_to_vc",
+        confidence: 0.95,
+        reason: `Captain ${captainPlayer.name} is ${captainPlayer.injuryStatus || "omitted"} — swap C to VC in the official app immediately. VC scored ${vcActualScore}.`,
+        vcScore: vcActualScore,
+        captainProjectedFloor: captainFloor,
+        captainProjectedCeiling: captainCeiling,
+        captainTogRisk,
+        captainAvailable,
+      };
+    }
+
+    if (captainTogRisk) {
+      const togAdjusted = calcCaptainTOGAdjustedScore(captainProj, captainPlayer.avgTog, vcActualScore);
+      if (togAdjusted.togApplied && vcActualScore > captainProj) {
+        return {
+          action: "swap_to_vc",
+          confidence: 0.80,
+          reason: `Captain ${captainPlayer.name} has TOG risk (avg ${captainPlayer.avgTog?.toFixed(0)}%). VC scored ${vcActualScore} which exceeds Captain's projection of ${captainProj.toFixed(0)}. If Captain drops below 50% TOG, the doubled score becomes the higher of C/VC — swap Captain to VC in the official app to lock in ${vcActualScore * 2} doubled.`,
+          vcScore: vcActualScore,
+          captainProjectedFloor: captainFloor,
+          captainProjectedCeiling: captainCeiling,
+          captainTogRisk,
+          captainAvailable,
+        };
+      }
+    }
+
+    const vcTogWarning = vcBelowTogThreshold
+      ? ` WARNING: VC ${vcPlayer.name} was below 50% TOG (${vcTog?.toFixed(0)}%) — their score may be replaced by a higher-scoring emergency. Check the official app.`
+      : "";
+
+    if (vcEffectiveScore >= captainCeiling) {
+      return {
+        action: "swap_to_vc",
+        confidence: vcBelowTogThreshold ? 0.60 : 0.90,
+        reason: `VC ${vcPlayer.name} scored ${vcActualScore} — at or above Captain ${captainPlayer.name}'s ceiling (${captainCeiling}). Swap C to VC in the official app to lock in the guaranteed ${vcActualScore * 2} doubled score.${vcTogWarning}`,
+        vcScore: vcActualScore,
+        captainProjectedFloor: captainFloor,
+        captainProjectedCeiling: captainCeiling,
+        captainTogRisk,
+        captainAvailable,
+      };
+    }
+
+    if (vcEffectiveScore >= captainProj) {
+      return {
+        action: "swap_to_vc",
+        confidence: 0.70,
+        reason: `VC ${vcPlayer.name} scored ${vcActualScore} — above Captain ${captainPlayer.name}'s projected ${captainProj.toFixed(0)} (floor ${captainFloor}, ceiling ${captainCeiling}). The safe play is to swap C to VC in the official app and lock it in.`,
+        vcScore: vcActualScore,
+        captainProjectedFloor: captainFloor,
+        captainProjectedCeiling: captainCeiling,
+        captainTogRisk,
+        captainAvailable,
+      };
+    }
+
+    if (vcEffectiveScore >= captainFloor && vcEffectiveScore < captainProj) {
+      const riskTolerance = (captainProj - vcEffectiveScore) / (captainCeiling - captainFloor);
+      if (riskTolerance < 0.3) {
+        return {
+          action: "swap_to_vc",
+          confidence: 0.55,
+          reason: `VC ${vcPlayer.name} scored ${vcActualScore} — close to Captain ${captainPlayer.name}'s projection (${captainProj.toFixed(0)}). Marginal gain from keeping Captain. Consider swapping C to VC in the official app for the safe option.`,
+          vcScore: vcActualScore,
+          captainProjectedFloor: captainFloor,
+          captainProjectedCeiling: captainCeiling,
+          captainTogRisk,
+          captainAvailable,
+        };
+      }
+      return {
+        action: "keep_captain",
+        confidence: 0.55,
+        reason: `VC ${vcPlayer.name} scored ${vcActualScore} — between Captain ${captainPlayer.name}'s floor (${captainFloor}) and projection (${captainProj.toFixed(0)}). Keep your Captain in the official app — upside of ${captainCeiling} worth the risk.`,
+        vcScore: vcActualScore,
+        captainProjectedFloor: captainFloor,
+        captainProjectedCeiling: captainCeiling,
+        captainTogRisk,
+        captainAvailable,
+      };
+    }
+
+    return {
+      action: "keep_captain",
+      confidence: 0.80,
+      reason: `VC ${vcPlayer.name} scored ${vcActualScore} — below Captain ${captainPlayer.name}'s floor (${captainFloor}). Keep your Captain in the official app — strong chance of a better score (projected ${captainProj.toFixed(0)}, ceiling ${captainCeiling}).`,
+      vcScore: vcActualScore,
+      captainProjectedFloor: captainFloor,
+      captainProjectedCeiling: captainCeiling,
+      captainTogRisk,
+      captainAvailable,
+    };
+  }
+
+  private calculatePointsEV(p: Player, stats: { fantasyScore: number; cbaPercent: number | null; togPercent: number | null; round: number }[]) {
+    const recent3 = stats.slice(0, 3);
+    const avgRecentCBA = recent3.length > 0
+      ? recent3.reduce((acc, s) => acc + (s.cbaPercent || 0), 0) / recent3.length
+      : p.seasonCba || 0;
+    const cbaDelta = avgRecentCBA - (p.seasonCba || 0);
+
+    const effectiveTog = p.avgTog || 80;
+    const effectivePpm = p.ppm || ((p.avgScore || 0) / (effectiveTog * 0.01 * 120));
+    const expectedTog = effectiveTog > OPTIMIZER_CONFIG.IRONMAN_TOG ? effectiveTog : 78;
+    let projectedScore = effectivePpm * (expectedTog * 0.01 * 120);
+
+    const togFactor = calcTogFactor(p.avgTog);
+    projectedScore *= togFactor;
+
+    let isCbaBreakout = false;
+    if (cbaDelta > OPTIMIZER_CONFIG.BREAKOUT_CBA_THRESHOLD) {
+      projectedScore += 10;
+      isCbaBreakout = true;
+    }
+
+    return { pointsEV: projectedScore * OPTIMIZER_CONFIG.HORIZON, isCbaBreakout };
+  }
+
+  private calculateStrategicEV(
+    p: Player,
+    nextRoundFixtures: typeof fixtures.$inferSelect[],
+    teamPlayers: Player[],
+    round: number,
+  ) {
+    let strategicEV = 0;
+    const flags = { isLoopholeEnabler: false, isLoopholeRisk: false, isByeRisk: false };
+
+    const nextGame = nextRoundFixtures.find(
+      f => f.homeTeam === p.team || f.awayTeam === p.team
+    );
+
+    if (nextGame) {
+      const gameDate = nextGame.date;
+      const dayOfWeek = gameDate ? new Date(gameDate).getDay() : -1;
+      const isEarly = dayOfWeek === 4 || dayOfWeek === 5;
+
+      if (isEarly && (p.avgScore || 0) >= OPTIMIZER_CONFIG.VC_SCORE_THRESHOLD) {
+        strategicEV += 19;
+        flags.isLoopholeEnabler = true;
+      }
+    }
+
+    const playersOnSameBye = teamPlayers.filter(tp => tp.byeRound === p.byeRound).length;
+    if (round > 8 && round < 16) {
+      if (playersOnSameBye > 10) {
+        strategicEV -= 30;
+        flags.isByeRisk = true;
+      }
+    }
+
+    return { strategicEV, flags };
+  }
+
+  private calculatePriceEV(p: Player): number {
+    const expectedChange = ((p.avgScore || 0) - (p.breakEven || 0)) * 0.25;
+    return (expectedChange / OPTIMIZER_CONFIG.MAGIC_NUMBER) * 100;
+  }
+
+  private generateEvalAdvice(
+    ev: number,
+    flags: { isLoopholeEnabler: boolean; isLoopholeRisk: boolean; isCbaBreakout: boolean; isByeRisk: boolean },
+  ): string {
+    if (flags.isLoopholeRisk) return "High Risk: This trade kills your VC loophole structure.";
+    if (flags.isCbaBreakout) return "Elite Target: Recent CBA spikes suggest an imminent breakout.";
+    if (flags.isByeRisk) return "Bye Risk: Too many players on the same bye round.";
+    if (ev > 150) return "Strong Buy: High scoring uplift with positive cash trajectory.";
+    if (ev > 80) return "Good Target: Solid uplift with acceptable structure impact.";
+    if (ev > 30) return "Consider: Moderate improvement — weigh against other options.";
+    return "Marginal: Consider alternative targets with better bye alignment.";
+  }
 }

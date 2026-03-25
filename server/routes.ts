@@ -14,14 +14,14 @@ import {
   getCachedWeights,
   buildWeightConfig,
 } from "./services/projection-engine";
-import { generateTradeRecommendations } from "./services/trade-engine";
-import { evaluateTrade } from "./services/trade-optimizer";
+import { TradeEngine, generateTradeRecommendations } from "./services/trade-engine";
 import { buildOptimalTeam, generateSeasonPlan, saveSeasonPlan, getActiveSeasonPlan, buildDreamTeamReverse } from "./services/season-planner";
 import { getLiveRoundData, updatePlayerLiveStats, bulkUpdateLiveScores, fetchMatchStatuses, getMatchPlayers, fetchAndStorePlayerScores } from "./services/live-scores";
 import { getAllFixtures, getFixturesByRound, fetchAndStoreFixtures, syncPlayerFixtures, getRoundName } from "./services/fixture-service";
 import { isAuthenticated } from "./replit_integrations/auth";
 
 const gameRules = AFL_FANTASY_CLASSIC_2026;
+const tradeEngine = new TradeEngine();
 
 function getUserId(req: Request): string {
   const userId = (req.user as any)?.claims?.sub;
@@ -455,7 +455,8 @@ export async function registerRoutes(
       const currentRound = settings?.currentRound ?? 0;
       const salaryCap = settings?.salaryCap || gameRules.salaryCap;
 
-      const finalTrades = generateTradeRecommendations(myTeam, allPlayers, currentRound, salaryCap);
+      const executedThisRound = await tradeEngine.getTradeHistoryForRound(uid, currentRound);
+      const finalTrades = tradeEngine.generateRecommendations(myTeam, allPlayers, currentRound, salaryCap, executedThisRound);
 
       for (const trade of finalTrades) {
         await storage.createTradeRecommendation(uid, {
@@ -495,34 +496,43 @@ export async function registerRoutes(
         return res.status(400).json({ message: `No trades remaining this round (${maxTradesThisRound} per round${isByeRound(settings.currentRound) ? ' - bye round' : ''})` });
       }
 
+      const executedThisRound = await tradeEngine.getTradeHistoryForRound(uid, settings.currentRound);
+      const validation = tradeEngine.validateRecommendation(trade.playerInId, settings.currentRound, executedThisRound);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.reason });
+      }
+
       const myTeam = await storage.getMyTeam(uid);
       const teamEntry = myTeam.find((p) => p.id === trade.playerOutId);
       if (!teamEntry) {
         return res.status(400).json({ message: "Player not on team" });
       }
 
-      const inheritedOnField = teamEntry.isOnField;
-      const inheritedFieldPosition = teamEntry.fieldPosition;
-
-      await storage.removeFromMyTeam(uid, teamEntry.myTeamPlayerId!);
-
       const playerIn = await storage.getPlayer(trade.playerInId);
       if (!playerIn) return res.status(404).json({ message: "Player not found" });
 
-      await storage.addToMyTeam(uid, {
-        playerId: trade.playerInId,
-        isOnField: inheritedOnField,
-        isCaptain: false,
-        isViceCaptain: false,
-        fieldPosition: inheritedFieldPosition || playerIn.position,
-      });
+      const inheritedOnField = teamEntry.isOnField;
+      const inheritedFieldPosition = teamEntry.fieldPosition;
 
-      await storage.updateSettings(uid, {
-        tradesRemaining: settings.tradesRemaining - 1,
-        totalTradesUsed: settings.totalTradesUsed + 1,
-      });
+      await db.transaction(async () => {
+        await storage.removeFromMyTeam(uid, teamEntry.myTeamPlayerId!);
 
-      await storage.deleteTradeRecommendation(uid, tradeId);
+        await storage.addToMyTeam(uid, {
+          playerId: trade.playerInId,
+          isOnField: inheritedOnField,
+          isCaptain: false,
+          isViceCaptain: false,
+          fieldPosition: inheritedFieldPosition || playerIn.position,
+        });
+
+        await storage.updateSettings(uid, {
+          tradesRemaining: settings.tradesRemaining - 1,
+          totalTradesUsed: settings.totalTradesUsed + 1,
+        });
+
+        await tradeEngine.markAsExecuted(uid, trade.playerOutId, trade.playerInId, settings.currentRound);
+        await storage.deleteTradeRecommendation(uid, tradeId);
+      });
 
       res.json({ success: true });
     } catch (error: any) {
@@ -538,8 +548,71 @@ export async function registerRoutes(
       const settings = await storage.getSettings(uid);
       const myTeam = await storage.getMyTeam(uid);
       const teamPlayerIds = myTeam.map(p => p.id);
-      const evaluation = await evaluateTrade(candidateId, teamPlayerIds, settings.currentRound);
+      const evaluation = await tradeEngine.evaluateCandidate(candidateId, teamPlayerIds, settings.currentRound);
       res.json(evaluation);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/captain-advice", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const myTeam = await storage.getMyTeam(uid);
+      if (myTeam.length === 0) return res.status(400).json({ message: "Add players to your team first" });
+
+      const settings = await storage.getSettings(uid);
+      const currentRound = settings?.currentRound ?? 0;
+      const roundFixtures = await getFixturesByRound(currentRound);
+      const fixtureData = roundFixtures.map(f => ({
+        homeTeam: f.homeTeam,
+        awayTeam: f.awayTeam,
+        date: f.date,
+        localTime: f.localTime,
+        complete: f.complete,
+      }));
+
+      const advice = tradeEngine.getCaptainLoopholeAdvice(myTeam, currentRound, fixtureData);
+      res.json(advice);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/loophole-decision", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const myTeam = await storage.getMyTeam(uid);
+      if (myTeam.length === 0) return res.status(400).json({ message: "No team set up" });
+
+      const settings = await storage.getSettings(uid);
+      const currentRound = settings?.currentRound ?? 0;
+      const liveData = await getLiveRoundData(currentRound, uid);
+
+      const vcTeamEntry = myTeam.find(p => p.isViceCaptain);
+      const captainTeamEntry = myTeam.find(p => p.isCaptain);
+      if (!vcTeamEntry || !captainTeamEntry) {
+        return res.json({ action: "keep_captain", confidence: 0, reason: "Set both a Captain and Vice-Captain in the official app first.", vcScore: 0, captainProjectedFloor: 0, captainProjectedCeiling: 0, captainTogRisk: false, captainAvailable: true });
+      }
+
+      const vcLive = liveData.myTeamScores.find(s => s.playerId === vcTeamEntry.id);
+      const captainLive = liveData.myTeamScores.find(s => s.playerId === captainTeamEntry.id);
+      if (!vcLive || !captainLive) {
+        return res.json({ action: "keep_captain", confidence: 0, reason: "Live scores not yet available — check back once games begin.", vcScore: 0, captainProjectedFloor: 0, captainProjectedCeiling: 0, captainTogRisk: false, captainAvailable: true });
+      }
+
+      if (vcLive.matchStatus !== "complete") {
+        return res.json({ action: "keep_captain", confidence: 0, reason: `VC ${vcTeamEntry.name}'s game is still ${vcLive.matchStatus} — wait until it finishes for a loophole decision.`, vcScore: vcLive.fantasyScore, captainProjectedFloor: 0, captainProjectedCeiling: 0, captainTogRisk: false, captainAvailable: true });
+      }
+
+      const decision = tradeEngine.getLiveLoopholeDecision(
+        vcTeamEntry,
+        vcLive.fantasyScore,
+        vcLive.timeOnGround,
+        captainTeamEntry,
+        captainLive.matchStatus as "upcoming" | "live" | "complete",
+      );
+      res.json(decision);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
