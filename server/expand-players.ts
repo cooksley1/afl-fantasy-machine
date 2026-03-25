@@ -278,8 +278,10 @@ export async function syncAflFantasyPrices(): Promise<{
         });
       }
 
+      const priceValues = aflPlayer.stats.prices ? Object.values(aflPlayer.stats.prices) : [];
+      const hasVaryingPrices = new Set(priceValues).size > 1;
       const rd1Price = aflPlayer.stats.prices?.["1"];
-      if (rd1Price && rd1Price > 0 && dbPlayer.startingPrice !== rd1Price) {
+      if (hasVaryingPrices && rd1Price && rd1Price > 0 && dbPlayer.startingPrice !== rd1Price) {
         updates.startingPrice = rd1Price;
       } else if (!dbPlayer.startingPrice) {
         updates.startingPrice = aflPlayer.cost;
@@ -303,22 +305,22 @@ export async function syncAflFantasyPrices(): Promise<{
       }
 
       const s = aflPlayer.stats;
-      if (s.games_played !== undefined && s.games_played !== dbPlayer.gamesPlayed) {
+      if (s.games_played !== undefined && s.games_played > 0 && s.games_played !== dbPlayer.gamesPlayed) {
         updates.gamesPlayed = s.games_played;
       }
       if (s.avg_points !== undefined && s.avg_points > 0 && Math.abs(s.avg_points - (dbPlayer.avgScore || 0)) >= 0.5) {
         updates.avgScore = s.avg_points;
       }
-      if (s.total_points !== undefined && s.total_points !== dbPlayer.seasonTotal) {
+      if (s.total_points !== undefined && s.total_points > 0 && s.total_points !== dbPlayer.seasonTotal) {
         updates.seasonTotal = s.total_points;
       }
-      if (s.last_3_avg !== undefined && s.last_3_avg !== (dbPlayer.last3Avg || 0)) {
+      if (s.last_3_avg !== undefined && s.last_3_avg > 0 && s.last_3_avg !== (dbPlayer.last3Avg || 0)) {
         updates.last3Avg = s.last_3_avg;
       }
-      if (s.last_5_avg !== undefined && s.last_5_avg !== (dbPlayer.last5Avg || 0)) {
+      if (s.last_5_avg !== undefined && s.last_5_avg > 0 && s.last_5_avg !== (dbPlayer.last5Avg || 0)) {
         updates.last5Avg = s.last_5_avg;
       }
-      if (s.owned_by !== undefined && Math.abs(s.owned_by - (dbPlayer.ownedByPercent || 0)) >= 0.1) {
+      if (s.owned_by !== undefined && s.owned_by > 0 && Math.abs(s.owned_by - (dbPlayer.ownedByPercent || 0)) >= 0.1) {
         updates.ownedByPercent = s.owned_by;
       }
       if (s.high_score !== undefined && s.high_score > 0) {
@@ -694,7 +696,7 @@ export async function expandPlayerDatabase(): Promise<number> {
   for (const existing of existingPlayers) {
     const real = realPlayerMap.get(existing.name);
     if (!real) continue;
-    const needsPriceUpdate = existing.price !== real.salary || existing.startingPrice !== real.salary;
+    const needsPriceUpdate = existing.price !== real.salary;
     const hasLiveStats = playersWithStats.has(existing.id);
     const needsScoreUpdate = !hasLiveStats && existing.avgScore !== real.avgPoints;
 
@@ -702,7 +704,7 @@ export async function expandPlayerDatabase(): Promise<number> {
       const byeRound = BYE_ROUNDS[real.team] || 12;
       const updates: Record<string, any> = {
         price: real.salary,
-        startingPrice: real.salary,
+        startingPrice: existing.startingPrice || real.salary,
         ownedByPercent: real.owned,
         projectedScore: real.regAvg,
         ceilingScore: Math.round(real.maxScore),
@@ -1097,6 +1099,9 @@ export async function recalculatePlayerAverages(): Promise<number> {
     const last5Scores = scores.slice(-5);
     const last5Avg = Math.round((last5Scores.reduce((a, b) => a + b, 0) / last5Scores.length) * 10) / 10;
 
+    const ceilingScore = Math.max(...scores);
+    const recentScoresStr = scores.slice(-5).join(",");
+
     const breakEven = deriveBreakEven(p.price, avgScore, gamesPlayed, p.startingPrice || p.price);
 
     const formTrend = deriveFormTrend(last5Avg, avgScore);
@@ -1118,7 +1123,9 @@ export async function recalculatePlayerAverages(): Promise<number> {
       Math.abs((p.last3Avg || 0) - last3Avg) > 0.1 ||
       Math.abs((p.last5Avg || 0) - last5Avg) > 0.1 ||
       p.gamesPlayed !== gamesPlayed ||
-      p.seasonTotal !== seasonTotal;
+      p.seasonTotal !== seasonTotal ||
+      (p.ceilingScore || 0) !== ceilingScore ||
+      (p.recentScores || "") !== recentScoresStr;
 
     if (needsUpdate) {
       await db.update(players).set({
@@ -1127,6 +1134,8 @@ export async function recalculatePlayerAverages(): Promise<number> {
         last5Avg,
         gamesPlayed,
         seasonTotal,
+        ceilingScore,
+        recentScores: recentScoresStr,
         breakEven,
         formTrend,
         ...(avgTog !== null && avgTog !== undefined ? { avgTog } : {}),

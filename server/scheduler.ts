@@ -151,6 +151,16 @@ async function runGather() {
       markSync("fixtures", "error", e.message);
       console.log(`[Scheduler] Fixtures sync error: ${e.message}`);
     }
+
+    try {
+      const { recalculatePlayerAverages } = await import("./expand-players");
+      const recalcCount = await recalculatePlayerAverages();
+      if (recalcCount > 0) {
+        console.log(`[Scheduler] Recalculated averages for ${recalcCount} players from weekly_stats`);
+      }
+    } catch (e: any) {
+      console.log(`[Scheduler] Recalc averages error: ${e.message}`);
+    }
   } catch (e: any) {
     console.error("[Scheduler] Gather error:", e.message);
   } finally {
@@ -283,6 +293,13 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     } catch (e: any) {
       markSync("aflInjuryList", "error", e.message);
       errors.push(`AFL injury list: ${e.message}`);
+    }
+
+    try {
+      const { recalculatePlayerAverages } = await import("./expand-players");
+      await recalculatePlayerAverages();
+    } catch (e: any) {
+      errors.push(`Recalc averages: ${e.message}`);
     }
 
     return { success: errors.length === 0, duration: Date.now() - startTime, errors };
