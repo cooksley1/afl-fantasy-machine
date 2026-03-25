@@ -99,7 +99,16 @@ export default function Players() {
 
   const filtered = (players || [])
     .filter((p) => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search) {
+        const q = search.toLowerCase().trim();
+        const nameLower = p.name.toLowerCase();
+        const nameParts = nameLower.split(/\s+/);
+        const searchWords = q.split(/\s+/);
+        const matches = searchWords.every(sw =>
+          nameParts.some(np => np.startsWith(sw)) || nameLower.includes(sw)
+        );
+        if (!matches) return false;
+      }
       if (teamFilter !== "All Teams" && p.team !== teamFilter) return false;
       if (posFilter !== "All Positions" && p.position !== posFilter) return false;
       return true;

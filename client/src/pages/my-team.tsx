@@ -1125,7 +1125,14 @@ function PlayerActionDialog({
         if (!isSearching && p.price > budgetAfterRemoval) return false;
         if (isSearching) {
           const q = replaceSearch.toLowerCase();
-          if (!p.name.toLowerCase().includes(q) && !p.team.toLowerCase().includes(q)) return false;
+          const nameLower = p.name.toLowerCase();
+          const teamLower = p.team.toLowerCase();
+          const nameParts = nameLower.split(/\s+/);
+          const searchWords = q.split(/\s+/);
+          const nameMatch = searchWords.every(sw =>
+            nameParts.some(np => np.startsWith(sw)) || nameLower.includes(sw)
+          );
+          if (!nameMatch && !teamLower.includes(q)) return false;
         }
         return true;
       })
@@ -1455,7 +1462,14 @@ function AddPlayerToSlotDialog({
         if (teamIds.has(p.id)) return false;
         if (!isSearching && p.price > remainingBudget) return false;
         if (isSearching) {
-          if (!p.name.toLowerCase().includes(q) && !p.team.toLowerCase().includes(q)) return false;
+          const nameLower = p.name.toLowerCase();
+          const teamLower = p.team.toLowerCase();
+          const nameParts = nameLower.split(/\s+/);
+          const searchWords = q.split(/\s+/);
+          const nameMatch = searchWords.every(sw =>
+            nameParts.some(np => np.startsWith(sw)) || nameLower.includes(sw)
+          );
+          if (!nameMatch && !teamLower.includes(q)) return false;
         }
         if (position === "UTIL") return true;
         return canPlayPosition(p, position);
@@ -1592,6 +1606,11 @@ export default function MyTeam() {
       toast({ title: "Team analysis complete", description: `Rating: ${data.overallRating}/10` });
     },
     onError: (error: Error) => {
+      if (error.message.includes("401")) {
+        toast({ title: "Session expired", description: "Please log in again to use team analysis.", variant: "destructive" });
+        window.location.href = "/api/login";
+        return;
+      }
       toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
     },
   });
