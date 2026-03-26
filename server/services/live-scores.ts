@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { players, weeklyStats, leagueSettings, myTeamPlayers, fixtures, leagueOpponents } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 
 const UA = "AFL-Fantasy-Machine/1.0 (replit.app; afl-fantasy-advisor)";
 
@@ -850,6 +850,7 @@ async function fetchFromDTLive(round: number): Promise<{ fetched: number; update
 
       if (!dbPlayer) continue;
       if (alreadyHasStats.has(dbPlayer.id)) continue;
+      if (coveredTeams.has(team)) continue;
 
       await db.insert(weeklyStats).values({
         playerId: dbPlayer.id,
@@ -1062,6 +1063,7 @@ interface DfsLivePlayerStat {
 }
 
 const dfsUpdatedPlayerIds = new Set<number>();
+const coveredTeams = new Set<string>();
 
 async function fetchFromDfsAustraliaLive(round: number, isCurrentRound: boolean): Promise<{ fetched: number; updated: number; errors: string[] }> {
   const errors: string[] = [];
@@ -1164,6 +1166,7 @@ async function fetchFromDfsAustraliaLive(round: number, isCurrentRound: boolean)
 
         await upsertPlayerStats(dbPlayer, round, fpStat, opponent, sp.timeOnGroundPercentage);
         dfsUpdatedPlayerIds.add(dbPlayer.id);
+        coveredTeams.add(dbPlayer.team);
         updated++;
         fetched++;
       } catch (rowErr: any) {
@@ -1240,6 +1243,7 @@ export async function fetchAndStorePlayerScores(round: number, isCurrentRound: b
   try {
     if (isCurrentRound) {
       dfsUpdatedPlayerIds.clear();
+      coveredTeams.clear();
     }
 
     const dfsResult = await fetchFromDfsAustraliaLive(round, isCurrentRound);
@@ -1334,6 +1338,7 @@ export async function fetchAndStorePlayerScores(round: number, isCurrentRound: b
             if (dfsUpdatedPlayerIds.has(dbPlayer.id)) {
               continue;
             }
+            coveredTeams.add(fp.team);
             const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
             await upsertPlayerStats(dbPlayer, round, fp, opponent);
             updated++;
@@ -1358,6 +1363,31 @@ export async function fetchAndStorePlayerScores(round: number, isCurrentRound: b
     const dtliveResult = await fetchFromDTLive(round);
     fetched += dtliveResult.fetched;
     updated += dtliveResult.updated;
+
+    if (coveredTeams.size > 0) {
+      const coveredTeamsList = Array.from(coveredTeams);
+      const bogusRecords = await db
+        .select({ id: weeklyStats.id, playerId: weeklyStats.playerId })
+        .from(weeklyStats)
+        .innerJoin(players, eq(weeklyStats.playerId, players.id))
+        .where(
+          and(
+            eq(weeklyStats.round, round),
+            inArray(players.team, coveredTeamsList),
+            eq(weeklyStats.kickCount, 0),
+            eq(weeklyStats.handballCount, 0),
+            eq(weeklyStats.markCount, 0),
+            eq(weeklyStats.tackleCount, 0),
+            sql`${weeklyStats.fantasyScore} > 0`
+          )
+        );
+
+      if (bogusRecords.length > 0) {
+        const bogusIds = bogusRecords.map(r => r.id);
+        await db.delete(weeklyStats).where(inArray(weeklyStats.id, bogusIds));
+        console.log(`[LiveScores] Cleaned ${bogusRecords.length} score-only records for covered teams in round ${round}`);
+      }
+    }
 
     if (fetched === 0 && errors.length === 0) {
       errors.push(`No player stats available for round ${round} from any source. The round may not have started yet.`);
