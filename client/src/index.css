@@ -27,44 +27,45 @@ body > a[href*="replit"] {
   border-radius: 9999px;
 }
 
-/* LIGHT MODE */
+/* LIGHT MODE - Fantasy Manta Ray Palette */
+/* #efebe4 (cream), #d9d2c6 (sand), #344652 (slate), #101f2a (navy), #ffb143 (amber) */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 210 20% 98%;
-  --foreground: 220 30% 12%;
-  --border: 220 15% 88%;
-  --card: 0 0% 100%;
-  --card-foreground: 220 30% 12%;
-  --card-border: 220 15% 92%;
-  --sidebar: 220 40% 14%;
-  --sidebar-foreground: 210 20% 92%;
-  --sidebar-border: 220 35% 20%;
-  --sidebar-primary: 38 92% 50%;
-  --sidebar-primary-foreground: 220 40% 10%;
-  --sidebar-accent: 220 35% 20%;
-  --sidebar-accent-foreground: 210 20% 92%;
-  --sidebar-ring: 38 92% 50%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 30% 12%;
-  --popover-border: 220 15% 88%;
-  --primary: 220 60% 38%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 210 15% 90%;
-  --secondary-foreground: 220 30% 12%;
-  --muted: 210 15% 93%;
-  --muted-foreground: 220 10% 45%;
-  --accent: 38 92% 50%;
-  --accent-foreground: 220 40% 10%;
+  --background: 36 29% 93%;
+  --foreground: 206 45% 11%;
+  --border: 38 15% 82%;
+  --card: 36 29% 97%;
+  --card-foreground: 206 45% 11%;
+  --card-border: 38 15% 85%;
+  --sidebar: 206 45% 11%;
+  --sidebar-foreground: 36 29% 91%;
+  --sidebar-border: 206 40% 16%;
+  --sidebar-primary: 35 100% 63%;
+  --sidebar-primary-foreground: 206 45% 11%;
+  --sidebar-accent: 206 40% 16%;
+  --sidebar-accent-foreground: 36 29% 91%;
+  --sidebar-ring: 35 100% 63%;
+  --popover: 36 29% 97%;
+  --popover-foreground: 206 45% 11%;
+  --popover-border: 38 15% 82%;
+  --primary: 204 24% 26%;
+  --primary-foreground: 36 29% 97%;
+  --secondary: 38 18% 85%;
+  --secondary-foreground: 206 45% 11%;
+  --muted: 38 18% 88%;
+  --muted-foreground: 204 18% 40%;
+  --accent: 35 100% 63%;
+  --accent-foreground: 206 45% 11%;
   --destructive: 0 84% 45%;
   --destructive-foreground: 0 86% 98%;
-  --input: 220 15% 75%;
-  --ring: 220 60% 38%;
-  --chart-1: 220 60% 38%;
-  --chart-2: 38 92% 50%;
+  --input: 204 18% 70%;
+  --ring: 204 24% 26%;
+  --chart-1: 204 24% 26%;
+  --chart-2: 35 100% 63%;
   --chart-3: 160 60% 40%;
   --chart-4: 340 70% 50%;
   --chart-5: 280 60% 55%;
@@ -83,72 +84,66 @@ body > a[href*="replit"] {
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-/* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --sidebar-accent-border: hsl(var(--sidebar-accent));
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
   --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --muted-border: hsl(var(--muted));
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --accent-border: hsl(var(--accent));
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* DARK MODE - Fantasy Manta Ray Palette */
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
-  --background: 220 30% 8%;
-  --foreground: 210 20% 92%;
-  --border: 220 25% 18%;
-  --card: 220 28% 11%;
-  --card-foreground: 210 20% 92%;
-  --card-border: 220 25% 16%;
-  --sidebar: 220 35% 6%;
-  --sidebar-foreground: 210 20% 92%;
-  --sidebar-border: 220 30% 12%;
-  --sidebar-primary: 38 92% 50%;
-  --sidebar-primary-foreground: 220 40% 10%;
-  --sidebar-accent: 220 30% 14%;
-  --sidebar-accent-foreground: 210 20% 92%;
-  --sidebar-ring: 38 92% 50%;
-  --popover: 220 28% 13%;
-  --popover-foreground: 210 20% 92%;
-  --popover-border: 220 25% 18%;
-  --primary: 220 55% 50%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 20% 18%;
-  --secondary-foreground: 210 20% 92%;
-  --muted: 220 20% 16%;
-  --muted-foreground: 220 10% 60%;
-  --accent: 38 85% 50%;
-  --accent-foreground: 220 40% 10%;
+  --background: 206 45% 8%;
+  --foreground: 36 25% 90%;
+  --border: 206 30% 16%;
+  --card: 206 42% 11%;
+  --card-foreground: 36 25% 90%;
+  --card-border: 206 30% 14%;
+  --sidebar: 206 48% 6%;
+  --sidebar-foreground: 36 25% 90%;
+  --sidebar-border: 206 35% 12%;
+  --sidebar-primary: 35 100% 63%;
+  --sidebar-primary-foreground: 206 45% 8%;
+  --sidebar-accent: 206 35% 14%;
+  --sidebar-accent-foreground: 36 25% 90%;
+  --sidebar-ring: 35 100% 63%;
+  --popover: 206 42% 12%;
+  --popover-foreground: 36 25% 90%;
+  --popover-border: 206 30% 16%;
+  --primary: 204 28% 38%;
+  --primary-foreground: 36 29% 97%;
+  --secondary: 206 25% 16%;
+  --secondary-foreground: 36 25% 90%;
+  --muted: 206 25% 14%;
+  --muted-foreground: 204 15% 55%;
+  --accent: 35 100% 63%;
+  --accent-foreground: 206 45% 8%;
   --destructive: 0 84% 40%;
   --destructive-foreground: 0 86% 98%;
-  --input: 220 20% 30%;
-  --ring: 220 55% 50%;
-  --chart-1: 220 55% 60%;
-  --chart-2: 38 85% 60%;
+  --input: 206 22% 25%;
+  --ring: 204 28% 38%;
+  --chart-1: 204 30% 50%;
+  --chart-2: 35 95% 65%;
   --chart-3: 160 55% 55%;
   --chart-4: 340 65% 60%;
   --chart-5: 280 55% 60%;
@@ -161,31 +156,24 @@ body > a[href*="replit"] {
   --shadow-xl: 0px 2px 0px 0px hsl(240 6% 10% / 0.00), 0px 8px 10px -1px hsl(240 6% 10% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(240 6% 10% / 0.00);
 
-/* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --sidebar-accent-border: hsl(var(--sidebar-accent));
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
   --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --muted-border: hsl(var(--muted));
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --accent-border: hsl(var(--accent));
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }

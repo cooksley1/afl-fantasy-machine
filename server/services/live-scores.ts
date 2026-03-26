@@ -718,6 +718,7 @@ async function fetchFromSquigglePlayerStats(round: number): Promise<{ fetched: n
       }
 
       if (!dbPlayer) continue;
+      if (dfsUpdatedPlayerIds.has(dbPlayer.id)) continue;
 
       const kicks = sp.kicks || 0;
       const handballs = sp.handballs || 0;
@@ -916,6 +917,17 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
     const aflPlayers: any[] = await res.json();
     if (!aflPlayers || aflPlayers.length === 0) {
       errors.push("AFL Fantasy API returned no players");
+      return { fetched, updated, errors };
+    }
+
+    const sampleScores = aflPlayers.slice(0, 50).filter(ap => ap.stats?.scores);
+    const avgRounds = sampleScores.length > 0 
+      ? sampleScores.reduce((sum, ap) => sum + Object.keys(ap.stats.scores).length, 0) / sampleScores.length 
+      : 0;
+    const currentYear = new Date().getFullYear();
+    const maxExpectedRounds = round + 2;
+    if (avgRounds > maxExpectedRounds) {
+      console.log(`[LiveScores] AFL Fantasy API appears to have previous season data (avg ${avgRounds.toFixed(1)} rounds per player, expected max ${maxExpectedRounds}). Skipping score import.`);
       return { fetched, updated, errors };
     }
 
@@ -1311,6 +1323,9 @@ export async function fetchAndStorePlayerScores(round: number, isCurrentRound: b
               }
             }
 
+            if (dfsUpdatedPlayerIds.has(dbPlayer.id)) {
+              continue;
+            }
             const opponent = fp.team === parsed.team1 ? parsed.team2 : parsed.team1;
             await upsertPlayerStats(dbPlayer, round, fp, opponent);
             updated++;

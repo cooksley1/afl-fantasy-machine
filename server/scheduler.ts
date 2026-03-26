@@ -1,4 +1,6 @@
 import { gatherIntelligence } from "./data-gatherer";
+import { db } from "./db";
+import { leagueSettings } from "@shared/schema";
 
 let gatherInterval: NodeJS.Timeout | null = null;
 let liveScoreInterval: NodeJS.Timeout | null = null;
@@ -109,12 +111,29 @@ async function runGather() {
 
     try {
       markSync("liveScores", "syncing");
-      const { fetchScoresForCompletedRounds, detectAndAdvanceRound } = await import("./services/live-scores");
+      const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
       const roundResult = await detectAndAdvanceRound();
       if (roundResult.advanced) {
         console.log(`[Scheduler] Round advanced from ${roundResult.previousRound} to ${roundResult.newRound}`);
       }
       const scoreResult = await fetchScoresForCompletedRounds();
+      
+      const settingsForRound = await db.select().from(leagueSettings).limit(1);
+      const currentRound = settingsForRound[0]?.currentRound ?? 0;
+      try {
+        const currentMatches = await fetchMatchStatuses(currentRound);
+        const hasCompletedGames = currentMatches.some(m => m.complete === 100);
+        if (hasCompletedGames) {
+          console.log(`[Scheduler] Fetching scores for current round ${currentRound} (has completed games)`);
+          const currentResult = await fetchAndStorePlayerScores(currentRound, true);
+          if (currentResult.updated > 0) {
+            console.log(`[Scheduler] Updated ${currentResult.updated} player scores for current round ${currentRound}`);
+          }
+        }
+      } catch (currentErr: any) {
+        console.log(`[Scheduler] Current round score fetch: ${currentErr.message}`);
+      }
+      
       if (scoreResult.roundsProcessed > 0) {
         const { recalculatePlayerAverages } = await import("./expand-players");
         await recalculatePlayerAverages();
@@ -256,9 +275,19 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
 
     try {
       markSync("liveScores", "syncing");
-      const { fetchScoresForCompletedRounds, detectAndAdvanceRound } = await import("./services/live-scores");
+      const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
       await detectAndAdvanceRound();
       const scoreResult = await fetchScoresForCompletedRounds();
+      
+      const settingsRes = await db.select().from(leagueSettings).limit(1);
+      const curRound = settingsRes[0]?.currentRound ?? 0;
+      try {
+        const curMatches = await fetchMatchStatuses(curRound);
+        if (curMatches.some(m => m.complete === 100)) {
+          await fetchAndStorePlayerScores(curRound, true);
+        }
+      } catch {}
+      
       if (scoreResult.roundsProcessed > 0) {
         const { recalculatePlayerAverages } = await import("./expand-players");
         await recalculatePlayerAverages();
