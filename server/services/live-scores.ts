@@ -882,6 +882,19 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
   let updated = 0;
 
   try {
+    const matches = await fetchMatchStatuses(round);
+    const liveOrCompleteTeams = new Set<string>();
+    for (const m of matches) {
+      if (m.complete > 0) {
+        liveOrCompleteTeams.add(m.homeTeam);
+        liveOrCompleteTeams.add(m.awayTeam);
+      }
+    }
+
+    if (liveOrCompleteTeams.size === 0) {
+      return { fetched, updated, errors };
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     const res = await fetch("https://fantasy.afl.com.au/data/afl/players.json", {
@@ -902,6 +915,7 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
     }
 
     const roundKey = String(round);
+    const maxRoundsThisSeason = round + 1;
 
     const allDbPlayers = await db.select().from(players);
     const aflIdMap = new Map<number, typeof allDbPlayers[0]>();
@@ -912,12 +926,24 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
     }
 
     let playersWithScores = 0;
+    let skippedStale = 0;
     for (const ap of aflPlayers) {
       const scores = ap.stats?.scores;
       if (!scores) continue;
 
       const liveScore = scores[roundKey];
       if (liveScore == null) continue;
+
+      const totalRoundsInScores = Object.keys(scores).length;
+      if (totalRoundsInScores > maxRoundsThisSeason) {
+        skippedStale++;
+        continue;
+      }
+
+      const teamName = AFL_FANTASY_SQUAD_MAP_LIVE[ap.squad_id] || "";
+      if (!liveOrCompleteTeams.has(teamName)) {
+        continue;
+      }
 
       playersWithScores++;
 
@@ -958,6 +984,9 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
       fetched++;
     }
 
+    if (skippedStale > 0) {
+      console.log(`[LiveScores] AFL Fantasy API: Skipped ${skippedStale} players with stale/previous-season data`);
+    }
     if (fetched > 0) {
       console.log(`[LiveScores] AFL Fantasy API: ${fetched} players with round ${round} scores (${playersWithScores} had data), ${updated} DB updates`);
     }
@@ -967,6 +996,54 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
   }
 
   return { fetched, updated, errors };
+}
+
+export async function cleanStaleRoundStats(round: number): Promise<number> {
+  try {
+    const matches = await fetchMatchStatuses(round);
+    const liveOrCompleteTeams = new Set<string>();
+    for (const m of matches) {
+      if (m.complete > 0) {
+        liveOrCompleteTeams.add(m.homeTeam);
+        liveOrCompleteTeams.add(m.awayTeam);
+      }
+    }
+
+    const allStatsForRound = await db.select({
+      statsId: weeklyStats.id,
+      playerId: weeklyStats.playerId,
+      kickCount: weeklyStats.kickCount,
+      handballCount: weeklyStats.handballCount,
+      markCount: weeklyStats.markCount,
+      tackleCount: weeklyStats.tackleCount,
+    }).from(weeklyStats)
+      .where(eq(weeklyStats.round, round));
+
+    const allPlayers = await db.select({ id: players.id, team: players.team }).from(players);
+    const playerTeamMap = new Map(allPlayers.map(p => [p.id, p.team]));
+
+    let cleaned = 0;
+    for (const stat of allStatsForRound) {
+      const team = playerTeamMap.get(stat.playerId);
+      if (!team) continue;
+
+      const hasDetailedStats = (stat.kickCount || 0) > 0 || (stat.handballCount || 0) > 0 ||
+        (stat.markCount || 0) > 0 || (stat.tackleCount || 0) > 0;
+
+      if (!liveOrCompleteTeams.has(team) && !hasDetailedStats) {
+        await db.delete(weeklyStats).where(eq(weeklyStats.id, stat.statsId));
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log(`[LiveScores] Cleaned ${cleaned} stale round ${round} stats for teams not yet playing`);
+    }
+    return cleaned;
+  } catch (e: any) {
+    console.error("[LiveScores] cleanStaleRoundStats error:", e.message);
+    return 0;
+  }
 }
 
 export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
@@ -1147,6 +1224,8 @@ export async function fetchScoresForCompletedRounds(): Promise<{ totalFetched: n
     if (roundsProcessed > 0) {
       console.log(`[LiveScores] Auto-fetched scores for ${roundsProcessed} rounds: ${totalFetched} fetched, ${totalUpdated} updated`);
     }
+
+    await cleanStaleRoundStats(currentRound);
   } catch (e: any) {
     console.error("[LiveScores] fetchScoresForCompletedRounds error:", e.message);
   }

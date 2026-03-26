@@ -562,10 +562,17 @@ export default function LiveScoresPage() {
               "Live Scores"
             )}
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {data?.lastUpdated && `Updated ${new Date(data.lastUpdated).toLocaleTimeString()}`}
+          <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-last-updated">
+            {data?.lastUpdated && (() => {
+              const updated = new Date(data.lastUpdated);
+              const now = new Date();
+              const diffSec = Math.round((now.getTime() - updated.getTime()) / 1000);
+              const timeStr = updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              const agoStr = diffSec < 60 ? `${diffSec}s ago` : `${Math.floor(diffSec / 60)}m ago`;
+              return `Last refresh: ${timeStr} (${agoStr})`;
+            })()}
             {activeWindows?.hasActiveGames && (
-              <span className="ml-1.5 text-green-400">· Live polling {Math.round(pollInterval / 1000)}s</span>
+              <span className="ml-1.5 text-green-400">· Auto-refreshing every {Math.round(pollInterval / 1000)}s</span>
             )}
           </p>
         </div>

@@ -2122,6 +2122,9 @@ Return 5-10 key observations, prioritised by fantasy relevance.`;
       const uid = getEffectiveUserId(req);
       const round = req.query.round != null ? parseInt(req.query.round as string) : undefined;
       const data = await getLiveRoundData(round, uid);
+      const { getSchedulerStatus: getStatus } = await import("./scheduler");
+      const schedulerStatus = getStatus();
+      data.lastUpdated = schedulerStatus.lastLiveFetchTime || data.lastUpdated;
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
