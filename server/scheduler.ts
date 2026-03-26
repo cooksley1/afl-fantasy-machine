@@ -173,9 +173,11 @@ async function runLiveScoreFetch() {
   isFetchingLive = true;
   try {
     const { getActiveGameWindows, fetchAndStorePlayerScores } = await import("./services/live-scores");
-    const { windows, hasActiveGames } = await getActiveGameWindows();
+    const { windows, hasActiveGames, suggestedPollInterval } = await getActiveGameWindows();
 
-    if (hasActiveGames) {
+    const hasLiveGames = windows.some(w => w.status === "live");
+
+    if (hasActiveGames || hasLiveGames) {
       const { db: database } = await import("./db");
       const { leagueSettings } = await import("@shared/schema");
       const [settings] = await database.select().from(leagueSettings).limit(1);
@@ -187,6 +189,14 @@ async function runLiveScoreFetch() {
       if (result.updated > 0) {
         console.log(`[LiveFetch] #${liveFetchCount}: Updated ${result.updated} player scores for round ${currentRound} (${windows.filter(w => w.status === "live").length} live games)`);
       }
+    }
+
+    if (liveScoreInterval) {
+      const newInterval = hasLiveGames ? 60000 : suggestedPollInterval;
+      clearInterval(liveScoreInterval);
+      liveScoreInterval = setInterval(() => {
+        runLiveScoreFetch();
+      }, newInterval);
     }
   } catch (e: any) {
     console.error("[LiveFetch] Error:", e.message);

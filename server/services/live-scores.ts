@@ -868,12 +868,120 @@ async function fetchFromDTLive(round: number): Promise<{ fetched: number; update
   return { fetched, updated, errors };
 }
 
+const AFL_FANTASY_SQUAD_MAP_LIVE: Record<number, string> = {
+  10: "Adelaide", 20: "Brisbane Lions", 30: "Carlton", 40: "Collingwood",
+  50: "Essendon", 60: "Fremantle", 70: "Geelong", 1000: "Gold Coast",
+  1010: "GWS Giants", 80: "Hawthorn", 90: "Melbourne", 100: "North Melbourne",
+  110: "Port Adelaide", 120: "Richmond", 130: "St Kilda", 160: "Sydney",
+  140: "West Coast", 150: "Western Bulldogs",
+};
+
+async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let fetched = 0;
+  let updated = 0;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch("https://fantasy.afl.com.au/data/afl/players.json", {
+      headers: { "Accept-Encoding": "gzip, deflate" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      errors.push(`AFL Fantasy API returned ${res.status}`);
+      return { fetched, updated, errors };
+    }
+
+    const aflPlayers: any[] = await res.json();
+    if (!aflPlayers || aflPlayers.length === 0) {
+      errors.push("AFL Fantasy API returned no players");
+      return { fetched, updated, errors };
+    }
+
+    const roundKey = String(round);
+
+    const allDbPlayers = await db.select().from(players);
+    const aflIdMap = new Map<number, typeof allDbPlayers[0]>();
+    const nameMap = new Map<string, typeof allDbPlayers[0]>();
+    for (const p of allDbPlayers) {
+      if (p.aflFantasyId) aflIdMap.set(p.aflFantasyId, p);
+      nameMap.set(p.name.toLowerCase(), p);
+    }
+
+    let playersWithScores = 0;
+    for (const ap of aflPlayers) {
+      const scores = ap.stats?.scores;
+      if (!scores) continue;
+
+      const liveScore = scores[roundKey];
+      if (liveScore == null) continue;
+
+      playersWithScores++;
+
+      let dbPlayer = aflIdMap.get(ap.id);
+      if (!dbPlayer) {
+        const fullName = `${ap.first_name} ${ap.last_name}`.trim().toLowerCase();
+        dbPlayer = nameMap.get(fullName);
+      }
+      if (!dbPlayer) continue;
+
+      const existing = await db.select().from(weeklyStats)
+        .where(and(eq(weeklyStats.playerId, dbPlayer.id), eq(weeklyStats.round, round)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        if (existing[0].fantasyScore !== liveScore) {
+          await db.update(weeklyStats).set({ fantasyScore: liveScore })
+            .where(eq(weeklyStats.id, existing[0].id));
+          updated++;
+        }
+      } else {
+        await db.insert(weeklyStats).values({
+          playerId: dbPlayer.id,
+          round,
+          opponent: dbPlayer.nextOpponent || null,
+          fantasyScore: liveScore,
+          kickCount: 0,
+          handballCount: 0,
+          markCount: 0,
+          tackleCount: 0,
+          hitouts: 0,
+          goalsKicked: 0,
+          behindsKicked: 0,
+          freesAgainst: 0,
+        });
+        updated++;
+      }
+      fetched++;
+    }
+
+    if (fetched > 0) {
+      console.log(`[LiveScores] AFL Fantasy API: ${fetched} players with round ${round} scores (${playersWithScores} had data), ${updated} DB updates`);
+    }
+  } catch (e: any) {
+    errors.push(`AFL Fantasy API fetch error: ${e.message}`);
+    console.error("[LiveScores] AFL Fantasy API live fetch error:", e.message);
+  }
+
+  return { fetched, updated, errors };
+}
+
 export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
   const errors: string[] = [];
   let fetched = 0;
   let updated = 0;
 
   try {
+    const aflResult = await fetchFromAflFantasyApi(round);
+    fetched += aflResult.fetched;
+    updated += aflResult.updated;
+    if (aflResult.errors.length > 0) {
+      errors.push(...aflResult.errors);
+    }
+
     const year = new Date().getFullYear();
     const matchIds = await fetchFootywireMatchIds(year);
 
