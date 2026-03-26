@@ -17,7 +17,7 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
 - **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
 - **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
-Current version: **v2.9.0**. Always update this line in replit.md when bumping.
+Current version: **v2.10.0**. Always update this line in replit.md when bumping.
 
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
@@ -63,7 +63,7 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Tag Intelligence System**: Provides evidence-based tag warnings.
 - **Fixture Sync**: Fetches and syncs real fixtures and player data from Squiggle API.
 - **Player Alerts**: Generates typed alerts (injury, late_change, selection, role_change, news) when intel reports mention players on a user's team, displayed via a notification system.
-- **Live Scores**: Tracks live match statuses and fantasy scores using a three-source pipeline (Footywire, Squiggle, DTLive) with smart live polling. Includes a Head-to-Head Matchup View against league opponents.
+- **Live Scores**: Tracks live match statuses and fantasy scores using a four-source pipeline (DFS Australia Live → AFL Fantasy API → Footywire → Squiggle/DTLive) with smart live polling. DFS Australia Live (`dfsaustralia-apps.com/shiny/afl-live-scoring/liveScoring{year}.json`) is the primary real-time source, providing per-quarter fantasy scores, detailed stats, TOG%, and fixture status during live games. AFL Fantasy API is secondary with stale-data filtering. Footywire provides post-game detailed stats. Includes a Head-to-Head Matchup View against league opponents.
 - **Season Schedule**: Displays the full AFL season fixture, with clickable completed/live matches providing AI-generated fantasy synopses.
 - **Player Data Management**: Loads and reconciles player data, recalculating averages and breakevens. The AFL Fantasy API sync (`syncAflFantasyPrices`) dynamically adds new players not yet in the database on each startup, ensuring debutants and newly listed players are available for matching.
 - **Data Sync Scheduler** (`server/scheduler.ts`): Runs a full sync cycle every 4 hours covering all 10 data sources: AFL Fantasy Prices, DFS Australia, DTLive, Footywire, Live Scores, Wheelo Ratings, Fixtures, AFL Tables, AFL Injury List, and Intel Reports. Live scores poll every 2 minutes during active games. Per-source sync timestamps are tracked. Manual refresh available via POST `/api/data/refresh`. Sync status exposed via GET `/api/data/status` (public, no auth required). Frontend `DataStatusBar` component (`client/src/components/data-status-bar.tsx`) shows last refresh time, expandable source details, schedule info (in user's timezone), and "Update All Data" button. Displayed on the Players page.

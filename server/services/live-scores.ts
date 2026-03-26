@@ -615,13 +615,14 @@ async function upsertPlayerStats(
   dbPlayer: any,
   round: number,
   stats: FootywirePlayerStat,
-  opponent: string | null
+  opponent: string | null,
+  timeOnGroundPercent?: number
 ): Promise<void> {
   const existing = await db.select().from(weeklyStats)
     .where(and(eq(weeklyStats.playerId, dbPlayer.id), eq(weeklyStats.round, round)))
     .limit(1);
 
-  const data = {
+  const data: Record<string, any> = {
     fantasyScore: stats.fantasyScore || calcFantasyScore({
       kicks: stats.kicks, handballs: stats.handballs, marks: stats.marks,
       tackles: stats.tackles, hitouts: stats.hitouts, goals: stats.goals,
@@ -638,6 +639,10 @@ async function upsertPlayerStats(
     inside50s: stats.inside50s,
     rebound50s: stats.rebound50s,
   };
+
+  if (timeOnGroundPercent != null && timeOnGroundPercent > 0) {
+    data.timeOnGroundPercent = timeOnGroundPercent;
+  }
 
   if (existing.length > 0) {
     await db.update(weeklyStats).set(data).where(eq(weeklyStats.id, existing[0].id));
@@ -954,6 +959,11 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
       }
       if (!dbPlayer) continue;
 
+      if (dfsUpdatedPlayerIds.has(dbPlayer.id)) {
+        fetched++;
+        continue;
+      }
+
       const existing = await db.select().from(weeklyStats)
         .where(and(eq(weeklyStats.playerId, dbPlayer.id), eq(weeklyStats.round, round)))
         .limit(1);
@@ -993,6 +1003,162 @@ async function fetchFromAflFantasyApi(round: number): Promise<{ fetched: number;
   } catch (e: any) {
     errors.push(`AFL Fantasy API fetch error: ${e.message}`);
     console.error("[LiveScores] AFL Fantasy API live fetch error:", e.message);
+  }
+
+  return { fetched, updated, errors };
+}
+
+const DFS_TEAM_MAP: Record<string, string> = {
+  "ADE": "Adelaide", "BRL": "Brisbane Lions", "CAR": "Carlton",
+  "COL": "Collingwood", "ESS": "Essendon", "FRE": "Fremantle",
+  "GEE": "Geelong", "GCS": "Gold Coast", "GWS": "GWS Giants",
+  "HAW": "Hawthorn", "MEL": "Melbourne", "NTH": "North Melbourne",
+  "PTA": "Port Adelaide", "RIC": "Richmond", "STK": "St Kilda",
+  "SYD": "Sydney", "WCE": "West Coast", "WBD": "Western Bulldogs",
+};
+
+interface DfsLiveFixture {
+  id: number;
+  status: string;
+  homeTeam: string;
+  awayTeam: string;
+  progress: number;
+}
+
+interface DfsLivePlayerStat {
+  playerName: string;
+  teamAbbr: string;
+  dreamTeamPoints: number;
+  kicks: number;
+  handballs: number;
+  marks: number;
+  tackles: number;
+  hitouts: number;
+  goals: number;
+  behinds: number;
+  freesAgainst: number;
+  timeOnGroundPercentage: number;
+  id: number;
+}
+
+const dfsUpdatedPlayerIds = new Set<number>();
+
+async function fetchFromDfsAustraliaLive(round: number, isCurrentRound: boolean): Promise<{ fetched: number; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let fetched = 0;
+  let updated = 0;
+
+  if (!isCurrentRound) {
+    return { fetched, updated, errors };
+  }
+
+  try {
+    const year = new Date().getFullYear();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(`https://dfsaustralia-apps.com/shiny/afl-live-scoring/liveScoring${year}.json`, {
+      headers: { "Accept-Encoding": "gzip, deflate" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      errors.push(`DFS Australia live feed returned ${res.status}`);
+      return { fetched, updated, errors };
+    }
+
+    const data = await res.json();
+    const playerStats: DfsLivePlayerStat[] = data.playerStats || [];
+    const dfsFixtures: DfsLiveFixture[] = data.fixtures || [];
+    const timestamp = data.timeStamp?.[0] || null;
+
+    const activeFixtureIds = new Set(
+      dfsFixtures.filter(f => f.status === "LIVE" || f.status === "POSTGAME" || f.progress > 0).map(f => f.id)
+    );
+
+    if (activeFixtureIds.size === 0) {
+      return { fetched, updated, errors };
+    }
+
+    const livePlayers = playerStats.filter(p => activeFixtureIds.has(p.id) && p.dreamTeamPoints != null);
+
+    if (livePlayers.length === 0) {
+      return { fetched, updated, errors };
+    }
+
+    const allDbPlayers = await db.select().from(players);
+    const lastNameTeamMap = new Map<string, typeof allDbPlayers[0][]>();
+    for (const p of allDbPlayers) {
+      const parts = p.name.split(" ");
+      const lastName = parts[parts.length - 1].toLowerCase();
+      const key = `${lastName}|${p.team}`;
+      if (!lastNameTeamMap.has(key)) lastNameTeamMap.set(key, []);
+      lastNameTeamMap.get(key)!.push(p);
+    }
+
+    for (const sp of livePlayers) {
+      try {
+        const teamName = DFS_TEAM_MAP[sp.teamAbbr] || "";
+        if (!teamName || !sp.playerName) continue;
+
+        const nameParts = sp.playerName.trim().split(" ");
+        if (nameParts.length < 2) continue;
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(" ");
+
+        let dbPlayer: typeof allDbPlayers[0] | undefined;
+
+        const firstInitial = firstName.charAt(0).toLowerCase();
+        const surnameKey = `${lastName.toLowerCase()}|${teamName}`;
+        const candidates = lastNameTeamMap.get(surnameKey) || [];
+        if (candidates.length === 1) {
+          dbPlayer = candidates[0];
+        } else if (candidates.length > 1) {
+          dbPlayer = candidates.find(c => c.name.toLowerCase().startsWith(firstInitial));
+        }
+
+        if (!dbPlayer) continue;
+
+        const fixture = dfsFixtures.find(f => f.id === sp.id);
+        const opponent = fixture
+          ? (sp.teamAbbr === fixture.homeTeam
+            ? DFS_TEAM_MAP[fixture.awayTeam]
+            : DFS_TEAM_MAP[fixture.homeTeam]) || null
+          : null;
+
+        const fpStat: FootywirePlayerStat = {
+          name: dbPlayer.name,
+          team: teamName,
+          kicks: sp.kicks || 0,
+          handballs: sp.handballs || 0,
+          marks: sp.marks || 0,
+          goals: sp.goals || 0,
+          behinds: sp.behinds || 0,
+          tackles: sp.tackles || 0,
+          hitouts: sp.hitouts || 0,
+          freesAgainst: sp.freesAgainst || 0,
+          fantasyScore: sp.dreamTeamPoints || 0,
+          inside50s: 0,
+          rebound50s: 0,
+        };
+
+        await upsertPlayerStats(dbPlayer, round, fpStat, opponent, sp.timeOnGroundPercentage);
+        dfsUpdatedPlayerIds.add(dbPlayer.id);
+        updated++;
+        fetched++;
+      } catch (rowErr: any) {
+        continue;
+      }
+    }
+
+    if (fetched > 0) {
+      const activeGames = dfsFixtures.filter(f => f.status === "LIVE").length;
+      const postGames = dfsFixtures.filter(f => f.status === "POSTGAME").length;
+      console.log(`[LiveScores] DFS Australia live: ${fetched} players updated for round ${round} (${activeGames} live, ${postGames} complete${timestamp ? ', data from ' + timestamp : ''})`);
+    }
+  } catch (e: any) {
+    errors.push(`DFS Australia live fetch error: ${e.message}`);
+    console.error("[LiveScores] DFS Australia live scoring error:", e.message);
   }
 
   return { fetched, updated, errors };
@@ -1046,12 +1212,23 @@ export async function cleanStaleRoundStats(round: number): Promise<number> {
   }
 }
 
-export async function fetchAndStorePlayerScores(round: number): Promise<{ fetched: number; updated: number; errors: string[] }> {
+export async function fetchAndStorePlayerScores(round: number, isCurrentRound: boolean = true): Promise<{ fetched: number; updated: number; errors: string[] }> {
   const errors: string[] = [];
   let fetched = 0;
   let updated = 0;
 
   try {
+    if (isCurrentRound) {
+      dfsUpdatedPlayerIds.clear();
+    }
+
+    const dfsResult = await fetchFromDfsAustraliaLive(round, isCurrentRound);
+    fetched += dfsResult.fetched;
+    updated += dfsResult.updated;
+    if (dfsResult.errors.length > 0) {
+      errors.push(...dfsResult.errors);
+    }
+
     const aflResult = await fetchFromAflFantasyApi(round);
     fetched += aflResult.fetched;
     updated += aflResult.updated;
@@ -1211,7 +1388,7 @@ export async function fetchScoresForCompletedRounds(): Promise<{ totalFetched: n
       }
 
       console.log(`[LiveScores] Auto-fetching scores for completed round ${round} (first fetch)`);
-      const result = await fetchAndStorePlayerScores(round);
+      const result = await fetchAndStorePlayerScores(round, false);
       totalFetched += result.fetched;
       totalUpdated += result.updated;
       roundsProcessed++;
