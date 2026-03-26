@@ -462,22 +462,46 @@ export async function getMatchPlayers(
   }
 
   const statsMap = new Map(existingStats.map((s: any) => [s.playerId, s]));
+  const playedPlayerIds = new Set(existingStats.map((s: any) => s.playerId));
 
-  return allMatchPlayers.map((p) => {
-    const stats = statsMap.get(p.id);
-    const tp = myTeamMap.get(p.id);
-    const kicks = stats?.kickCount || 0;
-    const handballs = stats?.handballCount || 0;
-    const marks = stats?.markCount || 0;
-    const tackles = stats?.tackleCount || 0;
-    const hitouts = stats?.hitouts || 0;
-    const goals = stats?.goalsKicked || 0;
-    const behinds = stats?.behindsKicked || 0;
-    const freesAgainst = stats?.freesAgainst || 0;
+  const matchPlayers = allMatchPlayers
+    .filter((p) => playedPlayerIds.has(p.id))
+    .map((p) => {
+      const stats = statsMap.get(p.id);
+      const tp = myTeamMap.get(p.id);
+      const kicks = stats?.kickCount || 0;
+      const handballs = stats?.handballCount || 0;
+      const marks = stats?.markCount || 0;
+      const tackles = stats?.tackleCount || 0;
+      const hitouts = stats?.hitouts || 0;
+      const goals = stats?.goalsKicked || 0;
+      const behinds = stats?.behindsKicked || 0;
+      const freesAgainst = stats?.freesAgainst || 0;
 
-    const fantasyScore =
-      stats?.fantasyScore ||
-      calcFantasyScore({
+      const fantasyScore =
+        stats?.fantasyScore ||
+        calcFantasyScore({
+          kicks,
+          handballs,
+          marks,
+          tackles,
+          hitouts,
+          goals,
+          behinds,
+          freesAgainst,
+        });
+
+      const isCaptain = tp?.isCaptain || false;
+      const isViceCaptain = tp?.isViceCaptain || false;
+      const isOnMyTeam = !!tp;
+      const effectiveScore = isCaptain ? fantasyScore * 2 : fantasyScore;
+
+      return {
+        playerId: p.id,
+        playerName: p.name,
+        team: p.team,
+        position: p.position,
+        fantasyScore,
         kicks,
         handballs,
         marks,
@@ -486,37 +510,21 @@ export async function getMatchPlayers(
         goals,
         behinds,
         freesAgainst,
-      });
+        disposals: kicks + handballs,
+        isOnMyTeam,
+        isCaptain,
+        isViceCaptain,
+        effectiveScore,
+        timeOnGround: stats?.timeOnGroundPercent || null,
+        matchStatus: "upcoming",
+        aflFantasyId: p.aflFantasyId || null,
+        isOnField: tp?.isOnField ?? true,
+        selectionStatus: p.selectionStatus || "selected",
+        fieldPosition: tp?.fieldPosition || p.position?.split("/")[0] || "MID",
+      };
+    });
 
-    const isCaptain = tp?.isCaptain || false;
-    const isViceCaptain = tp?.isViceCaptain || false;
-    const isOnMyTeam = !!tp;
-    const effectiveScore = isCaptain ? fantasyScore * 2 : fantasyScore;
-
-    return {
-      playerId: p.id,
-      playerName: p.name,
-      team: p.team,
-      position: p.position,
-      fantasyScore,
-      kicks,
-      handballs,
-      marks,
-      tackles,
-      hitouts,
-      goals,
-      behinds,
-      freesAgainst,
-      disposals: kicks + handballs,
-      isOnMyTeam,
-      isCaptain,
-      isViceCaptain,
-      effectiveScore,
-      timeOnGround: stats?.timeOnGroundPercent || null,
-      matchStatus: "upcoming",
-      aflFantasyId: p.aflFantasyId || null,
-    };
-  });
+  return matchPlayers;
 }
 
 async function fetchFootywireMatchIds(year: number): Promise<number[]> {
