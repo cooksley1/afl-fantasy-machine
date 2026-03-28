@@ -825,6 +825,75 @@ export async function registerRoutes(
     res.json(gameRules);
   });
 
+  app.get("/api/team-sheet-status", async (req, res) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const userSettings = await storage.getSettings(uid);
+      const currentRound = userSettings?.currentRound ?? 0;
+
+      const roundFixtures = await getFixturesByRound(currentRound);
+
+      const playingTeams = new Set<string>();
+      for (const f of roundFixtures) {
+        playingTeams.add(f.homeTeam);
+        playingTeams.add(f.awayTeam);
+      }
+
+      const ALL_TEAMS = [
+        "Adelaide", "Brisbane Lions", "Carlton", "Collingwood", "Essendon", "Fremantle",
+        "Geelong", "Gold Coast", "GWS Giants", "Hawthorn", "Melbourne", "North Melbourne",
+        "Port Adelaide", "Richmond", "St Kilda", "Sydney", "West Coast", "Western Bulldogs",
+      ];
+      const byeTeams = ALL_TEAMS.filter(t => !playingTeams.has(t));
+
+      const allPlayers = await db.select({
+        team: players.team,
+        selectionStatus: players.selectionStatus,
+        isNamedTeam: players.isNamedTeam,
+      }).from(players).where(inArray(players.team, Array.from(playingTeams)));
+
+      const teamStats = new Map<string, { named: number; notPlaying: number; unknown: number; total: number }>();
+      for (const t of playingTeams) {
+        teamStats.set(t, { named: 0, notPlaying: 0, unknown: 0, total: 0 });
+      }
+
+      for (const p of allPlayers) {
+        const stat = teamStats.get(p.team);
+        if (!stat) continue;
+        stat.total++;
+        if (p.selectionStatus === "named" || p.selectionStatus === "medical_sub" || p.selectionStatus === "emergency") {
+          stat.named++;
+        } else if (p.selectionStatus === "not-playing" || p.selectionStatus === "injured" || p.selectionStatus === "omitted") {
+          stat.notPlaying++;
+        } else {
+          stat.unknown++;
+        }
+      }
+
+      const announced: string[] = [];
+      const notAnnounced: string[] = [];
+
+      for (const [team, stat] of teamStats) {
+        const classifiedRatio = (stat.named + stat.notPlaying) / Math.max(stat.total, 1);
+        if (stat.named >= 21 && classifiedRatio > 0.8) {
+          announced.push(team);
+        } else {
+          notAnnounced.push(team);
+        }
+      }
+
+      res.json({
+        round: currentRound,
+        announced: announced.sort(),
+        notAnnounced: notAnnounced.sort(),
+        byeTeams: byeTeams.sort(),
+        allAnnounced: notAnnounced.length === 0,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.patch("/api/settings", async (req, res) => {
     try {
       const schema = z.object({

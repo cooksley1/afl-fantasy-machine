@@ -41,6 +41,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { ErrorState } from "@/components/error-state";
+import { AFL_TEAM_COLORS } from "@/lib/afl-teams";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -136,6 +137,18 @@ export default function Dashboard() {
     enabled: !!teamPlayers && teamPlayers.length > 0,
   });
 
+  interface TeamSheetStatus {
+    round: number;
+    announced: string[];
+    notAnnounced: string[];
+    byeTeams: string[];
+    allAnnounced: boolean;
+  }
+  const { data: teamSheetStatus } = useQuery<TeamSheetStatus>({
+    queryKey: ["/api/team-sheet-status"],
+    enabled: !!teamPlayers && teamPlayers.length > 0,
+  });
+
   const { data: riskData } = useQuery<{
     alerts: { playerId: number; playerName: string; team: string; position: string; fieldPosition: string; reason: string; severity: string; avgScore: number; isCaptain: boolean; isViceCaptain: boolean }[];
     swapSuggestions: { outPlayerId: number; outPlayerName: string; outPosition: string; outAvg: number; inPlayerId: number; inPlayerName: string; inPosition: string; inAvg: number; scoreDiff: number; reason: string }[];
@@ -162,9 +175,6 @@ export default function Dashboard() {
   const emergencyPlayers = (teamPlayers || []).filter(
     (p) => p.selectionStatus === "emergency"
   );
-  const unknownSelectionCount = onFieldPlayers.filter(
-    (p) => p.selectionStatus === "unknown"
-  ).length;
   const regularByeRounds = gameRules?.regularByeRounds || [12, 13, 14];
   const earlyByeRounds = gameRules?.earlyByeRounds || [2, 3, 4];
   const isByeRoundNow = regularByeRounds.includes(currentRound) || earlyByeRounds.includes(currentRound);
@@ -645,16 +655,88 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {hasTeam && unknownSelectionCount > 0 && currentRound >= 1 && (
+      {hasTeam && currentRound >= 1 && teamSheetStatus && !teamSheetStatus.allAnnounced && (
         <Card className="border-blue-500/30 bg-blue-500/5" data-testid="card-teamsheet-notice">
-          <CardContent className="p-3 flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Team Sheets Not Yet Announced</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {unknownSelectionCount} of your on-field players have no team sheet confirmation yet. AFL clubs and the league release team sheets in the days before each game — playing status will be updated once announced. Changes can be made up to the start of each game.
+          <CardContent className="p-3">
+            <div className="flex items-start gap-2.5 mb-2">
+              <ClipboardList className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                Round {currentRound} Team Sheet Status
               </p>
             </div>
+
+            {teamSheetStatus.announced.length > 0 && (
+              <div className="mb-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <CheckCircle2 className="w-3 h-3 text-green-500" />
+                  <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                    Announced ({teamSheetStatus.announced.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 ml-4.5">
+                  {teamSheetStatus.announced.map((team) => (
+                    <Badge
+                      key={team}
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 border-green-500/30 text-green-700 dark:text-green-400 bg-green-500/5"
+                      data-testid={`badge-announced-${AFL_TEAM_COLORS[team]?.abbr || team}`}
+                    >
+                      {AFL_TEAM_COLORS[team]?.abbr || team}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {teamSheetStatus.notAnnounced.length > 0 && (
+              <div className="mb-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Clock className="w-3 h-3 text-amber-500" />
+                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Pending ({teamSheetStatus.notAnnounced.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 ml-4.5">
+                  {teamSheetStatus.notAnnounced.map((team) => (
+                    <Badge
+                      key={team}
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5"
+                      data-testid={`badge-pending-${AFL_TEAM_COLORS[team]?.abbr || team}`}
+                    >
+                      {AFL_TEAM_COLORS[team]?.abbr || team}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {teamSheetStatus.byeTeams.length > 0 && (
+              <div className="mb-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Calendar className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Bye ({teamSheetStatus.byeTeams.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 ml-4.5">
+                  {teamSheetStatus.byeTeams.map((team) => (
+                    <Badge
+                      key={team}
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 opacity-50"
+                      data-testid={`badge-bye-${AFL_TEAM_COLORS[team]?.abbr || team}`}
+                    >
+                      {AFL_TEAM_COLORS[team]?.abbr || team}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-muted-foreground mt-2 ml-4.5">
+              Team sheets are usually released Thu–Fri before each game. Status updates automatically.
+            </p>
           </CardContent>
         </Card>
       )}
