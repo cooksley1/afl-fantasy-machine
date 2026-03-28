@@ -110,6 +110,17 @@ async function runGather() {
     }
 
     try {
+      markSync("aflLineups", "syncing");
+      const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
+      const [sysSettings] = await db.select().from(leagueSettings).limit(1);
+      await syncTeamLineups(sysSettings?.currentRound || 1);
+      markSync("aflLineups", "idle");
+    } catch (e: any) {
+      markSync("aflLineups", "error", e.message);
+      console.log(`[Scheduler] AFL lineup sync error: ${e.message}`);
+    }
+
+    try {
       markSync("liveScores", "syncing");
       const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
       const roundResult = await detectAndAdvanceRound();
@@ -332,6 +343,17 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     } catch (e: any) {
       markSync("aflInjuryList", "error", e.message);
       errors.push(`AFL injury list: ${e.message}`);
+    }
+
+    try {
+      markSync("aflLineups", "syncing");
+      const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
+      const [sysSettings2] = await db.select().from(leagueSettings).limit(1);
+      await syncTeamLineups(sysSettings2?.currentRound || 1);
+      markSync("aflLineups", "idle");
+    } catch (e: any) {
+      markSync("aflLineups", "error", e.message);
+      errors.push(`AFL lineups: ${e.message}`);
     }
 
     try {

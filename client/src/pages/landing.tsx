@@ -1,8 +1,9 @@
-import { TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users, ChevronDown, Zap } from "lucide-react";
+import { TrendingUp, Brain, Shield, ArrowRight, BarChart3, Users, ChevronDown, Zap, Loader2 } from "lucide-react";
 import logoImg from "@assets/1772915052518_1772915124902_no_bg.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { apiRequest } from "@/lib/queryClient";
 
 const features = [
   {
@@ -94,6 +95,19 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function LandingPage() {
+  const [devLoading, setDevLoading] = useState(false);
+  const isDev = import.meta.env.DEV;
+
+  const handleDevLogin = async () => {
+    setDevLoading(true);
+    try {
+      await apiRequest("POST", "/api/auth/dev-login");
+      window.location.href = "/";
+    } catch {
+      setDevLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/80 border-b">
@@ -210,7 +224,19 @@ export default function LandingPage() {
             <img src={logoImg} alt="AFL Fantasy Machine" className="w-4 h-4 object-contain" data-testid="img-footer-logo" />
             <span>AFL Fantasy Machine</span>
           </div>
-          <span>&copy; 2026 All rights reserved</span>
+          <div className="flex items-center gap-3">
+            {isDev && (
+              <button
+                onClick={handleDevLogin}
+                disabled={devLoading}
+                className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors cursor-pointer"
+                data-testid="button-dev-login"
+              >
+                {devLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "dev"}
+              </button>
+            )}
+            <span>&copy; 2026 All rights reserved</span>
+          </div>
         </div>
       </footer>
     </div>

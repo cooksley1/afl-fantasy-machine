@@ -271,6 +271,46 @@ async function fetchAllClubFeeds(): Promise<FetchedItem[]> {
   return allItems;
 }
 
+const EXTERNAL_RSS_FEEDS: { name: string; url: string; sourceType: string }[] = [
+  { name: "Aussie Rules Training", url: "https://aussierulestraining.com/feed/", sourceType: "training_intel" },
+  { name: "BigFooty", url: "https://www.bigfooty.com/feed/", sourceType: "community_intel" },
+];
+
+async function fetchExternalFeeds(): Promise<FetchedItem[]> {
+  const items: FetchedItem[] = [];
+
+  for (const feed of EXTERNAL_RSS_FEEDS) {
+    try {
+      const res = await fetchWithTimeout(feed.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      }, 12000);
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const parsed = parseRSSItems(xml);
+
+      for (const entry of parsed.slice(0, 8)) {
+        const cleanTitle = entry.title.replace(/ - [^-]+$/, '').trim();
+        const isRelevant = FANTASY_KEYWORDS.some(kw => cleanTitle.toLowerCase().includes(kw)) ||
+          cleanTitle.toLowerCase().includes("afl") ||
+          cleanTitle.toLowerCase().includes("fantasy") ||
+          cleanTitle.toLowerCase().includes("supercoach");
+        if (!isRelevant) continue;
+
+        items.push({
+          sourceType: feed.sourceType,
+          sourceUrl: entry.link,
+          title: cleanTitle,
+          rawContent: `Source: ${feed.name}\n${cleanTitle}\n${entry.desc}\nPublished: ${entry.pubDate}`,
+        });
+      }
+      console.log(`[DataGatherer] ${feed.name} RSS: ${parsed.length} items, ${items.length} relevant`);
+    } catch (e: any) {
+      console.error(`[DataGatherer] ${feed.name} RSS error:`, e.message);
+    }
+  }
+  return items;
+}
+
 async function fetchFantasySpecificNews(): Promise<FetchedItem[]> {
   const items: FetchedItem[] = [];
   const queries = [
@@ -344,16 +384,17 @@ export async function gatherIntelligence(userId?: string): Promise<{ fetched: nu
 
   const allItems: FetchedItem[] = [];
 
-  const [fixtures, tips, ladder, aflNews, clubFeeds, fantasyNews] = await Promise.all([
+  const [fixtures, tips, ladder, aflNews, clubFeeds, fantasyNews, externalFeeds] = await Promise.all([
     fetchSquiggleGames(currentRound),
     fetchSquiggleTips(currentRound),
     fetchSquiggleLadder(),
     fetchAFLRSS(),
     fetchAllClubFeeds(),
     fetchFantasySpecificNews(),
+    fetchExternalFeeds(),
   ]);
 
-  allItems.push(...fixtures, ...tips, ...ladder, ...aflNews, ...clubFeeds, ...fantasyNews);
+  allItems.push(...fixtures, ...tips, ...ladder, ...aflNews, ...clubFeeds, ...fantasyNews, ...externalFeeds);
 
   let fetched = 0;
   for (const item of allItems) {
