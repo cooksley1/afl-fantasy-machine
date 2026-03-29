@@ -21,13 +21,10 @@ export interface SyncSourceStatus {
 const syncSources: Record<string, SyncSourceStatus> = {
   aflFantasyPrices: { lastSync: null, status: "idle" },
   dfsAustralia: { lastSync: null, status: "idle" },
-  dtLive: { lastSync: null, status: "idle" },
-  footywire: { lastSync: null, status: "idle" },
   liveScores: { lastSync: null, status: "idle" },
   wheelo: { lastSync: null, status: "idle" },
   fixtures: { lastSync: null, status: "idle" },
-  aflTables: { lastSync: null, status: "idle" },
-  aflInjuryList: { lastSync: null, status: "idle" },
+  injuryAndLineups: { lastSync: null, status: "idle" },
   intel: { lastSync: null, status: "idle" },
 };
 
@@ -60,26 +57,6 @@ async function runGather() {
     console.log(`[Scheduler] Gather #${gatherCount} complete: ${result.fetched} fetched, ${result.processed} processed`);
 
     try {
-      markSync("dtLive", "syncing");
-      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
-      await fetchDTLiveData();
-      markSync("dtLive", "idle");
-    } catch (e: any) {
-      markSync("dtLive", "error", e.message);
-      console.log(`[Scheduler] DTLive sync error: ${e.message}`);
-    }
-
-    try {
-      markSync("footywire", "syncing");
-      const { fetchFootywireData } = await import("./services/footywire-scraper");
-      await fetchFootywireData();
-      markSync("footywire", "idle");
-    } catch (e: any) {
-      markSync("footywire", "error", e.message);
-      console.log(`[Scheduler] Footywire sync error: ${e.message}`);
-    }
-
-    try {
       markSync("dfsAustralia", "syncing");
       const { syncDfsAustralia } = await import("./expand-players");
       await syncDfsAustralia();
@@ -100,24 +77,17 @@ async function runGather() {
     }
 
     try {
-      markSync("aflInjuryList", "syncing");
+      markSync("injuryAndLineups", "syncing");
       const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
       await syncAflInjuryList();
-      markSync("aflInjuryList", "idle");
-    } catch (e: any) {
-      markSync("aflInjuryList", "error", e.message);
-      console.log(`[Scheduler] AFL injury list sync error: ${e.message}`);
-    }
 
-    try {
-      markSync("aflLineups", "syncing");
       const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
       const [sysSettings] = await db.select().from(leagueSettings).limit(1);
       await syncTeamLineups(sysSettings?.currentRound || 1);
-      markSync("aflLineups", "idle");
+      markSync("injuryAndLineups", "idle");
     } catch (e: any) {
-      markSync("aflLineups", "error", e.message);
-      console.log(`[Scheduler] AFL lineup sync error: ${e.message}`);
+      markSync("injuryAndLineups", "error", e.message);
+      console.log(`[Scheduler] Injury/Lineups sync error: ${e.message}`);
     }
 
     try {
@@ -255,26 +225,6 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     }
 
     try {
-      markSync("dtLive", "syncing");
-      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
-      await fetchDTLiveData();
-      markSync("dtLive", "idle");
-    } catch (e: any) {
-      markSync("dtLive", "error", e.message);
-      errors.push(`DTLive: ${e.message}`);
-    }
-
-    try {
-      markSync("footywire", "syncing");
-      const { fetchFootywireData } = await import("./services/footywire-scraper");
-      await fetchFootywireData();
-      markSync("footywire", "idle");
-    } catch (e: any) {
-      markSync("footywire", "error", e.message);
-      errors.push(`Footywire: ${e.message}`);
-    }
-
-    try {
       markSync("aflFantasyPrices", "syncing");
       const { syncAflFantasyPrices } = await import("./expand-players");
       await syncAflFantasyPrices();
@@ -336,24 +286,17 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     }
 
     try {
-      markSync("aflInjuryList", "syncing");
+      markSync("injuryAndLineups", "syncing");
       const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
       await syncAflInjuryList();
-      markSync("aflInjuryList", "idle");
-    } catch (e: any) {
-      markSync("aflInjuryList", "error", e.message);
-      errors.push(`AFL injury list: ${e.message}`);
-    }
 
-    try {
-      markSync("aflLineups", "syncing");
       const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
       const [sysSettings2] = await db.select().from(leagueSettings).limit(1);
       await syncTeamLineups(sysSettings2?.currentRound || 1);
-      markSync("aflLineups", "idle");
+      markSync("injuryAndLineups", "idle");
     } catch (e: any) {
-      markSync("aflLineups", "error", e.message);
-      errors.push(`AFL lineups: ${e.message}`);
+      markSync("injuryAndLineups", "error", e.message);
+      errors.push(`Injury/Lineups: ${e.message}`);
     }
 
     try {

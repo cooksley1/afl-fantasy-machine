@@ -21,16 +21,24 @@ interface DataStatus {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  aflFantasyPrices: "AFL Fantasy Prices",
-  dfsAustralia: "DFS Australia",
-  dtLive: "DTLive Stats",
-  footywire: "Footywire Prices",
+  aflFantasyPrices: "Prices & Rosters",
+  dfsAustralia: "Player Stats",
   liveScores: "Live Scores",
-  wheelo: "Wheelo Ratings",
-  fixtures: "Fixtures & Schedule",
-  aflTables: "AFL Tables History",
-  intel: "Intel Reports",
+  wheelo: "Advanced Ratings",
+  fixtures: "Fixtures",
+  injuryAndLineups: "Injuries & Lineups",
+  intel: "News & Intel",
 };
+
+const SOURCE_ORDER = [
+  "aflFantasyPrices",
+  "liveScores",
+  "injuryAndLineups",
+  "fixtures",
+  "dfsAustralia",
+  "wheelo",
+  "intel",
+];
 
 function formatTimeAgo(isoString: string): string {
   const now = new Date();
@@ -105,10 +113,20 @@ export function DataStatusBar() {
 
   if (!status) return null;
 
+  const visibleSources = Object.entries(status.sources).filter(
+    ([key]) => SOURCE_LABELS[key]
+  );
+
   const latestSync = getLatestSyncTime(status.sources);
   const isRefreshing = refreshMutation.isPending || status.isManualRefreshing || status.isGathering;
-  const activeSyncs = Object.values(status.sources).filter(s => s.status === "syncing").length;
-  const errorSyncs = Object.values(status.sources).filter(s => s.status === "error").length;
+  const activeSyncs = visibleSources.filter(([, s]) => s.status === "syncing").length;
+  const errorSyncs = visibleSources.filter(([, s]) => s.status === "error").length;
+
+  const sortedSources = visibleSources.sort(([a], [b]) => {
+    const ai = SOURCE_ORDER.indexOf(a);
+    const bi = SOURCE_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
   return (
     <div className="rounded-lg border border-border/50 bg-card/50 overflow-hidden" data-testid="data-status-bar">
@@ -121,9 +139,9 @@ export function DataStatusBar() {
           <Clock className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
             {activeSyncs > 0 ? (
-              <span className="text-blue-500">Syncing {activeSyncs} sources...</span>
+              <span className="text-blue-500">Syncing {activeSyncs} source{activeSyncs > 1 ? "s" : ""}...</span>
             ) : latestSync ? (
-              <>Last refreshed {formatTimeAgo(latestSync)} ({formatLocalTime(latestSync)})</>
+              <>Last refreshed {formatTimeAgo(latestSync)}</>
             ) : (
               "Data loading..."
             )}
@@ -147,13 +165,13 @@ export function DataStatusBar() {
           ) : (
             <RefreshCw className="w-3 h-3" />
           )}
-          {isRefreshing ? "Refreshing..." : "Update All Data"}
+          {isRefreshing ? "Refreshing..." : "Refresh"}
         </Button>
       </div>
 
       {expanded && (
         <div className="border-t border-border/50 px-3 py-2 space-y-1.5">
-          {Object.entries(status.sources).map(([key, source]) => (
+          {sortedSources.map(([key, source]) => (
             <div key={key} className="flex items-center justify-between text-xs" data-testid={`status-source-${key}`}>
               <div className="flex items-center gap-1.5">
                 {source.status === "syncing" ? (
@@ -186,8 +204,7 @@ export function DataStatusBar() {
           ))}
 
           <div className="pt-1.5 mt-1.5 border-t border-border/30 text-[11px] text-muted-foreground">
-            <p>Auto-refresh: every 4 hours (prices, stats, intel, fixtures, ratings)</p>
-            <p>Live scores: every 2 minutes during active games</p>
+            <p>Auto-refresh every 4 hours. Live scores every 2 min during games.</p>
             {status.serverStartTime && (
               <p>Server started: {new Date(status.serverStartTime).toLocaleString([], {
                 weekday: "short",

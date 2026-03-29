@@ -1335,6 +1335,9 @@ export async function registerRoutes(
         RUC: "RUC", RUCK: "RUC",
         FWD: "FWD", FORWARD: "FWD",
         UTIL: "UTIL", UTILITY: "UTIL",
+        "D/M": "DEF", "M/D": "MID", "F/M": "FWD", "M/F": "MID",
+        "R/D": "RUC", "R/F": "RUC", "D/F": "DEF", "F/D": "FWD",
+        "D/R": "DEF", "F/R": "FWD",
       };
 
       const notFound: string[] = [];
@@ -1374,7 +1377,7 @@ export async function registerRoutes(
 
       type MatchResult = { match: typeof allPlayers[0]; ambiguous?: false } | { match: typeof allPlayers[0]; ambiguous: true; candidates: typeof allPlayers };
 
-      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string): MatchResult | null => {
+      const fuzzyMatchPlayer = (inputName: string, players: typeof allPlayers, inputTeam?: string, inputPrice?: number): MatchResult | null => {
         const normalName = inputName.trim().toLowerCase().replace(/[''`]/g, "'");
 
         const exact = players.find(p => p.name.toLowerCase() === normalName);
@@ -1395,6 +1398,16 @@ export async function registerRoutes(
           return tm || null;
         };
 
+        const narrowByPrice = (candidates: typeof allPlayers): typeof allPlayers[0] | null => {
+          if (!inputPrice || inputPrice <= 0 || candidates.length <= 1) return null;
+          const withDiffs = candidates.map(p => ({ player: p, diff: Math.abs(p.price - inputPrice) }));
+          withDiffs.sort((a, b) => a.diff - b.diff);
+          if (withDiffs[0].diff < 10000 && (withDiffs.length === 1 || withDiffs[1].diff > withDiffs[0].diff * 3)) {
+            return withDiffs[0].player;
+          }
+          return null;
+        };
+
         const surnameMatches = players.filter(p => {
           const parts = p.name.toLowerCase().split(" ");
           return parts[parts.length - 1] === inputSurname;
@@ -1413,8 +1426,14 @@ export async function registerRoutes(
           });
           if (firstMatch.length === 1) return { match: firstMatch[0] };
           if (firstMatch.length > 1) {
+            const byPrice = narrowByPrice(firstMatch);
+            if (byPrice) return { match: byPrice };
+            const byTeam2 = narrowByTeam(firstMatch);
+            if (byTeam2) return { match: byTeam2 };
             return { match: firstMatch[0], ambiguous: true, candidates: firstMatch };
           }
+          const byPrice = narrowByPrice(surnameMatches);
+          if (byPrice) return { match: byPrice };
           return { match: surnameMatches[0], ambiguous: true, candidates: surnameMatches };
         }
 
@@ -1429,6 +1448,8 @@ export async function registerRoutes(
           if (initialMatch.length > 1) {
             const byTeam = narrowByTeam(initialMatch);
             if (byTeam) return { match: byTeam };
+            const byPrice = narrowByPrice(initialMatch);
+            if (byPrice) return { match: byPrice };
             return { match: initialMatch[0], ambiguous: true, candidates: initialMatch };
           }
         }
@@ -1480,10 +1501,10 @@ export async function registerRoutes(
       const ambiguousPlayers: { inputName: string; position: string; team?: string; isOnField?: boolean; isCaptain?: boolean; isViceCaptain?: boolean; isEmergency?: boolean; candidates: { id: number; name: string; team: string; position: string; avgScore: number | null; price: number | null }[] }[] = [];
 
       for (const ip of identifiedPlayers) {
-        const result = fuzzyMatchPlayer(ip.name, allPlayers, ip.team);
+        const result = fuzzyMatchPlayer(ip.name, allPlayers, ip.team, ip.price);
 
         if (!result) {
-          console.log(`[save-from-analyzer] No match found for: "${ip.name}" (team: ${ip.team || "none"})`);
+          console.log(`[save-from-analyzer] No match found for: "${ip.name}" (team: ${ip.team || "none"}, price: ${ip.price || "none"})`);
           notFound.push(ip.name);
           continue;
         }
@@ -1510,7 +1531,7 @@ export async function registerRoutes(
           continue;
         }
 
-        const posRaw = (ip.position || result.match.position || "MID").toUpperCase();
+        const posRaw = (ip.position || result.match.position || "MID").toUpperCase().trim().replace(/\s*\/\s*/g, "/");
         const fieldPos = posMap[posRaw] || "MID";
         resolvedPlayers.push({ match: result.match, fieldPos, ip });
       }

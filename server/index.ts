@@ -141,24 +141,13 @@ app.use((req, res, next) => {
       console.log(`[DfsAustralia] Background sync error: ${err.message}`);
     }
     try {
-      const { fetchFootywireData } = await import("./services/footywire-scraper");
-      await fetchFootywireData();
-      markSourceSynced("footywire");
-    } catch (err: any) {
-      console.log(`[Footywire] Background sync error: ${err.message}`);
-    }
-    try {
-      const { fetchDTLiveData } = await import("./services/dtlive-scraper");
-      await fetchDTLiveData();
-      markSourceSynced("dtLive");
       await recalculatePlayerAverages();
     } catch (err: any) {
-      console.log(`[DTLive] Background sync error: ${err.message}`);
+      console.log(`[Recalc] Background recalc error: ${err.message}`);
     }
     try {
       const { fetchAflTablesHistoricalData } = await import("./services/afltables-scraper");
       await fetchAflTablesHistoricalData([2024, 2025]);
-      markSourceSynced("aflTables");
     } catch (err: any) {
       console.log(`[AflTables] Background sync error: ${err.message}`);
     }
