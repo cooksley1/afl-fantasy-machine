@@ -48,119 +48,116 @@ async function runGather() {
     return;
   }
   isGathering = true;
+  const startTime = Date.now();
   try {
-    markSync("intel", "syncing");
-    const result = await gatherIntelligence();
-    markSync("intel", "idle");
+    const [sysSettings] = await db.select().from(leagueSettings).limit(1);
+    const currentRound = sysSettings?.currentRound || 1;
+
+    const wave1 = await Promise.allSettled([
+      (async () => {
+        markSync("intel", "syncing");
+        const result = await gatherIntelligence();
+        markSync("intel", "idle");
+        return result;
+      })(),
+      (async () => {
+        markSync("aflFantasyPrices", "syncing");
+        const { syncAflFantasyPrices } = await import("./expand-players");
+        await syncAflFantasyPrices();
+        markSync("aflFantasyPrices", "idle");
+      })(),
+      (async () => {
+        markSync("injuryAndLineups", "syncing");
+        const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
+        await syncAflInjuryList();
+        const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
+        await syncTeamLineups(currentRound);
+        markSync("injuryAndLineups", "idle");
+      })(),
+      (async () => {
+        markSync("fixtures", "syncing");
+        const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
+        await fetchAndStoreFixtures();
+        await syncPlayerFixtures(currentRound);
+        markSync("fixtures", "idle");
+      })(),
+    ]);
+
+    for (const r of wave1) {
+      if (r.status === "rejected") {
+        console.log(`[Scheduler] Wave 1 error: ${r.reason?.message || r.reason}`);
+      }
+    }
+    if (wave1[0].status === "rejected") markSync("intel", "error", wave1[0].reason?.message);
+    if (wave1[1].status === "rejected") markSync("aflFantasyPrices", "error", wave1[1].reason?.message);
+    if (wave1[2].status === "rejected") markSync("injuryAndLineups", "error", wave1[2].reason?.message);
+    if (wave1[3].status === "rejected") markSync("fixtures", "error", wave1[3].reason?.message);
+
+    const intelResult = wave1[0].status === "fulfilled" ? wave1[0].value : { fetched: 0, processed: 0 };
     lastGatherTime = new Date();
     gatherCount++;
-    console.log(`[Scheduler] Gather #${gatherCount} complete: ${result.fetched} fetched, ${result.processed} processed`);
 
-    try {
-      markSync("dfsAustralia", "syncing");
-      const { syncDfsAustralia } = await import("./expand-players");
-      await syncDfsAustralia();
-      markSync("dfsAustralia", "idle");
-    } catch (e: any) {
-      markSync("dfsAustralia", "error", e.message);
-      console.log(`[Scheduler] DFS Australia sync error: ${e.message}`);
-    }
-
-    try {
-      markSync("aflFantasyPrices", "syncing");
-      const { syncAflFantasyPrices } = await import("./expand-players");
-      await syncAflFantasyPrices();
-      markSync("aflFantasyPrices", "idle");
-    } catch (e: any) {
-      markSync("aflFantasyPrices", "error", e.message);
-      console.log(`[Scheduler] AFL Fantasy price sync error: ${e.message}`);
-    }
-
-    try {
-      markSync("injuryAndLineups", "syncing");
-      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
-      await syncAflInjuryList();
-
-      const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
-      const [sysSettings] = await db.select().from(leagueSettings).limit(1);
-      await syncTeamLineups(sysSettings?.currentRound || 1);
-      markSync("injuryAndLineups", "idle");
-    } catch (e: any) {
-      markSync("injuryAndLineups", "error", e.message);
-      console.log(`[Scheduler] Injury/Lineups sync error: ${e.message}`);
-    }
-
-    try {
-      markSync("liveScores", "syncing");
-      const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
-      const roundResult = await detectAndAdvanceRound();
-      if (roundResult.advanced) {
-        console.log(`[Scheduler] Round advanced from ${roundResult.previousRound} to ${roundResult.newRound}`);
-      }
-      const scoreResult = await fetchScoresForCompletedRounds();
-      
-      const settingsForRound = await db.select().from(leagueSettings).limit(1);
-      const currentRound = settingsForRound[0]?.currentRound ?? 0;
-      try {
-        const currentMatches = await fetchMatchStatuses(currentRound);
-        const hasCompletedGames = currentMatches.some(m => m.complete === 100);
-        if (hasCompletedGames) {
-          console.log(`[Scheduler] Fetching scores for current round ${currentRound} (has completed games)`);
-          const currentResult = await fetchAndStorePlayerScores(currentRound, true);
-          if (currentResult.updated > 0) {
-            console.log(`[Scheduler] Updated ${currentResult.updated} player scores for current round ${currentRound}`);
-          }
+    const wave2 = await Promise.allSettled([
+      (async () => {
+        markSync("dfsAustralia", "syncing");
+        const { syncDfsAustralia } = await import("./expand-players");
+        await syncDfsAustralia();
+        markSync("dfsAustralia", "idle");
+      })(),
+      (async () => {
+        markSync("liveScores", "syncing");
+        const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
+        const roundResult = await detectAndAdvanceRound();
+        if (roundResult.advanced) {
+          console.log(`[Scheduler] Round advanced from ${roundResult.previousRound} to ${roundResult.newRound}`);
         }
-      } catch (currentErr: any) {
-        console.log(`[Scheduler] Current round score fetch: ${currentErr.message}`);
-      }
-      
-      if (scoreResult.roundsProcessed > 0) {
-        const { recalculatePlayerAverages } = await import("./expand-players");
-        await recalculatePlayerAverages();
-        console.log(`[Scheduler] Updated scores for ${scoreResult.roundsProcessed} rounds`);
-      }
-      markSync("liveScores", "idle");
-    } catch (e: any) {
-      markSync("liveScores", "error", e.message);
-      console.log(`[Scheduler] Score fetch error: ${e.message}`);
-    }
+        const scoreResult = await fetchScoresForCompletedRounds();
+        try {
+          const currentMatches = await fetchMatchStatuses(currentRound);
+          if (currentMatches.some(m => m.complete === 100)) {
+            console.log(`[Scheduler] Fetching scores for current round ${currentRound} (has completed games)`);
+            const currentResult = await fetchAndStorePlayerScores(currentRound, true);
+            if (currentResult.updated > 0) {
+              console.log(`[Scheduler] Updated ${currentResult.updated} player scores for current round ${currentRound}`);
+            }
+          }
+        } catch (currentErr: any) {
+          console.log(`[Scheduler] Current round score fetch: ${currentErr.message}`);
+        }
+        if (scoreResult.roundsProcessed > 0) {
+          console.log(`[Scheduler] Updated scores for ${scoreResult.roundsProcessed} rounds`);
+        }
+        markSync("liveScores", "idle");
+      })(),
+      (async () => {
+        markSync("wheelo", "syncing");
+        const { syncWheeloRatings } = await import("./services/wheelo-scraper");
+        await syncWheeloRatings();
+        markSync("wheelo", "idle");
+      })(),
+    ]);
 
-    try {
-      markSync("wheelo", "syncing");
-      const { syncWheeloRatings } = await import("./services/wheelo-scraper");
-      await syncWheeloRatings();
-      markSync("wheelo", "idle");
-    } catch (e: any) {
-      markSync("wheelo", "error", e.message);
-      console.log(`[Scheduler] Wheelo sync error: ${e.message}`);
-    }
-
-    try {
-      markSync("fixtures", "syncing");
-      const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
-      await fetchAndStoreFixtures();
-      const { db: database } = await import("./db");
-      const { leagueSettings } = await import("@shared/schema");
-      const [settings] = await database.select().from(leagueSettings).limit(1);
-      if (settings?.currentRound) {
-        await syncPlayerFixtures(settings.currentRound);
+    for (const r of wave2) {
+      if (r.status === "rejected") {
+        console.log(`[Scheduler] Wave 2 error: ${r.reason?.message || r.reason}`);
       }
-      markSync("fixtures", "idle");
-    } catch (e: any) {
-      markSync("fixtures", "error", e.message);
-      console.log(`[Scheduler] Fixtures sync error: ${e.message}`);
     }
+    if (wave2[0].status === "rejected") markSync("dfsAustralia", "error", wave2[0].reason?.message);
+    if (wave2[1].status === "rejected") markSync("liveScores", "error", wave2[1].reason?.message);
+    if (wave2[2].status === "rejected") markSync("wheelo", "error", wave2[2].reason?.message);
 
     try {
       const { recalculatePlayerAverages } = await import("./expand-players");
       const recalcCount = await recalculatePlayerAverages();
       if (recalcCount > 0) {
-        console.log(`[Scheduler] Recalculated averages for ${recalcCount} players from weekly_stats`);
+        console.log(`[Scheduler] Recalculated averages for ${recalcCount} players`);
       }
     } catch (e: any) {
       console.log(`[Scheduler] Recalc averages error: ${e.message}`);
     }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Scheduler] Gather #${gatherCount} complete in ${duration}s: ${(intelResult as any).fetched} fetched, ${(intelResult as any).processed} processed`);
   } catch (e: any) {
     console.error("[Scheduler] Gather error:", e.message);
   } finally {
@@ -214,90 +211,72 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
   const errors: string[] = [];
 
   try {
-    try {
-      markSync("dfsAustralia", "syncing");
-      const { syncDfsAustralia } = await import("./expand-players");
-      await syncDfsAustralia();
-      markSync("dfsAustralia", "idle");
-    } catch (e: any) {
-      markSync("dfsAustralia", "error", e.message);
-      errors.push(`DFS Australia: ${e.message}`);
-    }
+    const [sysSettings] = await db.select().from(leagueSettings).limit(1);
+    const currentRound = sysSettings?.currentRound || 1;
 
-    try {
-      markSync("aflFantasyPrices", "syncing");
-      const { syncAflFantasyPrices } = await import("./expand-players");
-      await syncAflFantasyPrices();
-      markSync("aflFantasyPrices", "idle");
-    } catch (e: any) {
-      markSync("aflFantasyPrices", "error", e.message);
-      errors.push(`AFL Fantasy prices: ${e.message}`);
-    }
+    const wave1 = await Promise.allSettled([
+      (async () => {
+        markSync("aflFantasyPrices", "syncing");
+        const { syncAflFantasyPrices } = await import("./expand-players");
+        await syncAflFantasyPrices();
+        markSync("aflFantasyPrices", "idle");
+      })(),
+      (async () => {
+        markSync("injuryAndLineups", "syncing");
+        const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
+        await syncAflInjuryList();
+        const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
+        await syncTeamLineups(currentRound);
+        markSync("injuryAndLineups", "idle");
+      })(),
+      (async () => {
+        markSync("fixtures", "syncing");
+        const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
+        await fetchAndStoreFixtures();
+        await syncPlayerFixtures(currentRound);
+        markSync("fixtures", "idle");
+      })(),
+    ]);
 
-    try {
-      markSync("liveScores", "syncing");
-      const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
-      await detectAndAdvanceRound();
-      const scoreResult = await fetchScoresForCompletedRounds();
-      
-      const settingsRes = await db.select().from(leagueSettings).limit(1);
-      const curRound = settingsRes[0]?.currentRound ?? 0;
-      try {
-        const curMatches = await fetchMatchStatuses(curRound);
-        if (curMatches.some(m => m.complete === 100)) {
-          await fetchAndStorePlayerScores(curRound, true);
+    if (wave1[0].status === "rejected") { markSync("aflFantasyPrices", "error", wave1[0].reason?.message); errors.push(`AFL Fantasy prices: ${wave1[0].reason?.message}`); }
+    if (wave1[1].status === "rejected") { markSync("injuryAndLineups", "error", wave1[1].reason?.message); errors.push(`Injury/Lineups: ${wave1[1].reason?.message}`); }
+    if (wave1[2].status === "rejected") { markSync("fixtures", "error", wave1[2].reason?.message); errors.push(`Fixtures: ${wave1[2].reason?.message}`); }
+
+    const wave2 = await Promise.allSettled([
+      (async () => {
+        markSync("dfsAustralia", "syncing");
+        const { syncDfsAustralia } = await import("./expand-players");
+        await syncDfsAustralia();
+        markSync("dfsAustralia", "idle");
+      })(),
+      (async () => {
+        markSync("liveScores", "syncing");
+        const { fetchScoresForCompletedRounds, detectAndAdvanceRound, fetchAndStorePlayerScores, fetchMatchStatuses } = await import("./services/live-scores");
+        await detectAndAdvanceRound();
+        const scoreResult = await fetchScoresForCompletedRounds();
+        try {
+          const curMatches = await fetchMatchStatuses(currentRound);
+          if (curMatches.some(m => m.complete === 100)) {
+            await fetchAndStorePlayerScores(currentRound, true);
+          }
+        } catch {}
+        if (scoreResult.roundsProcessed > 0) {
+          const { recalculatePlayerAverages } = await import("./expand-players");
+          await recalculatePlayerAverages();
         }
-      } catch {}
-      
-      if (scoreResult.roundsProcessed > 0) {
-        const { recalculatePlayerAverages } = await import("./expand-players");
-        await recalculatePlayerAverages();
-      }
-      markSync("liveScores", "idle");
-    } catch (e: any) {
-      markSync("liveScores", "error", e.message);
-      errors.push(`Live scores: ${e.message}`);
-    }
+        markSync("liveScores", "idle");
+      })(),
+      (async () => {
+        markSync("wheelo", "syncing");
+        const { syncWheeloRatings } = await import("./services/wheelo-scraper");
+        await syncWheeloRatings();
+        markSync("wheelo", "idle");
+      })(),
+    ]);
 
-    try {
-      markSync("wheelo", "syncing");
-      const { syncWheeloRatings } = await import("./services/wheelo-scraper");
-      await syncWheeloRatings();
-      markSync("wheelo", "idle");
-    } catch (e: any) {
-      markSync("wheelo", "error", e.message);
-      errors.push(`Wheelo: ${e.message}`);
-    }
-
-    try {
-      markSync("fixtures", "syncing");
-      const { fetchAndStoreFixtures, syncPlayerFixtures } = await import("./services/fixture-service");
-      await fetchAndStoreFixtures();
-      const { db: database } = await import("./db");
-      const { leagueSettings } = await import("@shared/schema");
-      const [settings] = await database.select().from(leagueSettings).limit(1);
-      if (settings?.currentRound) {
-        await syncPlayerFixtures(settings.currentRound);
-      }
-      markSync("fixtures", "idle");
-    } catch (e: any) {
-      markSync("fixtures", "error", e.message);
-      errors.push(`Fixtures: ${e.message}`);
-    }
-
-    try {
-      markSync("injuryAndLineups", "syncing");
-      const { syncAflInjuryList } = await import("./services/afl-injury-scraper");
-      await syncAflInjuryList();
-
-      const { syncTeamLineups } = await import("./services/afl-lineup-scraper");
-      const [sysSettings2] = await db.select().from(leagueSettings).limit(1);
-      await syncTeamLineups(sysSettings2?.currentRound || 1);
-      markSync("injuryAndLineups", "idle");
-    } catch (e: any) {
-      markSync("injuryAndLineups", "error", e.message);
-      errors.push(`Injury/Lineups: ${e.message}`);
-    }
+    if (wave2[0].status === "rejected") { markSync("dfsAustralia", "error", wave2[0].reason?.message); errors.push(`DFS Australia: ${wave2[0].reason?.message}`); }
+    if (wave2[1].status === "rejected") { markSync("liveScores", "error", wave2[1].reason?.message); errors.push(`Live scores: ${wave2[1].reason?.message}`); }
+    if (wave2[2].status === "rejected") { markSync("wheelo", "error", wave2[2].reason?.message); errors.push(`Wheelo: ${wave2[2].reason?.message}`); }
 
     try {
       const { recalculatePlayerAverages } = await import("./expand-players");
@@ -306,7 +285,9 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
       errors.push(`Recalc averages: ${e.message}`);
     }
 
-    return { success: errors.length === 0, duration: Date.now() - startTime, errors };
+    const duration = Date.now() - startTime;
+    console.log(`[Scheduler] Manual refresh complete in ${(duration / 1000).toFixed(1)}s, ${errors.length} errors`);
+    return { success: errors.length === 0, duration, errors };
   } finally {
     isManualRefreshing = false;
   }

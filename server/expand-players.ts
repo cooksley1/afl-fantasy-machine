@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { players, modelWeights, weeklyStats } from "@shared/schema";
+import { players, modelWeights, weeklyStats, leagueSettings } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -289,6 +289,17 @@ export async function syncAflFantasyPrices(): Promise<{
     dbByNormName.set(normalizeNameForMatch(p.name), true);
   }
 
+  const maxRoundsInApi = Math.max(...aflPlayers.map(p => {
+    const priceKeys = p.stats.prices ? Object.keys(p.stats.prices).map(Number) : [];
+    return priceKeys.length;
+  }));
+  const settingsRow = await db.select().from(leagueSettings).limit(1);
+  const currentRound = settingsRow[0]?.currentRound || 1;
+  const isStaleSeasonData = maxRoundsInApi > currentRound + 3;
+  if (isStaleSeasonData) {
+    console.log(`[AflPriceSync] API has ${maxRoundsInApi} rounds of prices but current round is ${currentRound} — stale season data. Skipping price/stats updates.`);
+  }
+
   let updated = 0;
   const priceChanges: Array<{ name: string; oldPrice: number; newPrice: number }> = [];
 
@@ -305,7 +316,7 @@ export async function syncAflFantasyPrices(): Promise<{
     if (aflPlayer && aflPlayer.cost > 0) {
       const updates: Record<string, any> = {};
 
-      if (Math.abs(aflPlayer.cost - dbPlayer.price) >= 1000) {
+      if (!isStaleSeasonData && Math.abs(aflPlayer.cost - dbPlayer.price) >= 1000) {
         updates.price = aflPlayer.cost;
         priceChanges.push({
           name: dbPlayer.name,
@@ -314,11 +325,15 @@ export async function syncAflFantasyPrices(): Promise<{
         });
       }
 
-      const priceValues = aflPlayer.stats.prices ? Object.values(aflPlayer.stats.prices) : [];
-      const hasVaryingPrices = new Set(priceValues).size > 1;
-      const rd1Price = aflPlayer.stats.prices?.["1"];
-      if (hasVaryingPrices && rd1Price && rd1Price > 0 && dbPlayer.startingPrice !== rd1Price) {
-        updates.startingPrice = rd1Price;
+      if (!isStaleSeasonData) {
+        const priceValues = aflPlayer.stats.prices ? Object.values(aflPlayer.stats.prices) : [];
+        const hasVaryingPrices = new Set(priceValues).size > 1;
+        const rd1Price = aflPlayer.stats.prices?.["1"];
+        if (hasVaryingPrices && rd1Price && rd1Price > 0 && dbPlayer.startingPrice !== rd1Price) {
+          updates.startingPrice = rd1Price;
+        } else if (!dbPlayer.startingPrice) {
+          updates.startingPrice = aflPlayer.cost;
+        }
       } else if (!dbPlayer.startingPrice) {
         updates.startingPrice = aflPlayer.cost;
       }
@@ -340,50 +355,52 @@ export async function syncAflFantasyPrices(): Promise<{
         }
       }
 
-      const s = aflPlayer.stats;
-      if (s.games_played !== undefined && s.games_played > 0 && s.games_played !== dbPlayer.gamesPlayed) {
-        updates.gamesPlayed = s.games_played;
-      }
-      if (s.avg_points !== undefined && s.avg_points > 0 && Math.abs(s.avg_points - (dbPlayer.avgScore || 0)) >= 0.5) {
-        updates.avgScore = s.avg_points;
-      }
-      if (s.total_points !== undefined && s.total_points > 0 && s.total_points !== dbPlayer.seasonTotal) {
-        updates.seasonTotal = s.total_points;
-      }
-      if (s.last_3_avg !== undefined && s.last_3_avg > 0 && s.last_3_avg !== (dbPlayer.last3Avg || 0)) {
-        updates.last3Avg = s.last_3_avg;
-      }
-      if (s.last_5_avg !== undefined && s.last_5_avg > 0 && s.last_5_avg !== (dbPlayer.last5Avg || 0)) {
-        updates.last5Avg = s.last_5_avg;
-      }
-      if (s.owned_by !== undefined && s.owned_by > 0 && Math.abs(s.owned_by - (dbPlayer.ownedByPercent || 0)) >= 0.1) {
-        updates.ownedByPercent = s.owned_by;
-      }
-      if (s.high_score !== undefined && s.high_score > 0) {
-        updates.ceilingScore = s.high_score;
-      }
-      if (s.tog !== undefined && s.tog > 0 && s.tog !== (dbPlayer.avgTog || 0)) {
-        updates.avgTog = s.tog;
-      }
-
-      if (s.scores && Object.keys(s.scores).length > 0) {
-        const roundKeys = Object.keys(s.scores).map(Number).sort((a, b) => a - b);
-        const recentRounds = roundKeys.slice(-5);
-        const recentScoresStr = recentRounds.map(r => s.scores![String(r)]).join(",");
-        if (recentScoresStr && recentScoresStr !== (dbPlayer.recentScores || "")) {
-          updates.recentScores = recentScoresStr;
+      if (!isStaleSeasonData) {
+        const s = aflPlayer.stats;
+        if (s.games_played !== undefined && s.games_played > 0 && s.games_played !== dbPlayer.gamesPlayed) {
+          updates.gamesPlayed = s.games_played;
         }
-      }
+        if (s.avg_points !== undefined && s.avg_points > 0 && Math.abs(s.avg_points - (dbPlayer.avgScore || 0)) >= 0.5) {
+          updates.avgScore = s.avg_points;
+        }
+        if (s.total_points !== undefined && s.total_points > 0 && s.total_points !== dbPlayer.seasonTotal) {
+          updates.seasonTotal = s.total_points;
+        }
+        if (s.last_3_avg !== undefined && s.last_3_avg > 0 && s.last_3_avg !== (dbPlayer.last3Avg || 0)) {
+          updates.last3Avg = s.last_3_avg;
+        }
+        if (s.last_5_avg !== undefined && s.last_5_avg > 0 && s.last_5_avg !== (dbPlayer.last5Avg || 0)) {
+          updates.last5Avg = s.last_5_avg;
+        }
+        if (s.owned_by !== undefined && s.owned_by > 0 && Math.abs(s.owned_by - (dbPlayer.ownedByPercent || 0)) >= 0.1) {
+          updates.ownedByPercent = s.owned_by;
+        }
+        if (s.high_score !== undefined && s.high_score > 0) {
+          updates.ceilingScore = s.high_score;
+        }
+        if (s.tog !== undefined && s.tog > 0 && s.tog !== (dbPlayer.avgTog || 0)) {
+          updates.avgTog = s.tog;
+        }
 
-      const currentPrice = updates.price || dbPlayer.price;
-      const prevRoundPrices = aflPlayer.stats.prices ? Object.entries(aflPlayer.stats.prices) : [];
-      if (prevRoundPrices.length >= 2) {
-        const sorted = prevRoundPrices.map(([r, p]) => ({ r: Number(r), p })).sort((a, b) => a.r - b.r);
-        const prevPrice = sorted[sorted.length - 2]?.p;
-        if (prevPrice) {
-          const roundChange = currentPrice - prevPrice;
-          if (roundChange !== dbPlayer.priceChange) {
-            updates.priceChange = roundChange;
+        if (s.scores && Object.keys(s.scores).length > 0) {
+          const roundKeys = Object.keys(s.scores).map(Number).sort((a, b) => a - b);
+          const recentRounds = roundKeys.slice(-5);
+          const recentScoresStr = recentRounds.map(r => s.scores![String(r)]).join(",");
+          if (recentScoresStr && recentScoresStr !== (dbPlayer.recentScores || "")) {
+            updates.recentScores = recentScoresStr;
+          }
+        }
+
+        const currentPrice = updates.price || dbPlayer.price;
+        const prevRoundPrices = aflPlayer.stats.prices ? Object.entries(aflPlayer.stats.prices) : [];
+        if (prevRoundPrices.length >= 2) {
+          const sorted = prevRoundPrices.map(([r, p]) => ({ r: Number(r), p })).sort((a, b) => a.r - b.r);
+          const prevPrice = sorted[sorted.length - 2]?.p;
+          if (prevPrice) {
+            const roundChange = currentPrice - prevPrice;
+            if (roundChange !== dbPlayer.priceChange) {
+              updates.priceChange = roundChange;
+            }
           }
         }
       }
@@ -601,7 +618,9 @@ export async function syncDfsAustralia(): Promise<{ updated: number; added: numb
         if (dualPos !== (dbPlayer.dualPosition || null)) updates.dualPosition = dualPos;
         if (dp.salary > 0 && Math.abs(dp.salary - dbPlayer.price) >= 1000) {
           updates.price = dp.salary;
-          if (!dbPlayer.startingPrice) updates.startingPrice = dp.salary;
+        }
+        if (dp.salary > 0 && !dbPlayer.startingPrice) {
+          updates.startingPrice = dp.salary;
         }
         if (dp.owned > 0) updates.ownedByPercent = Math.round(dp.owned * 1000) / 10;
         if (dp.ppm > 0 && !dbPlayer.ppm) updates.ppm = dp.ppm;

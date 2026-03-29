@@ -17,7 +17,7 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
 - **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
 - **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
-Current version: **v2.10.6**. Always update this line in replit.md when bumping.
+Current version: **v2.10.7**. Always update this line in replit.md when bumping.
 
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
@@ -84,8 +84,8 @@ Utilizes OpenAI GPT-4o-mini for text analysis and GPT-4o for vision and screensh
 - **Aussie Rules Training RSS** (`aussierulestraining.com/feed/`): AFL training/coaching analysis and injury discussion.
 - **BigFooty RSS** (`bigfooty.com/feed`): Community-driven AFL news, rumours, and analysis.
 - **AFL Team Lineups** (`server/services/afl-lineup-scraper.ts`): Checks AFL API (`aflapi.afl.com.au`) for round match data (bye teams, playing teams) and scrapes `afl.com.au/matches/team-lineups` for team sheet announcement status. Falls back to DB player `selectionStatus` analysis when scrape unavailable. Powers the dashboard Team Sheet Status card via `GET /api/team-sheet-status`.
-- **AFL Fantasy API**: Syncs team, position, dual position, and prices on every startup. Also inserts new players (debutants).
-- **DFS Australia** (`dfsaustralia.com`): Downloads the AFL Fantasy 2026 XLSX spreadsheet on startup. Provides Champion Data IDs (= AFL Fantasy IDs), positions (including DPP), ownership %, PPM, and historical stats for ~780 players. Primary source for linking players to AFL Fantasy IDs. Runs after AFL Fantasy API sync. 890/895 players now linked.
+- **AFL Fantasy API**: Syncs team, position, dual position on every startup. Also inserts new players (debutants). **Note**: As of 2026, the public API (`fantasy.afl.com.au/data/afl/players.json`) still serves 2025 season data (25 rounds of prices). Stale-season detection (>10 price rounds) automatically skips price/stats updates from this source, using it only for roster/position/team changes. When the API is updated for 2026, price and stats syncing will resume automatically.
+- **DFS Australia** (`dfsaustralia.com`): Downloads the AFL Fantasy 2026 XLSX spreadsheet on startup. Provides Champion Data IDs (= AFL Fantasy IDs), positions (including DPP), ownership %, PPM, prices, and historical stats for ~780 players. **Currently the primary price authority** since the AFL Fantasy API has stale 2025 data. Runs after AFL Fantasy API sync in scheduler wave 2. 890/895 players now linked.
 - **Wheelo Ratings** (`wheeloratings.com`): JSON API at `/src/match_stats/table_data/{roundId}.json`. Provides detailed per-round player match stats: AFL Fantasy scores (DreamTeamPoints), disposal efficiency, metres gained, clearances, CBA%, pressure acts, contested marks, intercept marks, ground ball gets, score involvements, rating points. Also provides team-level stats for team_context. Syncs all completed rounds on startup. Player matching by name+team. ~963 player rows across 3 rounds, 42 team context rows. No Supercoach data stored — AFL Fantasy only.
 - **DTLive (dtlive.com.au)**: Scraped for player prices, ownership %, and scores.
 - **Footywire (footywire.com)**: Scraped for comprehensive AFL Fantasy prices.

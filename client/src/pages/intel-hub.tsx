@@ -487,49 +487,41 @@ export default function IntelHub() {
     queryKey: ["/api/intel/sources/stats"],
   });
 
-  const generateMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/intel/generate"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/intel"] });
-      toast({
-        title: "Intelligence generated",
-        description: "Fresh insights based on current data and AI analysis",
-      });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error generating intel", description: error.message, variant: "destructive" });
-    },
-  });
+  const [intelStep, setIntelStep] = useState<"idle" | "gathering" | "analysing" | "pregame">("idle");
 
-  const gatherMutation = useMutation({
+  const generateIntelMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/intel/gather");
-      return res.json();
+      setIntelStep("gathering");
+      const gatherRes = await apiRequest("POST", "/api/intel/gather");
+      const gatherData = await gatherRes.json();
+
+      setIntelStep("analysing");
+      await apiRequest("POST", "/api/intel/generate");
+
+      setIntelStep("pregame");
+      try {
+        const pgRes = await apiRequest("POST", "/api/intel/pre-game");
+        const pgData = await pgRes.json();
+        return { gatherData, preGame: pgData as PreGameAdvice };
+      } catch {
+        return { gatherData, preGame: null };
+      }
     },
-    onSuccess: (data: { fetched: number; processed: number }) => {
+    onSuccess: (data) => {
+      setIntelStep("idle");
       queryClient.invalidateQueries({ queryKey: ["/api/intel"] });
       queryClient.invalidateQueries({ queryKey: ["/api/intel/sources/stats"] });
+      if (data.preGame) {
+        setPreGameAdvice(data.preGame);
+      }
       toast({
-        title: "Data gathered",
-        description: `${data.fetched} new sources fetched, ${data.processed} processed`,
+        title: "Intel updated",
+        description: `${data.gatherData.fetched} sources gathered, AI analysis complete`,
       });
     },
     onError: (error: Error) => {
-      toast({ title: "Error gathering data", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const preGameMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/intel/pre-game");
-      return res.json();
-    },
-    onSuccess: (data: PreGameAdvice) => {
-      setPreGameAdvice(data);
-      toast({ title: "Pre-game advice ready" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setIntelStep("idle");
+      toast({ title: "Error generating intel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -618,55 +610,22 @@ export default function IntelHub() {
             Live data from all 18 AFL clubs, AFL.com.au, Squiggle + AI analysis
           </p>
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <Button
-            onClick={() => gatherMutation.mutate()}
-            disabled={gatherMutation.isPending}
-            variant="outline"
-            size="sm"
-            className="text-xs sm:text-sm"
-            data-testid="button-gather-intel"
-          >
-            {gatherMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
-            ) : (
-              <Satellite className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
-            )}
-            <span className="hidden sm:inline">{gatherMutation.isPending ? "Gathering..." : "Gather Data"}</span>
-            <span className="sm:hidden">{gatherMutation.isPending ? "..." : "Gather"}</span>
-          </Button>
-          <Button
-            onClick={() => preGameMutation.mutate()}
-            disabled={preGameMutation.isPending}
-            variant="outline"
-            size="sm"
-            className="text-xs sm:text-sm"
-            data-testid="button-pregame"
-          >
-            {preGameMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
-            ) : (
-              <Siren className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
-            )}
-            <span className="hidden sm:inline">{preGameMutation.isPending ? "Loading..." : "Pre-Game"}</span>
-            <span className="sm:hidden">{preGameMutation.isPending ? "..." : "Pre-G"}</span>
-          </Button>
-          <Button
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-            size="sm"
-            className="text-xs sm:text-sm"
-            data-testid="button-generate-intel"
-          >
-            {generateMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
-            ) : (
-              <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
-            )}
-            <span className="hidden sm:inline">{generateMutation.isPending ? "Analysing..." : "AI Analysis"}</span>
-            <span className="sm:hidden">{generateMutation.isPending ? "..." : "AI"}</span>
-          </Button>
-        </div>
+        <Button
+          onClick={() => generateIntelMutation.mutate()}
+          disabled={generateIntelMutation.isPending}
+          size="sm"
+          className="text-xs sm:text-sm"
+          data-testid="button-generate-intel"
+        >
+          {generateIntelMutation.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 animate-spin" />
+          ) : (
+            <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
+          )}
+          {generateIntelMutation.isPending
+            ? intelStep === "gathering" ? "Gathering data..." : intelStep === "analysing" ? "Running AI..." : "Finishing up..."
+            : "Generate Intel"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
@@ -799,12 +758,16 @@ export default function IntelHub() {
         </Card>
       )}
 
-      {preGameMutation.isPending && (
-        <Card className="border-orange-500/30">
+      {generateIntelMutation.isPending && (
+        <Card className="border-accent/30">
           <CardContent className="p-6 text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-500 mb-3" />
-            <p className="font-semibold">Generating pre-game advice</p>
-            <p className="text-sm text-muted-foreground mt-1">Analysing latest intel, injury news, and team selections for final trade decisions...</p>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent mb-3" />
+            <p className="font-semibold">
+              {intelStep === "gathering" ? "Gathering latest data" : intelStep === "analysing" ? "Running AI analysis" : "Generating pre-game advice"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {intelStep === "gathering" ? "Fetching from AFL clubs, news feeds, and fantasy sources..." : intelStep === "analysing" ? "Analysing player data and generating strategic insights..." : "Building pre-game recommendations from latest intel..."}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -882,21 +845,12 @@ export default function IntelHub() {
                 </Button>
               )}
               <Button
-                onClick={() => gatherMutation.mutate()}
-                disabled={gatherMutation.isPending}
-                variant="outline"
-                data-testid="button-gather-intel-empty"
-              >
-                <Satellite className="w-4 h-4 mr-2" />
-                Gather Data First
-              </Button>
-              <Button
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
+                onClick={() => generateIntelMutation.mutate()}
+                disabled={generateIntelMutation.isPending}
                 data-testid="button-generate-intel-empty"
               >
-                <Brain className="w-4 h-4 mr-2" />
-                AI Analysis
+                {generateIntelMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Brain className="w-4 h-4 mr-2" />}
+                {generateIntelMutation.isPending ? "Generating..." : "Generate Intel"}
               </Button>
             </div>
           </CardContent>
