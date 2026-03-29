@@ -1,9 +1,8 @@
 import { db } from "../db";
-import { players } from "@shared/schema";
+import { players, leagueSettings } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 
-const FOOTYWIRE_URL = "https://www.footywire.com/afl/footy/dream_team_prices";
-const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 const TEAM_ALIASES: Record<string, string> = {
   "Power": "Port Adelaide", "Crows": "Adelaide", "Lions": "Brisbane Lions",
@@ -15,154 +14,202 @@ const TEAM_ALIASES: Record<string, string> = {
 };
 
 interface FootywirePlayer {
-  fullName: string;
-  shortName: string;
+  name: string;
   team: string;
-  aflFantasyPrice: number;
-  aflFantasyChange: number;
+  currentPrice: number;
+  roundPrice: number;
+  roundScore: number;
 }
 
-function parseFootywireRow(rawNameHtml: string, cells: string[]): FootywirePlayer | null {
-  if (cells.length < 3) return null;
-
-  const priceStr = cells[1];
-  const changeStr = cells[2];
-
-  const priceMatch = priceStr.match(/\$([\d,]+)/);
-  if (!priceMatch) return null;
-  const price = parseInt(priceMatch[1].replace(/,/g, ""));
-  if (price <= 0) return null;
-
-  const changeMatch = changeStr.match(/([+-])\$([\d,]+)/);
-  const change = changeMatch
-    ? (changeMatch[1] === "+" ? 1 : -1) * parseInt(changeMatch[2].replace(/,/g, ""))
-    : 0;
-
-  const spanMatch = rawNameHtml.match(/<span[^>]*class="hiddenspan"[^>]*>([^<]+)<\/span>/);
-  const fullName = spanMatch ? spanMatch[1].trim() : "";
-  if (fullName.length < 3) return null;
-
-  const cleanedNameCell = cells[0];
-  const teamOrder = [
-    "Brisbane Lions", "GWS Giants", "North Melbourne", "Western Bulldogs",
-    "West Coast", "Gold Coast", "Port Adelaide", "St Kilda",
-    "Adelaide", "Carlton", "Collingwood", "Essendon", "Fremantle",
-    "Geelong", "Hawthorn", "Melbourne", "Richmond", "Sydney",
-    "Power", "Crows", "Lions", "Blues", "Magpies", "Bombers",
-    "Dockers", "Cats", "Suns", "Giants", "Hawks", "Demons",
-    "Kangaroos", "Tigers", "Saints", "Swans", "Eagles", "Bulldogs",
-  ];
-
-  let team = "";
-  for (const t of teamOrder) {
-    if (cleanedNameCell.includes(t)) {
-      team = TEAM_ALIASES[t] || t;
-      break;
-    }
-  }
-
-  if (!team) return null;
-
-  return { fullName, shortName: fullName, team, aflFantasyPrice: price, aflFantasyChange: change };
+function normalizeTeam(raw: string): string {
+  const trimmed = raw.trim();
+  return TEAM_ALIASES[trimmed] || trimmed;
 }
 
-async function matchFootywireToPlayer(fwPlayer: FootywirePlayer): Promise<number | null> {
-  const surname = fwPlayer.fullName.split(" ").pop() || "";
-  if (surname.length < 2) return null;
+function parseRoundPage(html: string): FootywirePlayer[] {
+  const results: FootywirePlayer[] = [];
+  const tables = html.match(/<table[^>]*>[\s\S]*?<\/table>/gi) || [];
 
-  const candidates = await db.select({ id: players.id, name: players.name, price: players.price })
-    .from(players)
-    .where(sql`${players.name} ILIKE ${"%" + surname + "%"} AND ${players.team} = ${fwPlayer.team}`);
+  let dataTable: string | null = null;
+  for (const t of tables) {
+    const rows = t.match(/<tr/gi) || [];
+    if (rows.length > 50) { dataTable = t; break; }
+  }
+  if (!dataTable) return results;
 
-  if (candidates.length === 1) return candidates[0].id;
+  const allRows = dataTable.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
 
-  if (candidates.length > 1) {
-    const firstName = fwPlayer.fullName.split(" ")[0];
-    const exact = candidates.find(c => c.name.toLowerCase() === fwPlayer.fullName.toLowerCase());
-    if (exact) return exact.id;
+  for (let r = 1; r < allRows.length; r++) {
+    const cells = allRows[r].match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [];
+    if (cells.length < 6) continue;
 
-    const startsWith = candidates.find(c => c.name.split(" ")[0].toLowerCase() === firstName.toLowerCase());
-    if (startsWith) return startsWith.id;
+    const vals = cells.map(c => c.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim());
 
-    const priceMatch = candidates.find(c => Math.abs(c.price - fwPlayer.aflFantasyPrice) < 5000);
-    if (priceMatch) return priceMatch.id;
+    const name = vals[1]?.replace(/\s*(Injured|Suspended|Dropped)\s*/gi, "").trim() || "";
+    const teamRaw = vals[2] || "";
+    const currentPriceStr = vals[3] || "";
+    const roundPriceStr = vals[4] || "";
+    const roundScoreStr = vals[5] || "";
+
+    if (!name || name.length < 3) continue;
+
+    const currentPrice = parseInt(currentPriceStr.replace(/[^0-9]/g, "")) || 0;
+    const roundPrice = parseInt(roundPriceStr.replace(/[^0-9]/g, "")) || 0;
+    const roundScore = parseInt(roundScoreStr.replace(/[^0-9]/g, "")) || 0;
+
+    if (currentPrice <= 0) continue;
+
+    const team = normalizeTeam(teamRaw);
+    if (!team) continue;
+
+    results.push({ name, team, currentPrice, roundPrice, roundScore });
   }
 
-  return null;
+  return results;
+}
+
+function normalizeNameForMatch(name: string): string {
+  return name.toLowerCase()
+    .replace(/[''`]/g, "")
+    .replace(/\bde \b/g, "de")
+    .replace(/\bmc\b/g, "mc")
+    .replace(/\bo['']?/g, "o")
+    .trim();
 }
 
 export async function fetchFootywireData(): Promise<{
   fetched: number;
   matched: number;
-  updated: number;
   priceUpdates: number;
   unmatched: string[];
 }> {
-  console.log("[Footywire] Fetching player price data...");
+  const settingsRow = await db.select().from(leagueSettings).limit(1);
+  const currentRound = settingsRow[0]?.currentRound || 1;
 
-  const response = await fetch(FOOTYWIRE_URL, {
-    headers: { "User-Agent": USER_AGENT },
-  });
-  if (!response.ok) {
-    throw new Error(`Footywire returned ${response.status}`);
-  }
-  const html = await response.text();
-
-  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
-  let rowMatch;
-  const fwPlayers: FootywirePlayer[] = [];
-
-  while ((rowMatch = rowRegex.exec(html)) !== null) {
-    const row = rowMatch[1];
-    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/g;
-    const rawCells: string[] = [];
-    let cellMatch;
-    while ((cellMatch = cellRegex.exec(row)) !== null) {
-      rawCells.push(cellMatch[1]);
-    }
-    if (rawCells.length >= 3) {
-      const rawNameHtml = rawCells[0];
-      const cells = rawCells.map(c => c.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim());
-      const parsed = parseFootywireRow(rawNameHtml, cells);
-      if (parsed) fwPlayers.push(parsed);
-    }
+  const roundsToScrape = [];
+  for (let r = 1; r <= currentRound; r++) {
+    roundsToScrape.push(r);
   }
 
-  console.log(`[Footywire] Parsed ${fwPlayers.length} players`);
+  console.log(`[Footywire] Scraping rounds ${roundsToScrape.join(",")} for current prices...`);
+
+  const playerMap = new Map<string, FootywirePlayer>();
+
+  for (const round of roundsToScrape) {
+    const url = `https://www.footywire.com/afl/footy/dream_team_round?year=2026&round=${round}&p=&s=T`;
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      });
+      if (!response.ok) {
+        console.log(`[Footywire] Round ${round} returned ${response.status}, skipping`);
+        continue;
+      }
+      const html = await response.text();
+      const roundPlayers = parseRoundPage(html);
+
+      for (const p of roundPlayers) {
+        const key = `${p.name.toLowerCase()}|${p.team}`;
+        playerMap.set(key, p);
+      }
+      console.log(`[Footywire] Round ${round}: ${roundPlayers.length} players (cumulative: ${playerMap.size})`);
+
+      if (round < roundsToScrape[roundsToScrape.length - 1]) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (err: any) {
+      console.log(`[Footywire] Round ${round} error: ${err.message}`);
+    }
+  }
+
+  const fwPlayers = Array.from(playerMap.values());
+  console.log(`[Footywire] Total unique players: ${fwPlayers.length}`);
+
+  if (fwPlayers.length < 50) {
+    throw new Error(`Only ${fwPlayers.length} players scraped (expected 200+). Footywire may be blocking requests.`);
+  }
+
+  const dbPlayers = await db.select({
+    id: players.id,
+    name: players.name,
+    team: players.team,
+    price: players.price,
+    startingPrice: players.startingPrice,
+  }).from(players);
+
+  const dbByNormNameTeam = new Map<string, typeof dbPlayers[0]>();
+  const dbByNameTeam = new Map<string, typeof dbPlayers[0]>();
+  const dbBySurnameTeam = new Map<string, typeof dbPlayers[0][]>();
+
+  for (const p of dbPlayers) {
+    const normKey = `${normalizeNameForMatch(p.name)}|${p.team}`;
+    dbByNormNameTeam.set(normKey, p);
+    const key = `${p.name.toLowerCase()}|${p.team}`;
+    dbByNameTeam.set(key, p);
+
+    const surname = normalizeNameForMatch(p.name.split(" ").pop() || "");
+    const sKey = `${surname}|${p.team}`;
+    if (!dbBySurnameTeam.has(sKey)) dbBySurnameTeam.set(sKey, []);
+    dbBySurnameTeam.get(sKey)!.push(p);
+  }
 
   let matched = 0;
-  let updated = 0;
   let priceUpdates = 0;
   const unmatched: string[] = [];
+  const updates: Array<{ id: number; price: number; priceChange: number }> = [];
 
   for (const fwp of fwPlayers) {
-    const playerId = await matchFootywireToPlayer(fwp);
-    if (!playerId) {
-      unmatched.push(`${fwp.fullName} (${fwp.team})`);
-      continue;
+    const normKey = `${normalizeNameForMatch(fwp.name)}|${fwp.team}`;
+    let dbPlayer = dbByNormNameTeam.get(normKey);
+
+    if (!dbPlayer) {
+      const key = `${fwp.name.toLowerCase()}|${fwp.team}`;
+      dbPlayer = dbByNameTeam.get(key);
     }
-    matched++;
 
-    const updates: Record<string, any> = {};
-
-    if (fwp.aflFantasyPrice > 0) {
-      const [current] = await db.select({ price: players.price }).from(players).where(eq(players.id, playerId));
-      if (current && Math.abs(current.price - fwp.aflFantasyPrice) >= 1000) {
-        updates.price = fwp.aflFantasyPrice;
-        priceUpdates++;
+    if (!dbPlayer) {
+      const surname = normalizeNameForMatch(fwp.name.split(" ").pop() || "");
+      const sKey = `${surname}|${fwp.team}`;
+      const candidates = dbBySurnameTeam.get(sKey) || [];
+      if (candidates.length === 1) {
+        dbPlayer = candidates[0];
+      } else if (candidates.length > 1) {
+        const firstName = normalizeNameForMatch(fwp.name.split(" ")[0]);
+        dbPlayer = candidates.find(c => normalizeNameForMatch(c.name.split(" ")[0]) === firstName);
       }
     }
-    if (fwp.aflFantasyChange !== 0) {
-      updates.priceChange = fwp.aflFantasyChange;
+
+    if (!dbPlayer) {
+      unmatched.push(`${fwp.name} (${fwp.team})`);
+      continue;
     }
 
-    if (Object.keys(updates).length > 0) {
-      await db.update(players).set(updates).where(eq(players.id, playerId));
-      updated++;
+    matched++;
+
+    if (Math.abs(dbPlayer.price - fwp.currentPrice) >= 1000) {
+      const priceChange = fwp.currentPrice - (dbPlayer.startingPrice || fwp.currentPrice);
+      updates.push({ id: dbPlayer.id, price: fwp.currentPrice, priceChange });
+      priceUpdates++;
     }
   }
 
-  console.log(`[Footywire] Matched ${matched}/${fwPlayers.length}, updated ${updated}, price changes ${priceUpdates}, unmatched ${unmatched.length}`);
+  for (const u of updates) {
+    await db.update(players).set({
+      price: u.price,
+      priceChange: u.priceChange,
+    }).where(eq(players.id, u.id));
+  }
 
-  return { fetched: fwPlayers.length, matched, updated, priceUpdates, unmatched };
+  if (unmatched.length > 0 && unmatched.length <= 20) {
+    console.log(`[Footywire] Unmatched: ${unmatched.join(", ")}`);
+  } else if (unmatched.length > 20) {
+    console.log(`[Footywire] ${unmatched.length} unmatched players`);
+  }
+
+  console.log(`[Footywire] Matched ${matched}/${fwPlayers.length}, ${priceUpdates} price updates`);
+
+  return { fetched: fwPlayers.length, matched, priceUpdates, unmatched };
 }

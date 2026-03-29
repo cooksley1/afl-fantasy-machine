@@ -21,6 +21,7 @@ export interface SyncSourceStatus {
 const syncSources: Record<string, SyncSourceStatus> = {
   aflFantasyPrices: { lastSync: null, status: "idle" },
   dfsAustralia: { lastSync: null, status: "idle" },
+  footywirePrices: { lastSync: null, status: "idle" },
   liveScores: { lastSync: null, status: "idle" },
   wheelo: { lastSync: null, status: "idle" },
   fixtures: { lastSync: null, status: "idle" },
@@ -145,6 +146,16 @@ async function runGather() {
     if (wave2[0].status === "rejected") markSync("dfsAustralia", "error", wave2[0].reason?.message);
     if (wave2[1].status === "rejected") markSync("liveScores", "error", wave2[1].reason?.message);
     if (wave2[2].status === "rejected") markSync("wheelo", "error", wave2[2].reason?.message);
+
+    try {
+      markSync("footywirePrices", "syncing");
+      const { fetchFootywireData } = await import("./services/footywire-scraper");
+      await fetchFootywireData();
+      markSync("footywirePrices", "idle");
+    } catch (fwErr: any) {
+      console.log(`[Scheduler] Footywire error: ${fwErr.message}`);
+      markSync("footywirePrices", "error", fwErr.message);
+    }
 
     try {
       const { recalculatePlayerAverages } = await import("./expand-players");
@@ -277,6 +288,16 @@ export async function runManualRefresh(): Promise<{ success: boolean; duration: 
     if (wave2[0].status === "rejected") { markSync("dfsAustralia", "error", wave2[0].reason?.message); errors.push(`DFS Australia: ${wave2[0].reason?.message}`); }
     if (wave2[1].status === "rejected") { markSync("liveScores", "error", wave2[1].reason?.message); errors.push(`Live scores: ${wave2[1].reason?.message}`); }
     if (wave2[2].status === "rejected") { markSync("wheelo", "error", wave2[2].reason?.message); errors.push(`Wheelo: ${wave2[2].reason?.message}`); }
+
+    try {
+      markSync("footywirePrices", "syncing");
+      const { fetchFootywireData } = await import("./services/footywire-scraper");
+      await fetchFootywireData();
+      markSync("footywirePrices", "idle");
+    } catch (fwErr: any) {
+      markSync("footywirePrices", "error", fwErr.message);
+      errors.push(`Footywire: ${fwErr.message}`);
+    }
 
     try {
       const { recalculatePlayerAverages } = await import("./expand-players");

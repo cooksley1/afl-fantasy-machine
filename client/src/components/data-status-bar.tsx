@@ -21,8 +21,9 @@ interface DataStatus {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  aflFantasyPrices: "Prices & Rosters",
+  aflFantasyPrices: "Rosters & IDs",
   dfsAustralia: "Player Stats",
+  footywirePrices: "Prices",
   liveScores: "Live Scores",
   wheelo: "Advanced Ratings",
   fixtures: "Fixtures",
@@ -31,6 +32,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const SOURCE_ORDER = [
+  "footywirePrices",
   "aflFantasyPrices",
   "liveScores",
   "injuryAndLineups",
