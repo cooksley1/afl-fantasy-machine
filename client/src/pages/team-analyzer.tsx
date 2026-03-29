@@ -470,7 +470,7 @@ export default function TeamAnalyzer() {
                 {captainPickMode && (
                   <div className="flex items-center justify-between mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Tap an on-field player to set as {captainPickMode === "captain" ? "Captain" : "Vice-Captain"}
+                      Tap a player to set as {captainPickMode === "captain" ? "Captain" : "Vice-Captain"}
                     </p>
                     <Button variant="ghost" size="sm" className="h-6 text-[11px] text-muted-foreground" onClick={skipCaptainPick} data-testid="button-skip-captain">
                       Skip
@@ -479,7 +479,7 @@ export default function TeamAnalyzer() {
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   {result.players.map((p, i) => {
-                    const isPickable = captainPickMode && p.isOnField !== false && !p.isCaptain;
+                    const isPickable = captainPickMode && !p.isCaptain;
                     const isAlreadyCaptain = p.isCaptain && captainPickMode === "vc";
                     return (
                       <Badge

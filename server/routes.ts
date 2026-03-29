@@ -274,6 +274,46 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/my-team/:id/move", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { isOnField } = z.object({ isOnField: z.boolean() }).parse(req.body);
+      const uid = getEffectiveUserId(req);
+      const team = await storage.getMyTeam(uid);
+      const player = team.find(p => p.myTeamPlayerId === id);
+      if (!player) return res.status(404).json({ message: "Player not found on team" });
+
+      const posQuotas: Record<string, number> = { DEF: 6, MID: 8, RUC: 2, FWD: 6 };
+      const pos = player.fieldPosition || "MID";
+
+      if (isOnField && pos === "UTIL") {
+        return res.status(400).json({ message: "Utility players cannot be moved on-field." });
+      }
+
+      if (isOnField) {
+        const currentOnField = team.filter(p => p.fieldPosition === pos && p.isOnField && p.myTeamPlayerId !== id).length;
+        const quota = posQuotas[pos] || 6;
+        if (currentOnField >= quota) {
+          return res.status(400).json({ message: `No open on-field ${pos} slots. Swap with a teammate first.` });
+        }
+      }
+
+      if (!isOnField) {
+        const posStructure: Record<string, number> = { DEF: 2, MID: 2, RUC: 1, FWD: 2 };
+        const currentBench = team.filter(p => p.fieldPosition === pos && !p.isOnField && p.myTeamPlayerId !== id).length;
+        const benchQuota = posStructure[pos] || 2;
+        if (currentBench >= benchQuota) {
+          return res.status(400).json({ message: `No open bench ${pos} slots. Swap with a teammate first.` });
+        }
+      }
+
+      await storage.updateMyTeamPlayer(uid, id, { isOnField });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.post("/api/my-team/:id/replace", async (req, res) => {
     try {
       const myTeamPlayerId = parseInt(req.params.id);
@@ -1485,7 +1525,9 @@ export async function registerRoutes(
         });
       }
 
-      if (!hasAiFieldData) {
+      const hasReliableFieldData = hasAiFieldData && resolvedPlayers.some(({ ip }) => ip.isOnField === true);
+
+      if (!hasReliableFieldData) {
         resolvedPlayers.sort((a, b) => (b.match.avgScore || 0) - (a.match.avgScore || 0));
       }
 
@@ -1495,7 +1537,7 @@ export async function registerRoutes(
 
         if (assignedFieldPos === "UTIL") {
           isOnField = false;
-        } else if (hasAiFieldData) {
+        } else if (hasReliableFieldData) {
           isOnField = ip.isOnField !== false;
         } else if (ip.isEmergency) {
           isOnField = false;

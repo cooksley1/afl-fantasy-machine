@@ -32,6 +32,8 @@ import {
   Users,
   ArrowLeftRight,
   ArrowUpDown,
+  ArrowUpFromLine,
+  ArrowDownToLine,
   UserPlus,
   Search,
   X,
@@ -1063,6 +1065,20 @@ function PlayerActionDialog({
     },
   });
 
+  const moveMutation = useMutation({
+    mutationFn: async (toField: boolean) => {
+      await apiRequest("POST", `/api/my-team/${player.myTeamPlayerId}/move`, { isOnField: toField });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      toast({ title: player.isOnField ? "Moved to bench" : "Moved to field" });
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Move failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const captainMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/my-team/${player.myTeamPlayerId}/captain`),
     onSuccess: () => {
@@ -1295,6 +1311,28 @@ function PlayerActionDialog({
             <p className="text-[10px] text-muted-foreground">Full player analysis</p>
           </div>
         </button>
+
+        {player.fieldPosition !== "UTIL" && (
+          <button
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+            onClick={() => moveMutation.mutate(!player.isOnField)}
+            disabled={moveMutation.isPending}
+            data-testid="action-move"
+          >
+            {player.isOnField ? (
+              <ArrowDownToLine className="w-4 h-4 text-amber-500" />
+            ) : (
+              <ArrowUpFromLine className="w-4 h-4 text-green-500" />
+            )}
+            <div>
+              <p className="text-sm font-medium">{player.isOnField ? "Move to Bench" : "Move to Field"}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {player.isOnField ? "Move this player to the bench" : "Move this player onto the field"}
+              </p>
+            </div>
+            {moveMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto" />}
+          </button>
+        )}
 
         <button
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
