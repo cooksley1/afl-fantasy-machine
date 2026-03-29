@@ -39,6 +39,7 @@ import {
   X,
   Check,
   Upload,
+  Settings2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -1013,9 +1014,9 @@ function PlayerActionDialog({
     enabled: mode === "replace",
   });
 
-  const totalSalary = teamPlayers.reduce((sum, p) => sum + p.price, 0);
-  const remainingBudget = salaryCap - totalSalary;
-  const budgetAfterRemoval = remainingBudget + player.price;
+  const totalPurchased = teamPlayers.reduce((sum, p) => sum + (p.purchasePrice ?? p.price), 0);
+  const remainingBudget = salaryCap - totalPurchased;
+  const budgetAfterRemoval = remainingBudget + (player.purchasePrice ?? player.price);
 
   const swapMutation = useMutation({
     mutationFn: async (targetId: number) => {
@@ -1450,8 +1451,8 @@ function AddPlayerToSlotDialog({
     queryKey: ["/api/players"],
   });
 
-  const totalSalary = teamPlayers.reduce((sum, p) => sum + p.price, 0);
-  const remainingBudget = salaryCap - totalSalary;
+  const totalPurchased = teamPlayers.reduce((sum, p) => sum + (p.purchasePrice ?? p.price), 0);
+  const remainingBudget = salaryCap - totalPurchased;
 
   const addMutation = useMutation({
     mutationFn: async (playerId: number) => {
@@ -1567,6 +1568,8 @@ export default function MyTeam() {
   const [sortBy, setSortBy] = useState<"position" | StatKey>("position");
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithTeamInfo | null>(null);
   const [addSlot, setAddSlot] = useState<{ position: string; isOnField: boolean } | null>(null);
+  const [showSalarySync, setShowSalarySync] = useState(false);
+  const [salaryInput, setSalaryInput] = useState("");
 
   const toggleStat = (key: StatKey) => {
     setVisibleStats(prev =>
@@ -1600,6 +1603,22 @@ export default function MyTeam() {
     }
     return teams;
   }, [roundFixtures]);
+
+  const salarySyncMutation = useMutation({
+    mutationFn: async (remainingSalary: number) => {
+      const res = await apiRequest("POST", "/api/my-team/sync-salary", { remainingSalary });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-team"] });
+      setShowSalarySync(false);
+      setSalaryInput("");
+      toast({ title: "Salary synced", description: "Remaining salary now matches the official AFL Fantasy app." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+    },
+  });
 
   const clearTeamMutation = useMutation({
     mutationFn: async () => {
@@ -1700,9 +1719,10 @@ export default function MyTeam() {
     );
   }
 
-  const totalSalary = teamPlayers?.reduce((sum, p) => sum + p.price, 0) || 0;
+  const totalValue = teamPlayers?.reduce((sum, p) => sum + p.price, 0) || 0;
+  const totalPurchased = teamPlayers?.reduce((sum, p) => sum + (p.purchasePrice ?? p.price), 0) || 0;
   const salaryCap = settings?.salaryCap || 18300000;
-  const remaining = salaryCap - totalSalary;
+  const remaining = salaryCap - totalPurchased;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl mx-auto" data-testid="page-my-team">
@@ -1713,15 +1733,54 @@ export default function MyTeam() {
             <div className="text-center bg-white/20 rounded-lg px-3 py-1.5">
               <p className="text-[10px] font-medium opacity-80">Team Value</p>
               <p className="text-sm sm:text-base font-bold" data-testid="text-team-value">
-                ${(totalSalary / 1000000).toFixed(3)}M
+                ${(totalValue / 1000000).toFixed(3)}M
               </p>
             </div>
-            <div className="text-center bg-white/20 rounded-lg px-3 py-1.5">
-              <p className="text-[10px] font-medium opacity-80">Rem Salary</p>
-              <p className="text-sm sm:text-base font-bold" data-testid="text-remaining-salary">
-                ${(remaining / 1000).toFixed(0)}k
-              </p>
-            </div>
+            <Popover open={showSalarySync} onOpenChange={setShowSalarySync}>
+              <PopoverTrigger asChild>
+                <button className="text-center bg-white/20 rounded-lg px-3 py-1.5 hover:bg-white/30 transition-colors cursor-pointer" data-testid="button-sync-salary">
+                  <p className="text-[10px] font-medium opacity-80">Rem Salary</p>
+                  <p className="text-sm sm:text-base font-bold" data-testid="text-remaining-salary">
+                    ${(remaining / 1000).toFixed(0)}k
+                  </p>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72" align="end">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold">Sync Remaining Salary</p>
+                    <p className="text-xs text-muted-foreground mt-1">Enter your remaining salary from the official AFL Fantasy app to keep our calculations accurate.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                      <Input
+                        type="number"
+                        placeholder="368000"
+                        value={salaryInput}
+                        onChange={(e) => setSalaryInput(e.target.value)}
+                        className="pl-6 text-sm"
+                        data-testid="input-remaining-salary"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={!salaryInput || salarySyncMutation.isPending}
+                      onClick={() => {
+                        const val = parseInt(salaryInput);
+                        if (val >= 0 && val <= 5000000) {
+                          salarySyncMutation.mutate(val);
+                        }
+                      }}
+                      data-testid="button-confirm-salary-sync"
+                    >
+                      {salarySyncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sync"}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Tip: Find this in the Trade Centre of the AFL Fantasy app.</p>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </div>

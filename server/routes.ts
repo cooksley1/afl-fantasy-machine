@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertMyTeamPlayerSchema, users, feedback, players, weeklyStats } from "@shared/schema";
+import { insertMyTeamPlayerSchema, myTeamPlayers, users, feedback, players, weeklyStats } from "@shared/schema";
 import { AFL_FANTASY_CLASSIC_2026, getTradesForRound, getFixtureForTeam, isByeRound } from "@shared/game-rules";
 import { z } from "zod";
 import multer from "multer";
@@ -157,12 +157,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Player already on team" });
       }
 
+      const player = await storage.getPlayer(data.playerId);
       const entry = await storage.addToMyTeam(uid, {
         playerId: data.playerId,
         isOnField: data.isOnField !== undefined ? data.isOnField : true,
         isCaptain: false,
         isViceCaptain: false,
         fieldPosition: data.fieldPosition,
+        purchasePrice: player?.price ?? 0,
       });
       res.json(entry);
     } catch (error: any) {
@@ -340,10 +342,10 @@ export async function registerRoutes(
 
       const settings = await storage.getSettings(uid);
       const salaryCap = settings.salaryCap || AFL_FANTASY_CLASSIC_2026.salaryCap;
-      const currentTotal = team.reduce((sum, p) => sum + p.price, 0);
-      const newTotal = currentTotal - oldPlayer.price + newPlayer.price;
-      if (newTotal > salaryCap) {
-        return res.status(400).json({ message: `Exceeds salary cap by $${((newTotal - salaryCap) / 1000).toFixed(0)}k` });
+      const totalPurchased = team.reduce((sum, p) => sum + (p.purchasePrice ?? p.price), 0);
+      const newTotalPurchased = totalPurchased - (oldPlayer.purchasePrice ?? oldPlayer.price) + newPlayer.price;
+      if (newTotalPurchased > salaryCap) {
+        return res.status(400).json({ message: `Exceeds salary cap by $${((newTotalPurchased - salaryCap) / 1000).toFixed(0)}k` });
       }
 
       const targetPos = oldPlayer.fieldPosition!;
@@ -361,6 +363,7 @@ export async function registerRoutes(
         isCaptain: false,
         isViceCaptain: false,
         fieldPosition: targetPos,
+        purchasePrice: newPlayer.price,
       });
 
       res.json({ success: true, replacedWith: newPlayer.name });
@@ -421,45 +424,50 @@ export async function registerRoutes(
       }
 
       const refreshed = await storage.getAllPlayers();
+      const playerMap = new Map(refreshed.map(p => [p.name, p]));
       const fp = (name: string) => {
-        const p = refreshed.find(pl => pl.name === name);
+        const p = playerMap.get(name);
         if (!p) throw new Error(`Player not found: ${name}`);
         return p.id;
+      };
+      const pp = (name: string) => {
+        const p = playerMap.get(name);
+        return p?.price ?? 0;
       };
 
       const uid = getEffectiveUserId(req);
 
       const teamEntries = [
-        { playerId: fp("Connor Rozee"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Jack Sinclair"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Josh Gibcus"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Samuel Grlj"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Lachlan Blakiston"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Jai Serong"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Josh Lindsay"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Lachie Jaques"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF" },
-        { playerId: fp("Jack Steele"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Zak Butters"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Errol Gulden"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Darcy Parish"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Cooper Lord"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Willem Duursma"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Tanner Bruhn"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Jagga Smith"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Tom Blamires"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Roan Steele"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID" },
-        { playerId: fp("Brodie Grundy"), isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Lachlan McAndrew"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Vigo Visentini"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC" },
-        { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "FWD" },
-        { playerId: fp("Christian Petracca"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Sam Flanders"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Mattaes Phillipou"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Gryan Miers"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Connor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Deven Robertson"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD" },
-        { playerId: fp("Jack Carroll"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL" },
+        { playerId: fp("Connor Rozee"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Connor Rozee") },
+        { playerId: fp("Jack Sinclair"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Jack Sinclair") },
+        { playerId: fp("Josh Gibcus"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Josh Gibcus") },
+        { playerId: fp("Samuel Grlj"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Samuel Grlj") },
+        { playerId: fp("Lachlan Blakiston"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Lachlan Blakiston") },
+        { playerId: fp("Jai Serong"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Jai Serong") },
+        { playerId: fp("Josh Lindsay"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Josh Lindsay") },
+        { playerId: fp("Lachie Jaques"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "DEF", purchasePrice: pp("Lachie Jaques") },
+        { playerId: fp("Jack Steele"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Jack Steele") },
+        { playerId: fp("Zak Butters"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Zak Butters") },
+        { playerId: fp("Errol Gulden"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Errol Gulden") },
+        { playerId: fp("Darcy Parish"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Darcy Parish") },
+        { playerId: fp("Cooper Lord"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Cooper Lord") },
+        { playerId: fp("Willem Duursma"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Willem Duursma") },
+        { playerId: fp("Tanner Bruhn"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Tanner Bruhn") },
+        { playerId: fp("Jagga Smith"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Jagga Smith") },
+        { playerId: fp("Tom Blamires"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Tom Blamires") },
+        { playerId: fp("Roan Steele"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "MID", purchasePrice: pp("Roan Steele") },
+        { playerId: fp("Brodie Grundy"), isOnField: true, isCaptain: true, isViceCaptain: false, fieldPosition: "RUC", purchasePrice: pp("Brodie Grundy") },
+        { playerId: fp("Lachlan McAndrew"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC", purchasePrice: pp("Lachlan McAndrew") },
+        { playerId: fp("Vigo Visentini"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "RUC", purchasePrice: pp("Vigo Visentini") },
+        { playerId: fp("Harry Sheezel"), isOnField: true, isCaptain: false, isViceCaptain: true, fieldPosition: "FWD", purchasePrice: pp("Harry Sheezel") },
+        { playerId: fp("Christian Petracca"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Christian Petracca") },
+        { playerId: fp("Sam Flanders"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Sam Flanders") },
+        { playerId: fp("Mattaes Phillipou"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Mattaes Phillipou") },
+        { playerId: fp("Gryan Miers"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Gryan Miers") },
+        { playerId: fp("Connor Budarick"), isOnField: true, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Connor Budarick") },
+        { playerId: fp("Deven Robertson"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Deven Robertson") },
+        { playerId: fp("Leonardo Lombard"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "FWD", purchasePrice: pp("Leonardo Lombard") },
+        { playerId: fp("Jack Carroll"), isOnField: false, isCaptain: false, isViceCaptain: false, fieldPosition: "UTIL", purchasePrice: pp("Jack Carroll") },
       ];
 
       await storage.replaceMyTeam(uid, teamEntries);
@@ -600,6 +608,7 @@ export async function registerRoutes(
           isCaptain: false,
           isViceCaptain: false,
           fieldPosition: inheritedFieldPosition || playerIn.position,
+          purchasePrice: playerIn.price,
         });
 
         await storage.updateSettings(uid, {
@@ -774,6 +783,7 @@ export async function registerRoutes(
         isCaptain: false,
         isViceCaptain: false,
         fieldPosition: p.fieldPosition,
+        purchasePrice: p.price,
       })));
       const settings = await storage.getSettings(uid);
       const teamPlayerIds = result.teamPlayers.map(p => p.id);
@@ -834,6 +844,7 @@ export async function registerRoutes(
         isCaptain: false,
         isViceCaptain: false,
         fieldPosition: p.fieldPosition,
+        purchasePrice: p.price,
       })));
       res.json({ success: true, teamSize: result.startingTeam.length, cost: result.startingTeamCost });
     } catch (error: any) {
@@ -905,6 +916,47 @@ export async function registerRoutes(
       const uid = getEffectiveUserId(req);
       const updated = await storage.updateSettings(uid, data);
       res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/my-team/sync-salary", async (req, res) => {
+    try {
+      const { remainingSalary } = z.object({
+        remainingSalary: z.number().min(0).max(5000000),
+      }).parse(req.body);
+
+      const uid = getEffectiveUserId(req);
+      const team = await storage.getMyTeam(uid);
+      if (team.length === 0) {
+        return res.status(400).json({ message: "No team set up" });
+      }
+
+      const settings = await storage.getSettings(uid);
+      const salaryCap = settings.salaryCap || AFL_FANTASY_CLASSIC_2026.salaryCap;
+      const targetTotalPurchased = salaryCap - remainingSalary;
+      const currentTotalValue = team.reduce((sum, p) => sum + p.price, 0);
+
+      const ratio = targetTotalPurchased / currentTotalValue;
+      let runningTotal = 0;
+      for (let i = 0; i < team.length; i++) {
+        const player = team[i];
+        if (player.myTeamPlayerId) {
+          let adjustedPurchasePrice: number;
+          if (i === team.length - 1) {
+            adjustedPurchasePrice = targetTotalPurchased - runningTotal;
+          } else {
+            adjustedPurchasePrice = Math.round(player.price * ratio);
+          }
+          runningTotal += adjustedPurchasePrice;
+          await db.update(myTeamPlayers)
+            .set({ purchasePrice: adjustedPurchasePrice })
+            .where(and(eq(myTeamPlayers.id, player.myTeamPlayerId), eq(myTeamPlayers.userId, uid)));
+        }
+      }
+
+      res.json({ success: true, remainingSalary, teamValue: currentTotalValue });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1589,6 +1641,7 @@ export async function registerRoutes(
           isCaptain: !!playerIsCaptain,
           isViceCaptain: !!playerIsVC,
           fieldPosition: assignedFieldPos,
+          purchasePrice: match.price,
         };
       });
 

@@ -129,6 +129,7 @@ export const myTeamPlayers = pgTable("my_team_players", {
   isCaptain: boolean("is_captain").notNull().default(false),
   isViceCaptain: boolean("is_vice_captain").notNull().default(false),
   fieldPosition: text("field_position").notNull(),
+  purchasePrice: integer("purchase_price"),
 });
 
 export const tradeRecommendations = pgTable("trade_recommendations", {
@@ -338,6 +339,7 @@ export type PlayerWithTeamInfo = Player & {
   myTeamPlayerId?: number;
   lastRoundScore?: number | null;
   lastRoundNumber?: number | null;
+  purchasePrice?: number | null;
 };
 
 export type TradeRecommendationWithPlayers = TradeRecommendation & {

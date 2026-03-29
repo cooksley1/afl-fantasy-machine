@@ -1,0 +1,340 @@
+Trade Centre
+
+Available Trades
+0/2
+Team Value
+$19.987M
+Remaining Salary
+$368k
+My Trades
+Show
+
+averagePoints
+Stats
+This table shows your fantasy team players organized by position, including lineup and bench players, with their current statistics.
+Player Name
+AVG
+DEF section with 6 lineup players and 2 bench players
+DEF
+Player S. Grlj in Defender position with current statistics and actions available
+Samuel Grlj
+playingS. Grlj
+D/M
+$420k
+
+RIC @ FRE, Sat @ 4.15pm
+
+70.3
+68
+Player J. Sinclair in Defender position with current statistics and actions available
+Jack Sinclair
+playingJ. Sinclair
+DEF
+$1.105M
+
+STK vs BL, Sat @ 12.35pm
+
+115
+106
+Player D. Houston in Defender position with current statistics and actions available
+Dan Houston
+playingD. Houston
+DEF
+$817k
+
+COL vs GWS, Fri @ 7.40pm
+
+105.7
+78
+Player J. Lindsay in Defender position with current statistics and actions available
+Josh Lindsay
+playingJ. Lindsay
+DEF
+$310k
+
+WCE @ PA, Sun @ 12.30pm
+
+66
+LIVE
+60
+Player L. Blakiston in Defender position with current statistics and actions available
+Lachlan Blakiston
+playingL. Blakiston
+DEF
+$410k
+
+ESS vs NM, Sat @ 7.35pm
+
+53.7
+70
+Player L. Ryan in Defender position with current statistics and actions available
+Luke Ryan
+playingL. Ryan
+DEF
+$866k
+
+FRE vs RIC, Sat @ 4.15pm
+
+82.5
+58
+Player J. Serong in Defender position with current statistics and actions available
+Jai Serong
+uncertainJ. Serong
+DEF
+$419k
+
+BYE
+
+63.3
+-
+
+Player L. Jaques in Defender position with current statistics and actions available
+Lachie Jaques
+uncertainL. Jaques
+DEF
+$484k
+
+BYE
+
+87.3
+-
+
+MID section with 8 lineup players and 2 bench players
+MID
+Player J. Smith in Midfielder position with current statistics and actions available
+Jagga Smith
+playingJ. Smith
+MID
+$381k
+
+CAR vs MEL, Sun @ 3.15pm
+
+90.5
+-
+
+Player Z. Butters in Midfielder position with current statistics and actions available
+Zak Butters
+playingZ. Butters
+MID
+$1.056M
+
+PA vs WCE, Sun @ 12.30pm
+
+118
+LIVE
+138
+Player J. Watkins in Midfielder position with current statistics and actions available
+Jack Watkins
+playingJ. Watkins
+MID
+$324k
+
+PA vs WCE, Sun @ 12.30pm
+
+71
+LIVE
+56
+Player J. Carroll in Midfielder position with current statistics and actions available
+Jack Carroll
+playingJ. Carroll
+MID
+$453k
+
+STK vs BL, Sat @ 12.35pm
+
+59.3
+53
+Player Z. Merrett in Midfielder position with current statistics and actions available
+Zach Merrett
+playingZ. Merrett
+MID
+$1.071M
+
+ESS vs NM, Sat @ 7.35pm
+
+94.3
+71
+Player W. Duursma in Midfielder position with current statistics and actions available
+Willem Duursma
+playingW. Duursma
+MID
+$439k
+
+WCE @ PA, Sun @ 12.30pm
+
+77
+LIVE
+72
+Player T. Blamires in Midfielder position with current statistics and actions available
+Tom Blamires
+playingT. Blamires
+MID
+$337k
+
+NM @ ESS, Sat @ 7.35pm
+
+70.7
+75
+Player T. Bruhn in Midfielder position with current statistics and actions available
+Tanner Bruhn
+playingT. Bruhn
+MID
+$622k
+
+GEE vs ADE, Thu @ 7.30pm
+
+81.7
+53
+Player J. Dawson in Midfielder position with current statistics and actions available
+Jordan Dawson
+injuredJ. Dawson
+MID
+$1.123M
+
+ADE @ GEE, Thu @ 7.30pm
+
+107
+DNP
+Player M. Murdock in Midfielder position with current statistics and actions available
+Milan Murdock
+injuredM. Murdock
+MID
+$387k
+
+WCE @ PA, Sun @ 12.30pm
+
+91.5
+LIVE
+DNP
+RUC section with 2 lineup players and 1 bench players
+RUC
+Player Z. Zakostelsky in Ruck position with current statistics and actions available
+Zane Zakostelsky
+not-playingZ. Zakostelsky
+R/D
+$298k
+
+BL @ STK, Sat @ 12.35pm
+
+51.5
+DNP
+Player L. McAndrew in Ruck position with current statistics and actions available
+Lachlan McAndrew
+playingL. McAndrew
+RUC
+$392k
+
+ADE @ GEE, Thu @ 7.30pm
+
+82.3
+92
+Player B. Grundy in Ruck position with current statistics and actions available
+Brodie Grundy
+uncertainB. Grundy
+RUC
+$1.008M
+
+BYE
+
+81.7
+-
+
+FWD section with 6 lineup players and 2 bench players
+FWD
+Player H. Sheezel in Forward position with current statistics and actions available
+Harry Sheezel
+playingH. Sheezel
+F/M
+$1.155M
+
+NM @ ESS, Sat @ 7.35pm
+
+127.3
+136
+Player G. Miers in Forward position with current statistics and actions available
+Gryan Miers
+playingG. Miers
+FWD
+$1.012M
+
+GEE vs ADE, Thu @ 7.30pm
+
+111.3
+123
+Player S. Flanders in Forward position with current statistics and actions available
+Sam Flanders
+playingS. Flanders
+FWD
+$813k
+
+STK vs BL, Sat @ 12.35pm
+
+95
+94
+Player C. Budarick in Forward position with current statistics and actions available
+Connor Budarick
+uncertainC. Budarick
+FWD
+$643k
+
+BYE
+
+83
+-
+
+Player J. Simpkin in Forward position with current statistics and actions available
+Jy Simpkin
+playingJ. Simpkin
+F/M
+$837k
+
+NM @ ESS, Sat @ 7.35pm
+
+77.3
+82
+Player D. Robertson in Forward position with current statistics and actions available
+Deven Robertson
+playingD. Robertson
+FWD
+$403k
+
+WCE @ PA, Sun @ 12.30pm
+
+97
+LIVE
+38
+Player C. Petracca in Forward position with current statistics and actions available
+Christian Petracca
+injuredC. Petracca
+F/M
+$988k
+
+BYE
+
+99.3
+-
+
+Player L. Lombard in Forward position with current statistics and actions available
+Leonardo Lombard
+uncertainL. Lombard
+FWD
+$378k
+
+BYE
+
+57
+-
+
+Utility position section with one flexible player slot
+UTILITY
+Player E. Richards in Utility position with current statistics and actions available
+Ed Richards
+uncertainE. Richards
+MID
+$1.036M
+
+BYE
+
+103.3
+-
+

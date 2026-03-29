@@ -239,7 +239,7 @@ ${preseasonContext}
 CURRENT ROUND: ${settings.currentRound}
 TRADES REMAINING: ${settings.tradesRemaining}
 SALARY CAP: $${(settings.salaryCap / 1000).toFixed(0)}K
-SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
+SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + (p.purchasePrice ?? p.price), 0)) / 1000).toFixed(0)}K
 
 MY TEAM:
 ${teamData}
@@ -410,7 +410,7 @@ ${tradePreseasonCtx}${tradesByeCtx}
 CURRENT ROUND: ${settings.currentRound}
 TRADES AVAILABLE THIS ROUND: ${getTradesForRound(settings.currentRound)}
 TRADES REMAINING THIS SEASON: ${settings.tradesRemaining}
-SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
+SALARY CAP REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + (p.purchasePrice ?? p.price), 0)) / 1000).toFixed(0)}K
 
 MY TEAM:
 ${teamData}
@@ -813,7 +813,7 @@ CURRENT ROUND: ${settings.currentRound}${isByeNow ? ` (${isEarlyBye ? "EARLY" : 
 TRADES AVAILABLE THIS ROUND: ${tradesForRound}
 TRADES REMAINING THIS SEASON: ${settings.tradesRemaining}
 SALARY CAP: $${(settings.salaryCap / 1000).toFixed(0)}K
-SALARY REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + p.price, 0)) / 1000).toFixed(0)}K
+SALARY REMAINING: $${((settings.salaryCap - myTeam.reduce((s, p) => s + (p.purchasePrice ?? p.price), 0)) / 1000).toFixed(0)}K
 ON-FIELD: ${onFieldCount}/22 | EMERGENCIES SET: ${emergencyCount}/4
 
 MY TEAM:

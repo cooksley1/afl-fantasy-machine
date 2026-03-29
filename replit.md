@@ -17,7 +17,7 @@ A mobile-first Fantasy AFL advisor app providing AI-powered insights, trade reco
 - **Patch** (e.g. 2.6.0 → 2.6.1): Bug fixes, data fixes, minor tweaks, matching improvements.
 - **Minor** (e.g. 2.6.1 → 2.7.0): New features, new UI components, new data sources, new pages.
 - **Major** (e.g. 2.7.0 → 3.0.0): Breaking changes, major redesigns, architecture overhauls.
-Current version: **v2.11.0**. Always update this line in replit.md when bumping.
+Current version: **v2.12.0**. Always update this line in replit.md when bumping.
 
 ## AFL Fantasy Classic 2026 Rules (from fantasy.afl.com.au)
 - **Squad**: 30 players. 22 on-field (6 DEF, 8 MID, 2 RUC, 6 FWD). 8 bench (2 DEF, 2 MID, 1 RUC, 2 FWD, 1 UTIL). Up to 4 emergencies.
@@ -44,7 +44,7 @@ Replit Auth (OpenID Connect) manages authentication. All API routes, except auth
 Built with React, TypeScript, Vite, Tailwind CSS, Shadcn UI, TanStack React Query, and Wouter for routing. Shared utilities in `client/src/lib/player-utils.ts` (formatPrice, formatPriceChange, getTeamColour). Key pages include Dashboard, MyTeam, Players, Trades, FormGuide, IntelHub, TeamAnalyzer, PlayerReport, LiveScores, Settings, Admin, Landing, and DreamTeam. The **Player Report** offers a tabbed view with Overview, Match Stats, Fixture Stats, Opposition, Venue, and AI Report (GPT-generated analysis loaded on demand). Player avatars utilize AFL Fantasy API headshots or team-colored placeholders. A 3-step onboarding wizard guides new users. The application incorporates detailed player availability and selection status logic.
 
 ### My Team Player Management
-Players on the My Team page are interactive, allowing actions like viewing reports, swapping with teammates (validating position eligibility), replacing with database players (filtered by position and budget), setting captaincy, or removing players.
+Players on the My Team page are interactive, allowing actions like viewing reports, swapping with teammates (validating position eligibility), replacing with database players (filtered by position and budget), setting captaincy, or removing players. **Purchase Price Tracking (v2.12.0)**: Each player on the user's team has a `purchasePrice` recorded at time of acquisition. "Team Value" = sum of current market prices. "Remaining Salary" = salary cap minus sum of purchase prices (matching the official AFL Fantasy app's calculation). Users can click the "Rem Salary" display to sync their remaining salary from the official app, which proportionally adjusts purchase prices to match exactly.
 
 ### Backend
 An Express.js and Node.js server manages API requests, file uploads, and service integrations.

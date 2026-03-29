@@ -183,6 +183,7 @@ export class DatabaseStorage implements IStorage {
           myTeamPlayerId: entry.id,
           lastRoundScore: lastScore?.score ?? null,
           lastRoundNumber: lastScore?.round ?? null,
+          purchasePrice: entry.purchasePrice ?? player.price,
         });
       }
     }

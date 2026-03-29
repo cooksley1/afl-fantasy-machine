@@ -868,8 +868,8 @@ export function generateTradeRecommendations(
   const tradesAvailable = getTradesForRound(currentRound);
 
   const w = getCachedWeights();
-  const totalSalary = myTeam.reduce((s, p) => s + p.price, 0);
-  const remainingSalary = salaryCap - totalSalary;
+  const totalPurchased = myTeam.reduce((s, p) => s + (p.purchasePrice ?? p.price), 0);
+  const remainingSalary = salaryCap - totalPurchased;
 
   const onField = myTeam.filter(pp => pp.isOnField);
   const teamByeCounts: Record<number, number> = {};

@@ -164,6 +164,7 @@ export default function Dashboard() {
   const benchPlayers = teamPlayers?.filter((p) => !p.isOnField) || [];
   const totalScore = onFieldPlayers.reduce((sum, p) => sum + (p.avgScore || 0), 0);
   const totalSalary = teamPlayers?.reduce((sum, p) => sum + p.price, 0) || 0;
+  const totalPurchased = teamPlayers?.reduce((sum, p) => sum + (p.purchasePrice ?? p.price), 0) || 0;
   const captain = teamPlayers?.find((p) => p.isCaptain);
   const viceCaptain = teamPlayers?.find((p) => p.isViceCaptain);
   const currentRound = settings?.currentRound || 1;
@@ -220,7 +221,7 @@ export default function Dashboard() {
   }
 
   const salaryCap = settings?.salaryCap || 18300000;
-  const remaining = salaryCap - totalSalary;
+  const remaining = salaryCap - totalPurchased;
   const hasTeam = teamPlayers && teamPlayers.length > 0;
 
   const availableTradesRound = Math.min(maxTradesThisRound, tradesThisRound);
