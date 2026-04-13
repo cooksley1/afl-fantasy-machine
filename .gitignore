@@ -4,3 +4,11 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Replit-internal (not needed outside Replit)
+.cache
+.upm
+.local
+.config
+.agents
+expanded-match.png
